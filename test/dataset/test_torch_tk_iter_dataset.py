@@ -2,7 +2,9 @@
 
 import pytest
 import numpy as np
-from apairo.dataset.torch_wrapper import TorchTKIterDataset
+from apairo.dataset.torch_wrappers import TorchKittiIterDataset
+# backward-compat alias
+TorchTKIterDataset = TorchKittiIterDataset
 # Assuming fixtures for paths or mock logic
 # from test.paths import tartan2kitti_path # Mock or use fixture
 
