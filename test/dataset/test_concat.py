@@ -66,3 +66,13 @@ def test_unified_timestamps():
     cd = ConcatDataset([a, b])
     assert "imu" in cd.timestamps
     assert len(cd.timestamps["imu"]) == 5
+
+
+def test_timestamps_none_for_sync_datasets():
+    ds = MagicMock()
+    ds.keys = ["lidar"]
+    ds.timestamps = None
+    ds.__len__ = MagicMock(return_value=3)
+    cd = ConcatDataset([ds, ds])
+    assert cd.timestamps is None
+    assert cd.is_synchronous is True

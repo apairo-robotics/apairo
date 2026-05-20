@@ -1,6 +1,7 @@
 """Apairo — unified robotics dataset loader."""
 
 from apairo.core.sample import Sample
+from apairo.core.synchronous_dataset import SynchronousDataset
 
 from apairo.dataset.kitti import KittiDataset
 from apairo.dataset.tartan_pt import TartanPT as TartanDataset
@@ -15,6 +16,7 @@ __version__ = "0.1.0"
 
 __all__ = [
     "Sample",
+    "SynchronousDataset",
     "KittiDataset",
     "TartanDataset",
     "ConcatDataset",

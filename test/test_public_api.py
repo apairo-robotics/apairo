@@ -4,6 +4,7 @@ import apairo
 def test_public_names():
     expected = [
         "Sample",
+        "SynchronousDataset",
         "KittiDataset",
         "TartanDataset",
         "ConcatDataset",

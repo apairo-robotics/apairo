@@ -37,12 +37,19 @@ class ConcatDataset(AbstractDataset):
             ds.keys = self._keys
 
     @property
-    def timestamps(self) -> dict[str, np.ndarray]:
+    def timestamps(self) -> dict[str, np.ndarray] | None:
+        """None for synchronous datasets, concatenated arrays for temporal ones."""
+        if self.datasets[0].timestamps is None:
+            return None
         result: dict[str, list[np.ndarray]] = {k: [] for k in self._keys}
         for ds in self.datasets:
             for k in self._keys:
                 result[k].append(ds.timestamps[k])
         return {k: np.concatenate(v) for k, v in result.items()}
+
+    @property
+    def is_synchronous(self) -> bool:
+        return self.datasets[0].timestamps is None
 
     def _dataset_idx_and_offset(self, idx: int) -> tuple[int, int]:
         if idx < 0 or idx >= self._cumulative[-1]:
