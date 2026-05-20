@@ -41,7 +41,7 @@ class AbstractDataset(ABC):
     """
 
     keys: Union[List[_Key], Sequence[_Key]]
-    timestamps: Timestamp
+    timestamps: dict | None
     loaders: Dict[_Key, abstract_loader.AbstractLoader]
     synchronous: bool
     profile: Optional[Dict[_Key, str]]
@@ -60,6 +60,11 @@ class AbstractDataset(ABC):
     @keys.setter
     def keys(self, keys: list[_Key]) -> None:
         self._set_keys(keys)
+
+    @property
+    def is_synchronous(self) -> bool:
+        """True if this dataset has no timestamps (synchronous frame access)."""
+        return getattr(self, 'timestamps', None) is None
 
     @abstractmethod
     def __iter__(self):
