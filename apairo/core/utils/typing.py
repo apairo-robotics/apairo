@@ -1,10 +1,3 @@
-from typing import TypedDict, Union, SupportsFloat, Sequence
-import numpy as np
+from apairo.utils.types import Timestamp, _Key, _TimestampData
 
-_Key = str
-_TimestampData = Union[np.ndarray, Sequence[SupportsFloat]]
-
-
-class Timestamp(TypedDict):
-    key: _Key
-    timestamp: _TimestampData
+__all__ = ["Timestamp", "_Key", "_TimestampData"]

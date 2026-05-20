@@ -127,7 +127,7 @@ def dict_to_tensor(tensor: torch.Tensor, flatten_temporal_dim):
 
 def tensor_to_dict(tensor: torch.Tensor, keys, dict_config):
     list_len = [np.prod(size) for key, size in dict_config if key in keys]
-    tensor_split = torch.spit(tensor, list_len, dim=-1)
+    tensor_split = torch.split(tensor, list_len, dim=-1)
 
     return {
         key: tensor for key, tensor in zip(keys, tensor_split)
