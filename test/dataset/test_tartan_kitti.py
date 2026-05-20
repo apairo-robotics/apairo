@@ -71,7 +71,7 @@ def test_set_keys_iter(dataset):
     """Check if when setting the keys the iterator is correctly set"""
     dataset.keys = ["controls"]
     for sample in dataset:
-        assert sample.key == "controls"
+        assert list(sample.data.keys())[0] == "controls"
 
 
 def test_timelines(dataset):
@@ -90,7 +90,7 @@ def test_time_order(dataset):
         assert isinstance(sample, Sample)
         if last_time > sample.timestamp:
             print(f"Last time: {last_time}, Time: {sample.timestamp}")
-            print(f"Key: {sample.key}")
+            print(f"Key: {list(sample.data.keys())[0]}")
         assert sample.timestamp >= last_time
         last_time = sample.timestamp
 
@@ -108,7 +108,7 @@ def test_iter_ending(dataset):
 
     for sample in dataset:
         assert isinstance(sample, Sample)
-        assert sample.key in ["controls", "image_left"]
+        assert list(sample.data.keys())[0] in ["controls", "image_left"]
 
 
 def test_iter_concrete():

@@ -112,8 +112,7 @@ class KittiDataset(AbstractDataset):
         key = self._keys[self._tl_key_idxs[idx]]
         frame = int(self._tl_frame_idxs[idx])
         return Sample(
-            key=key,
-            data=self.loaders[key][frame],
+            data={key: self.loaders[key][frame]},
             timestamp=float(self.timestamps[key][frame]),
         )
 

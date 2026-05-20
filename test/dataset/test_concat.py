@@ -12,10 +12,10 @@ def _make_mock_dataset(n: int, key: str = "imu"):
     ds.timestamps = {key: np.arange(n, dtype=float)}
     ds.__len__ = MagicMock(return_value=n)
     ds.__getitem__ = MagicMock(
-        side_effect=lambda i: Sample(key=key, data=torch.zeros(3), timestamp=float(i))
+        side_effect=lambda i: Sample(data={key: torch.zeros(3)}, timestamp=float(i))
     )
     ds.__iter__ = MagicMock(return_value=iter([
-        Sample(key=key, data=torch.zeros(3), timestamp=float(i)) for i in range(n)
+        Sample(data={key: torch.zeros(3)}, timestamp=float(i)) for i in range(n)
     ]))
     return ds
 
