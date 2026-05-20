@@ -23,6 +23,9 @@ class MockDataset(AbstractDataset):
     def __next__(self):
         return self.data
 
+    def __getitem__(self, idx):
+        return self.data
+
 
 def create_mock_dataset():
     return MockDataset()

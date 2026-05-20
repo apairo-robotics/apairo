@@ -32,7 +32,7 @@ class ConcatDataset(AbstractDataset):
         self.lengths = np.array([len(dataset) for dataset in self.datasets], dtype=int)
         self.cumulative_lengths = np.cumsum(self.lengths)
 
-    def _get_corresponding_dataset(self, idx) -> int:
+    def _get_corresponding_dataset(self, idx) -> int|np.intp:
         """Get the corresponding dataset index of the given index."""
         if idx < 0 or idx >= self.cumulative_lengths[-1]:
             raise IndexError("Index out of range")

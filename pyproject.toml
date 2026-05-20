@@ -3,36 +3,28 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "data-apairo"
-version = "0.1.dev0"
-description = "Extensible Framework to manage data"
+name = "apairo"
+version = "0.1.0"
+description = "Extensible framework to load robotics datasets"
 readme = "README.md"
 authors = [
   { name = "Augustin Bresset", email = "augustin.bresset@gmail.com" },
 ]
 license = { text = "MIT" }
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
     "numpy",
-    "matplotlib",
-    "opencv-python",
     "torch",
     "torchvision",
     "PyYAML",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "black",
-    "isort",
-    "flake8"
-]
+dev = ["pytest", "black", "isort", "flake8"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["apairo*"]
+
+[tool.setuptools.package-data]
+apairo = ["parameter/**/*.yaml", "core/config/*.yaml"]

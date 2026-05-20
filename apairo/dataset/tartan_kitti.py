@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Sequence
 import numpy as np
 import torch
 
@@ -7,6 +7,7 @@ from src.loader import str_to_loader, loads_timestamps, load_profile
 from src.utils.files import get_files
 from ..core import AbstractDataset, AbstractLoader
 
+_Key = str
 
 class TartanKittiDataset(AbstractDataset):
     r""" A :class:`AbstractRobotDataset` subclass that manage Kitti format from Tartan drive
@@ -29,8 +30,8 @@ class TartanKittiDataset(AbstractDataset):
            For more details : https://github.com/pytorch/pytorch/issues/13246#issuecomment-905703662
     """
     synchronous = False
-    _keys: np.ndarray
-    profile: Dict[str, str]
+    _keys: List[_Key]
+    _profile: Dict[str, str]
     files: Dict[str, str]
     loaders: Dict[str, AbstractLoader]
     timestamps: Dict[str, np.ndarray]
@@ -66,11 +67,7 @@ class TartanKittiDataset(AbstractDataset):
 
     @keys.setter
     def keys(self, keys: list):
-        """
-        Even if keys will not be big, it it important to work
-        with similare objects
-        """
-        super(TartanKittiDataset, type(self)).keys.__set__(self, keys)
+        self._set_keys(keys)
 
         if not set(keys).issubset(self.files.keys()):
             raise KeyError(f"keys {keys} not in the dataset")

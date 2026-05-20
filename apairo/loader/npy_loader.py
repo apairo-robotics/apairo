@@ -14,7 +14,7 @@ class NPYLoader(AbstractLoader):
         directory (str) :
             The directory that contains the `npy` file.
     """
-    array: Union[None, np.ndarray, torch.Tensor] = None
+    array: Union[np.ndarray, torch.Tensor] = np.zeros(0)
 
     def __init__(self, directory: str) -> None:
         for f in os.listdir(directory):
@@ -28,7 +28,7 @@ class NPYLoader(AbstractLoader):
     def __len__(self) -> int:
         return len(self.array)
 
-    def __getitem__(self, idx) -> torch.Tensor:
+    def __getitem__(self, idx: int) -> torch.Tensor:
         return self.array[idx]
 
     @property

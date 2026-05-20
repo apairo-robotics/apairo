@@ -46,18 +46,20 @@ class AbstractDataset(ABC):
     synchronous: bool
     profile: Optional[Dict[_Key, str]]
 
-    @property
-    def keys(self):
-        return self._keys
-
-    @keys.setter
-    def keys(self, keys: list):
+    def _set_keys(self, keys: list[_Key]) -> None:
         if len(keys) == 0:
             raise KeysEmptyWarning
-
         if len(set(keys)) != len(keys):
             raise KeysDuplicateWarning
         self._keys = keys
+
+    @property
+    def keys(self) -> list[_Key]:
+        return self._keys
+
+    @keys.setter
+    def keys(self, keys: list[_Key]) -> None:
+        self._set_keys(keys)
 
     @abstractmethod
     def __iter__(self):
@@ -75,6 +77,19 @@ class AbstractDataset(ABC):
         ...
 
     @overload
-    @abstractmethod
     def __getitem__(self, idx: Dict[str, Sequence[int]]) -> Dict[str, Any]:
+        ...
+
+    @overload
+    def __getitem__(self, idx: int) -> Any:
+        ...
+
+    @abstractmethod
+    def __getitem__(
+        self,
+        idx: Union[int, Dict[str, Sequence[int]]],
+    ) -> Union[Any, Dict[str, Any]]:
+        ...
+
+    def __len__(self) -> int:
         ...

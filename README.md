@@ -35,43 +35,43 @@ Then manage their pipeline with `Torch` functionalities and `Sampler` to manage 
 
 1. Clone the repository:
 
-    ```sh
-    git clone https://github.com/augustin-bresset/Apairo
-    cd Apairo
-    ```
+```sh
+git clone https://github.com/augustin-bresset/Apairo
+cd Apairo
+```
 
 ### using Docker
 
 1. Build the container:
 
-    ```sh
-    docker-compose build
-    ```
+```sh
+docker-compose build
+```
 
 2. Run the container:
 
-    ```sh
-    docker-compose up -d
-    ```
+```sh
+docker-compose up -d
+```
 
 3. Enter the container:
 
-    ```sh
-    docker-compose exec apairo bash
-    ```
+```sh
+docker-compose exec apairo bash
+```
 
 ### Local Installation
 
 1. Install the required packages:
 
-    ```sh
-    # Optional: Create a virtual environment
-    python3 -m venv venv
-    source venv/bin/activate
+```sh
+# Optional: Create a virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-    # Install the required packages
-    pip install -r requirements.txt
-    ```
+# Install the required packages
+pip install -r requirements.txt
+```
 
 ### Usage
 
