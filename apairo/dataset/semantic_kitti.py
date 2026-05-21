@@ -36,7 +36,7 @@ class SemanticKittiDataset(SynchronousDataset):
             raise ValueError(f"Mismatched file counts per key: {lengths}")
 
     def __len__(self) -> int:
-        return len(self._files[self._keys[0]])
+        return len(next(iter(self._files.values())))
 
     def __getitem__(self, idx: int) -> Sample:
         if not 0 <= idx < len(self):

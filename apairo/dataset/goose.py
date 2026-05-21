@@ -37,7 +37,7 @@ class Goose3DDataset(SynchronousDataset):
             raise ValueError(f"Mismatched file counts per key: {lengths}")
 
     def __len__(self) -> int:
-        return len(self._files[self._keys[0]])
+        return len(next(iter(self._files.values())))
 
     def __getitem__(self, idx: int) -> Sample:
         if not 0 <= idx < len(self):
@@ -50,7 +50,7 @@ class Goose3DDataset(SynchronousDataset):
                 data[key] = torch.from_numpy(arr)
             elif key == "labels":
                 arr = np.fromfile(path, dtype=np.int32)
-                data[key] = torch.from_numpy(arr.copy()).long()
+                data[key] = torch.from_numpy(arr).long()
         return Sample(data=data)
 
     def __iter__(self):
