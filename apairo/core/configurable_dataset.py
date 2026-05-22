@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from apairo.core.config import register_channel as _register_channel, read_config, write_config, CONFIG_FILENAME
+from apairo.core.preprocessor import Preprocessor
 
 
 class ConfigurableDataset:
@@ -72,6 +73,32 @@ class ConfigurableDataset:
             }
         """
         ...
+
+    @classmethod
+    def run_preprocess(
+        cls,
+        preprocessor: Preprocessor,
+        sequence_dir: str | Path,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Run a preprocessor on a sequence and persist the output channel.
+
+        Delegates to :func:`apairo.preprocess.run`, which handles file naming,
+        format-specific saving, timestamp writing, and ``.apairo`` registration.
+
+        Args:
+            preprocessor: A :class:`~apairo.core.preprocessor.FramePreprocessor`
+                or :class:`~apairo.core.preprocessor.SequencePreprocessor`.
+            sequence_dir: Path to the sequence directory.
+            overwrite: Recompute if output already exists.
+
+        Example::
+
+            TartanKittiDataset.run_preprocess(MyPreprocessor(), seq_dir)
+        """
+        from apairo.preprocess.runner import run
+        run(preprocessor, cls, sequence_dir, overwrite=overwrite)
 
     def _load_or_create_config(self, sequence_dir: Path) -> dict:
         """Read ``.apairo`` if it exists, otherwise bootstrap and write it."""

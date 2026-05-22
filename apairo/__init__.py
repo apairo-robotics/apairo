@@ -3,6 +3,7 @@
 from apairo.core.sample import Sample
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
+from apairo.preprocess import FramePreprocessor, SequencePreprocessor
 
 from apairo.dataset.kitti import KittiDataset
 from apairo.dataset.tartan_kitti import TartanKittiDataset
@@ -25,6 +26,8 @@ __all__ = [
     "Sample",
     "SynchronousDataset",
     "ConfigurableDataset",
+    "FramePreprocessor",
+    "SequencePreprocessor",
     "KittiDataset",
     "TartanKittiDataset",
     "TartanDataset",
