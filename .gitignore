@@ -1,11 +1,16 @@
 /__pycache__
 *.pyc
+**cache**
+
+data
+outputs
 *.npy
 *.ply
-outputs
-data
 
 .env
 .venv
 .claude/
 build/
+
+apairo.egg-info
+**.egg-info
