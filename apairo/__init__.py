@@ -15,6 +15,8 @@ from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
 
 from apairo.core.config import register_channel
+from apairo.writer import WRITERS
+from apairo.loader import DERIVED_LOADERS
 
 from apairo.sampler.low_freq_uniform_sampler import LowFreqUniformSampler
 from apairo.sampler.latest_sync_sampler import LatestSyncSampler
@@ -38,6 +40,8 @@ __all__ = [
     "Rellis3DDataset",
     "Goose3DDataset",
     "register_channel",
+    "WRITERS",
+    "DERIVED_LOADERS",
     "LowFreqUniformSampler",
     "LatestSyncSampler",
     "__version__",
