@@ -1,4 +1,6 @@
 """Apairo — unified robotics dataset loader."""
+import logging
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 from apairo.core.sample import Sample
 from apairo.core.synchronous_dataset import SynchronousDataset

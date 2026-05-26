@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
+import logging
 import numpy as np
 
 from apairo.core.preprocessor import FramePreprocessor, SequencePreprocessor
@@ -8,6 +9,8 @@ from apairo.writer import WRITERS
 
 if TYPE_CHECKING:
     from apairo.core.preprocessor import Preprocessor
+
+logger = logging.getLogger(__name__)
 
 
 def _to_numpy(data) -> np.ndarray:
@@ -57,6 +60,14 @@ def run(
     output_dir.mkdir(exist_ok=True)
 
     dataset = dataset_cls(sequence_dir, keys=preprocessor.input_keys)
+    n = len(dataset)
+    logger.info(
+        "%-20s  %s  (%d frame%s)",
+        preprocessor.__class__.__name__,
+        sequence_dir.name,
+        n,
+        "s" if n != 1 else "",
+    )
 
     if isinstance(preprocessor, FramePreprocessor):
         _run_frame(preprocessor, dataset, output_dir)
@@ -68,6 +79,7 @@ def run(
             f"got {type(preprocessor).__name__}."
         )
 
+    logger.info("Done  →  %s", output_dir)
     dataset_cls.register_channel(
         sequence_dir,
         preprocessor.output_key,
@@ -79,8 +91,10 @@ def run(
 
 def _run_frame(preprocessor: FramePreprocessor, dataset, output_dir: Path) -> None:
     timestamps = []
+    n = len(dataset)
 
     for idx, sample in enumerate(dataset):
+        logger.debug("[%d/%d]", idx + 1, n)
         result = _to_numpy(preprocessor.process(sample))
 
         writer = WRITERS[preprocessor.output_loader]()
