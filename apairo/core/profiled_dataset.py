@@ -197,3 +197,36 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if not self._files:
             return 0
         return len(next(iter(self._files.values())))
+
+    def __getitem__(self, idx: int) -> Sample:
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        data: dict = {}
+        for key in self._keys:
+            path = self._files[key][idx]
+            if key in self._modalities:
+                spec = self._modalities[key]
+                arr = np.fromfile(path, dtype=np.dtype(spec.dtype))
+                if spec.reshape:
+                    arr = arr.reshape(spec.reshape)
+                if spec.mask is not None:
+                    arr = arr & spec.mask
+                t = torch.from_numpy(np.ascontiguousarray(arr))
+                if spec.torch_dtype is not None:
+                    t = t.to(getattr(torch, spec.torch_dtype))
+                data[key] = t
+            else:
+                ext = self._derived_loaders[key]
+                data[key] = DERIVED_LOADERS[ext](path)
+        return Sample(data=data)
+
+    def __iter__(self):
+        self._iter_pos = 0
+        return self
+
+    def __next__(self) -> Sample:
+        if self._iter_pos >= len(self):
+            raise StopIteration
+        sample = self[self._iter_pos]
+        self._iter_pos += 1
+        return sample

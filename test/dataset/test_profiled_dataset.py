@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import torch
 from pathlib import Path
 from apairo.core.profiled_dataset import ModalitySpec, _parse_layers, LayerSpec, ProfiledDataset
 
@@ -89,15 +90,9 @@ def kitti_root(tmp_path):
 
 class _GooseDS(ProfiledDataset):
     _profile = "goose.yaml"
-    def __getitem__(self, idx): raise NotImplementedError
-    def __iter__(self): raise NotImplementedError
-    def __next__(self): raise NotImplementedError
 
 class _KittiDS(ProfiledDataset):
     _profile = "semantic_kitti.yaml"
-    def __getitem__(self, idx): raise NotImplementedError
-    def __iter__(self): raise NotImplementedError
-    def __next__(self): raise NotImplementedError
 
 
 def test_goose_len(goose_root):
@@ -145,3 +140,37 @@ def test_goose_split_filter(goose_root):
 def test_goose_split_filter_no_match(goose_root):
     with pytest.raises(FileNotFoundError):
         _GooseDS(goose_root, keys=["lidar"], split="val")
+
+def test_goose_getitem_shapes(goose_root):
+    ds = _GooseDS(goose_root, keys=["lidar", "labels"])
+    s = ds[0]
+    assert s.data["lidar"].shape == (N_POINTS, 4)
+    assert s.data["labels"].shape == (N_POINTS,)
+    assert s.data["lidar"].dtype == torch.float32
+    assert s.data["labels"].dtype == torch.int64  # int32 promoted via torch_dtype
+
+def test_goose_iter_count(goose_root):
+    ds = _GooseDS(goose_root, keys=["lidar"])
+    assert len(list(ds)) == 6
+
+def test_goose_out_of_range(goose_root):
+    ds = _GooseDS(goose_root, keys=["lidar"])
+    with pytest.raises(IndexError):
+        ds[6]
+
+def test_kitti_label_mask(kitti_root):
+    # Write labels with instance bits set in upper 16 bits
+    lbl_path = sorted((kitti_root / "sequences" / "00" / "labels").glob("*.label"))[0]
+    bin_path = sorted((kitti_root / "sequences" / "00" / "velodyne").glob("*.bin"))[0]
+    np.array([0x00010001, 0x00020002], dtype=np.int32).tofile(lbl_path)
+    np.random.rand(2, 4).astype(np.float32).tofile(bin_path)
+
+    ds = _KittiDS(kitti_root, keys=["labels"])
+    s = ds[0]
+    assert s.data["labels"][0].item() == 0x0001
+    assert s.data["labels"][1].item() == 0x0002
+
+def test_is_synchronous(goose_root):
+    ds = _GooseDS(goose_root, keys=["lidar"])
+    assert ds.timestamps is None
+    assert ds.is_synchronous is True
