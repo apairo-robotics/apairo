@@ -235,3 +235,48 @@ def test_bootstrap_config_uses_profile(goose_root):
     assert "labels" in cfg["channels"]
     assert cfg["channels"]["lidar"]["loader"] == "bin"
     assert cfg["channels"]["labels"]["loader"] == "bin"
+
+
+import yaml
+
+def _write_apairo(directory: Path, key: str, loader: str) -> None:
+    config = {
+        "version": 1,
+        "channels": {key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}},
+    }
+    with open(directory / ".apairo", "w") as f:
+        yaml.dump(config, f)
+
+
+@pytest.fixture
+def goose_root_with_derived(goose_root):
+    # .apairo registered at dataset root (GOOSE stores derived at root level)
+    _write_apairo(goose_root, "elevation_map", "npys")
+    for seq in ["seq_a", "seq_b"]:
+        d = goose_root / "elevation_map" / "train" / seq
+        d.mkdir(parents=True)
+        for i in range(3):
+            np.save(d / f"{i:06d}.npy", np.random.rand(32).astype(np.float32))
+    return goose_root
+
+
+def test_derived_key_loaded(goose_root_with_derived):
+    ds = _GooseDS(goose_root_with_derived, keys=["lidar", "elevation_map"])
+    assert len(ds) == 6
+    s = ds[0]
+    assert "elevation_map" in s.data
+    assert isinstance(s.data["elevation_map"], torch.Tensor)
+
+def test_derived_only_raises(goose_root_with_derived):
+    with pytest.raises(KeyError):
+        _GooseDS(goose_root_with_derived, keys=["elevation_map"])
+
+def test_derived_without_apairo_raises(goose_root):
+    with pytest.raises(KeyError):
+        _GooseDS(goose_root, keys=["lidar", "elevation_map"])
+
+def test_derived_missing_files_raises(goose_root):
+    _write_apairo(goose_root, "elevation_map", "npys")
+    # No actual elevation_map files on disk
+    with pytest.raises(FileNotFoundError):
+        _GooseDS(goose_root, keys=["lidar", "elevation_map"])

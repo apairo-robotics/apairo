@@ -163,7 +163,12 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 self._modality_idx = rel_parts.index(mapped)
 
         self._derived_loaders: dict[str, str] = {}
-        # Derived key support added in Task 6
+        if derived_keys:
+            seq_dirs = sorted({self._seq_root(f) for f in self._files[ref_key]})
+            for key in derived_keys:
+                ext = self._get_derived_ext(seq_dirs, key)
+                self._derived_loaders[key] = ext
+                self._files[key] = self._discover_derived(key, ext)
 
     def _seq_root(self, path: Path) -> Path:
         d = path
