@@ -90,3 +90,108 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 with open(profile_path) as f:
                     raw = yaml.safe_load(f)
                 cls.available_keys = frozenset(raw.get("modalities", {}).keys())
+
+    def __init__(
+        self,
+        root_dir: str | Path,
+        keys: list[str] | None = None,
+        split: str | None = None,
+    ) -> None:
+        profile_path = (
+            Path(self._profile)
+            if Path(self._profile).is_absolute()
+            else _PROFILES_DIR / self._profile
+        )
+        with open(profile_path) as f:
+            raw = yaml.safe_load(f)
+
+        self._modalities: dict[str, ModalitySpec] = {
+            k: ModalitySpec.from_dict(k, v)
+            for k, v in raw["modalities"].items()
+        }
+        self._layers: list[LayerSpec] = _parse_layers(raw["layers"])
+
+        layer_types = [l.type for l in self._layers]
+        self._modality_layer_idx: int = layer_types.index("modality")
+        seq_idx = (
+            layer_types.index("sequence")
+            if "sequence" in layer_types
+            else len(self._layers) - 1
+        )
+        self._seq_depth: int = len(self._layers) - seq_idx
+
+        self._root = Path(root_dir)
+        self._split_filter = split
+
+        if keys is None:
+            keys = [k for k in self._modalities if not self._modalities[k].optional]
+
+        native_keys = [k for k in keys if k in self._modalities]
+        derived_keys = [k for k in keys if k not in self._modalities]
+
+        if derived_keys and not native_keys:
+            raise KeyError(
+                f"Derived keys {derived_keys} require at least one native key "
+                f"({sorted(self._modalities)}) alongside them."
+            )
+
+        self._set_keys(list(keys))
+        self._files: dict[str, list[Path]] = {}
+
+        ref_key: str | None = None
+        for key in native_keys:
+            files = self._discover_native(key)
+            if not files and not self._modalities[key].optional:
+                raise FileNotFoundError(
+                    f"Key '{key}' declared in profile but no files found under {self._root}."
+                )
+            self._files[key] = files
+            if ref_key is None and files:
+                ref_key = key
+
+        lengths = {k: len(v) for k, v in self._files.items() if k in self._modalities}
+        if len(set(lengths.values())) > 1:
+            raise ValueError(f"Mismatched file counts per key: {lengths}")
+
+        # Detect modality_idx dynamically from first discovered file
+        self._modality_idx: int = self._modality_layer_idx
+        if ref_key and self._files[ref_key]:
+            first = self._files[ref_key][0]
+            rel_parts = first.relative_to(self._root).parts
+            mapped = self._mapped_name(ref_key)
+            if mapped in rel_parts:
+                self._modality_idx = rel_parts.index(mapped)
+
+        self._derived_loaders: dict[str, str] = {}
+        # Derived key support added in Task 6
+
+    def _mapped_name(self, key: str) -> str:
+        layer = self._layers[self._modality_layer_idx]
+        if isinstance(layer.value, dict):
+            return layer.value.get(key, key)
+        return key
+
+    def _discover_native(self, key: str) -> list[Path]:
+        spec = self._modalities[key]
+        fixed_parts = [l.value for l in self._layers if l.type == "fixed"]
+        mapped = self._mapped_name(key)
+
+        if fixed_parts:
+            prefix = Path(*fixed_parts)
+            pattern = str(prefix / "**" / mapped / f"*{spec.ext}")
+        else:
+            pattern = f"**/{mapped}/**/*{spec.ext}"
+
+        files = sorted(self._root.glob(pattern))
+
+        if self._split_filter and any(l.type == "split" for l in self._layers):
+            split_idx = next(i for i, l in enumerate(self._layers) if l.type == "split")
+            files = [
+                f for f in files
+                if split_idx < len(f.relative_to(self._root).parts)
+                and f.relative_to(self._root).parts[split_idx] == self._split_filter
+            ]
+        return files
+
+    def __len__(self) -> int:
+        return len(next(iter(self._files.values())))
