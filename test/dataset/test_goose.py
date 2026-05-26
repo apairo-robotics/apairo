@@ -153,10 +153,32 @@ def test_derived_key_loaded_from_apairo(goose_root_derived):
 def test_derived_path_mirrors_modality_structure(goose_root_derived):
     ds = Goose3DDataset(goose_root_derived, keys=["lidar"])
     p = ds.derived_path(0, "trav_label", "npy")
-    # elevation_map/train/seq_a/000000.npy → trav_label/train/seq_a/000000.npy
-    assert p.parts[-4] == "trav_label"
+    assert "trav_label" in p.parts
     assert p.suffix == ".npy"
     assert p.stem == "000000"
+    # lidar component is replaced, rest of path is preserved
+    lidar_ref = ds._files["lidar"][0].relative_to(ds.root_dir)
+    derived_rel = p.relative_to(ds.root_dir)
+    parts_ref = list(lidar_ref.parts)
+    parts_der = list(derived_rel.parts)
+    assert parts_der[ds._modality_idx] == "trav_label"
+    assert parts_ref[1:-1] == parts_der[1:-1]  # sub-path after modality is identical
+
+
+def test_derived_path_works_from_dataset_root(tmp_path):
+    # root = GOOSE_3D/ with train/lidar/train/seq/ structure
+    for seq in ["seq_a"]:
+        lidar_dir = tmp_path / "train" / "lidar" / "train" / seq
+        lidar_dir.mkdir(parents=True)
+        for i in range(2):
+            _make_bin(lidar_dir / f"{i:06d}.bin")
+    ds = Goose3DDataset(tmp_path, keys=["lidar"])
+    p = ds.derived_path(0, "trav_label", "npy")
+    # Expect: tmp_path/train/trav_label/train/seq_a/000000.npy
+    rel = p.relative_to(tmp_path)
+    assert rel.parts[1] == "trav_label"   # modality replaced at idx=1
+    assert rel.parts[0] == "train"        # split prefix preserved
+    assert rel.parts[2] == "train"        # sub-split preserved
 
 
 def test_derived_key_without_apairo_raises(tmp_path):

@@ -47,6 +47,17 @@ class Goose3DDataset(SynchronousDataset, ConfigurableDataset):
         if len(set(lengths.values())) > 1:
             raise ValueError(f"Mismatched file counts per key: {lengths}")
 
+        # Determine where the modality dir sits in the path (varies with root depth).
+        # e.g. root=GOOSE_3D/       → train/lidar/train/seq/file → idx=1
+        #      root=GOOSE_3D/train/ → lidar/train/seq/file       → idx=0
+        ref_key = native_keys[0] if native_keys else None
+        if ref_key and self._files.get(ref_key):
+            first = self._files[ref_key][0]
+            rel_parts = first.relative_to(root).parts
+            self._modality_idx: int = rel_parts.index(ref_key)
+        else:
+            self._modality_idx = 0
+
         self._derived_loaders: dict[str, str] = {}
         if derived_keys:
             ref_files = self._files[native_keys[0]]
@@ -77,12 +88,12 @@ class Goose3DDataset(SynchronousDataset, ConfigurableDataset):
         return Sample(data=data)
 
     def derived_path(self, idx: int, key: str, ext: str) -> Path:
-        # GOOSE layout: <root>/<modality>/split/seq/file
-        # derived data mirrors that with key replacing the modality dir
+        # Replace the modality component with the derived key name.
+        # Works regardless of root depth (GOOSE_3D/ or GOOSE_3D/train/).
         ref = next(iter(self._files.values()))[idx]
         rel = ref.relative_to(self._root)
         parts = list(rel.parts)
-        parts[0] = key
+        parts[self._modality_idx] = key
         parts[-1] = f"{ref.stem}.{ext}"
         return self._root / Path(*parts)
 
