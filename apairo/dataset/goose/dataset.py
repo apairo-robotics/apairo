@@ -5,12 +5,13 @@ import numpy as np
 import torch
 
 from apairo.core.synchronous_dataset import SynchronousDataset
+from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.sample import Sample
 
 _AVAILABLE_KEYS = {"lidar", "labels"}
 
 
-class Goose3DDataset(SynchronousDataset):
+class Goose3DDataset(SynchronousDataset, ConfigurableDataset):
     available_keys = frozenset(_AVAILABLE_KEYS)
     r"""Goose3D synchronous dataset (LiDAR + semantic labels).
 
@@ -53,6 +54,14 @@ class Goose3DDataset(SynchronousDataset):
                 arr = np.fromfile(path, dtype=np.int32)
                 data[key] = torch.from_numpy(arr).long()
         return Sample(data=data)
+
+    def _bootstrap_config(self, sequence_dir: Path) -> dict:
+        channels = {
+            key: {"loader": "bin", "has_timestamps": False}
+            for key in sorted(_AVAILABLE_KEYS)
+            if (sequence_dir / key).is_dir()
+        }
+        return {"version": 1, "channels": channels}
 
     def __iter__(self):
         self._iter_pos = 0

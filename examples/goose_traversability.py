@@ -1,72 +1,62 @@
-"""Compute per-point traversability from a labelled GOOSE3D sequence.
+"""Compute and persist per-point traversability labels from a GOOSE3D sequence.
 
-Given:
-  - a GOOSE dataset root (lidar + labels)
-  - a YAML listing which semantic labels are traversable
-
-Produces a boolean mask (N,) per frame: True = traversable point.
+Defines a FramePreprocessor that maps semantic labels to a binary traversability
+mask (0 / 1) using a YAML config. The runner handles file naming, saving, and
+.apairo registration automatically via run_preprocess.
 
 Usage:
     python examples/goose_traversability.py \
-        --root /data/goose/2023-06-21_flight \
+        --seq /data/goose/seq_a \
         --config examples/goose_traversable_labels.yaml
 """
 
 import argparse
 from pathlib import Path
 
+import numpy as np
 import torch
 import yaml
 
-from apairo import Goose3DDataset
+from apairo import Goose3DDataset, FramePreprocessor
+from apairo.core.sample import Sample
 
 
-def load_traversable_labels(config_path: str | Path) -> set[int]:
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
-    return set(cfg["traversable_map"])
+class TraversabilityPreprocessor(FramePreprocessor):
+    """Map GOOSE semantic labels to a binary traversability mask.
 
+    Reads which label IDs are traversable from a YAML file with the key
+    ``traversable_map``.  Produces a uint8 array of shape (N,): 1 = traversable.
+    """
 
-def make_traversability_mask(
-    labels: torch.Tensor, traversable: set[int]
-) -> torch.Tensor:
-    """Return a boolean mask: True for each point whose label is traversable."""
-    mask = torch.zeros(len(labels), dtype=torch.bool)
-    for lbl in traversable:
-        mask |= labels == lbl
-    return mask
+    output_key = "trav_label"
+    output_loader = "npys"
+    input_keys = ["labels"]
+    timestamps_from = "labels"
+    sources = ["labels"]
+
+    def __init__(self, config_path: str | Path) -> None:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        self._traversable: set[int] = set(cfg["traversable_map"])
+
+    def process(self, sample: Sample) -> np.ndarray:
+        labels: torch.Tensor = sample.data["labels"]  # (N,)
+        mask = torch.zeros(len(labels), dtype=torch.bool)
+        for lbl in self._traversable:
+            mask |= labels == lbl
+        return mask.numpy().astype(np.uint8)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", required=True, help="GOOSE dataset root directory")
+    parser.add_argument("--seq", required=True, help="GOOSE sequence directory")
     parser.add_argument("--config", default="examples/goose_traversable_labels.yaml")
     args = parser.parse_args()
 
-    traversable = load_traversable_labels(args.config)
-    print(f"Traversable labels: {sorted(traversable)}")
+    preprocessor = TraversabilityPreprocessor(args.config)
+    print(f"Traversable labels : {sorted(preprocessor._traversable)}")
 
-    ds = Goose3DDataset(args.root, keys=["lidar", "labels"])
-    print(f"Frames: {len(ds)}")
-
-    for idx, sample in enumerate(ds):
-        pts: torch.Tensor = sample.data["lidar"]  # (N, 4)  x y z intensity
-        labels: torch.Tensor = sample.data["labels"]  # (N,)
-
-        mask = make_traversability_mask(labels, traversable)
-
-        trav_pts = pts[mask]
-        non_trav_pts = pts[~mask]
-
-        print(
-            f"[{idx:04d}]  total={len(pts):6d}  "
-            f"traversable={mask.sum().item():6d}  "
-            f"non-traversable={( ~mask).sum().item():6d}  "
-            f"ratio={mask.float().mean().item():.2%}"
-        )
-
-        # trav_pts / non_trav_pts can be passed to a model, saved, visualised, …
-        _ = trav_pts, non_trav_pts
+    Goose3DDataset.run_preprocess(preprocessor, args.seq)
 
 
 if __name__ == "__main__":
