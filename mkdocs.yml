@@ -1,0 +1,70 @@
+site_name: apairo
+site_description: Unified robotics dataset loader for time-series and annotated sensor data
+site_url: https://apairo.readthedocs.io
+repo_url: https://github.com/bresset/apairo
+repo_name: bresset/apairo
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - tables
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Concepts: concepts.md
+  - Datasets:
+    - Overview: datasets/index.md
+    - YAML Profiles: datasets/yaml-profiles.md
+    - Adding a Dataset: datasets/adding-a-dataset.md
+  - Preprocessing: preprocessing.md
+  - Combining Datasets: combining.md
+  - API Reference: api/reference.md

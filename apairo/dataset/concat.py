@@ -8,7 +8,27 @@ from apairo.core.sample import Sample
 
 
 class ConcatDataset(AbstractDataset):
-    r"""Concatenates multiple datasets into one for multi-session training."""
+    """Concatenates multiple dataset instances into one.
+
+    Takes the intersection of keys across all datasets so every index returns
+    the same set of modalities regardless of which underlying dataset is hit.
+    Indexing is O(log n) via binary search over cumulative lengths.
+
+    Args:
+        datasets: Non-empty list of dataset instances to concatenate.
+
+    Example::
+
+        sequences = [
+            SemanticKittiDataset(f"/data/kitti/seq_{i:02d}", keys=["lidar", "labels"])
+            for i in range(11)
+        ]
+        combined = ConcatDataset(sequences)
+        sample = combined[0]
+
+    Raises:
+        ValueError: If ``datasets`` is empty.
+    """
 
     def __init__(self, datasets: List[AbstractDataset]) -> None:
         if not datasets:

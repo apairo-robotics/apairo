@@ -7,12 +7,20 @@ from apairo.core.sample import Sample
 
 
 class SynchronousDataset(AbstractDataset):
-    """Base class for datasets where index i returns a complete synchronous frame.
+    """Base class for datasets where index ``i`` returns a complete synchronous frame.
 
-    All modalities are captured at the same time — no timestamps, no interleaving.
-    Compatible with PyTorch's standard DataLoader (random/sequential sampling).
+    All modalities at index ``i`` are co-captured — no timestamps, no interleaving.
+    ``sample.timestamp`` is always ``None``.  Random access and standard PyTorch
+    ``DataLoader`` shuffling work without any additional wrappers.
 
-    Subclasses must implement: __len__, __getitem__, __iter__, __next__.
+    Subclasses must implement ``__len__``, ``__getitem__``, ``__iter__``, ``__next__``.
+
+    For new synchronous datasets, prefer extending
+    :class:`~apairo.core.profiled_dataset.ProfiledDataset` with a YAML profile
+    rather than subclassing this directly.
+
+    Attributes:
+        timestamps: Always ``None`` — marks this dataset as synchronous.
     """
 
     timestamps = None

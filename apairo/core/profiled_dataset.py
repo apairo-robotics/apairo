@@ -76,10 +76,34 @@ def _parse_layers(raw: list) -> list[LayerSpec]:
 
 
 class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
-    """Dataset driven by a YAML structural profile.
+    """Synchronous dataset driven by a YAML structural profile.
 
-    Subclasses set _profile = "filename.yaml" (relative to profiles dir)
-    or an absolute path.
+    Subclasses declare a `_profile` class attribute pointing to a YAML file
+    (relative to `apairo/dataset/profiles/` or an absolute path).  The profile
+    describes the directory layout, file extensions, dtypes, and any type
+    transformations.  All file discovery, loading, split filtering, and derived
+    key resolution are handled automatically.
+
+    Example:
+        Minimal subclass::
+
+            class MyDataset(ProfiledDataset):
+                _profile = "my_dataset.yaml"
+
+        Usage::
+
+            ds = MyDataset("/data/my_dataset", keys=["lidar", "labels"], split="train")
+            sample = ds[0]
+            # sample.data["lidar"]  → torch.Tensor
+            # sample.data["labels"] → torch.Tensor
+
+    Attributes:
+        available_keys: Frozenset of key names declared in the profile.
+            Populated at class definition time from the YAML file.
+
+    See Also:
+        `YAML Profiles <https://apairo.readthedocs.io/datasets/yaml-profiles/>`_
+        for the full profile specification.
     """
 
     _profile: str
