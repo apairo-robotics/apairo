@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 from apairo.utils import npy_analyser
-from ..core import AbstractLoader
+from apairo.core import AbstractLoader
 
 
 class NPYSLoader(AbstractLoader):
@@ -30,7 +30,7 @@ class NPYSLoader(AbstractLoader):
         for file in filter(lambda f: f[-3:] == "npy", os.listdir(directory)):
             if "_" in file:
                 file_ext = file.split("_")[-1].split(".")[0]
-                if file_ext not in self.npy_formats: # Fixed boolean check
+                if file_ext not in self.npy_formats:  # Fixed boolean check
                     raise ValueError(f"New format {file_ext} found in {directory}")
             else:
                 file_ext = ""
@@ -39,17 +39,19 @@ class NPYSLoader(AbstractLoader):
         for key in self.files.keys():
             self.files[key].sort()
 
-        self._shape = np.load(os.path.join(self.directory, self.files[''][0])).shape
+        self._shape = np.load(os.path.join(self.directory, self.files[""][0])).shape
 
     @property
     def shape(self):
         return self._shape
 
     def __len__(self):
-        return len(self.files[''])
+        return len(self.files[""])
 
     def set_format(self, key):
         self.key = key
 
     def __getitem__(self, idx) -> torch.Tensor:
-        return torch.from_numpy(np.load(os.path.join(self.directory, self.files[self.key][idx])))
+        return torch.from_numpy(
+            np.load(os.path.join(self.directory, self.files[self.key][idx]))
+        )

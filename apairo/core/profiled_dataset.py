@@ -15,13 +15,16 @@ from apairo.loader import DERIVED_LOADERS
 _PROFILES_DIR = Path(__file__).parent.parent / "dataset" / "profiles"
 
 _EXT_TO_LOADER: dict[str, str] = {
-    ".bin":   "bin",
+    ".bin": "bin",
     ".label": "bin",
-    ".npy":   "npy",
-    ".png":   "img",
-    ".jpg":   "img",
-    ".pt":    "pt",
+    ".npy": "npy",
+    ".png": "img",
+    ".jpg": "img",
+    ".pt": "pt",
 }
+
+# Extensions loaded via np.fromfile — raw binary, dtype/reshape/mask are meaningful
+_BINARY_EXTS: frozenset[str] = frozenset({".bin", ".label"})
 
 
 @dataclass
@@ -78,6 +81,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     Subclasses set _profile = "filename.yaml" (relative to profiles dir)
     or an absolute path.
     """
+
     _profile: str
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -106,12 +110,11 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             raw = yaml.safe_load(f)
 
         self._modalities: dict[str, ModalitySpec] = {
-            k: ModalitySpec.from_dict(k, v)
-            for k, v in raw["modalities"].items()
+            k: ModalitySpec.from_dict(k, v) for k, v in raw["modalities"].items()
         }
         self._layers: list[LayerSpec] = _parse_layers(raw["layers"])
 
-        layer_types = [l.type for l in self._layers]
+        layer_types = [layer.type for layer in self._layers]
         self._modality_layer_idx: int = layer_types.index("modality")
         seq_idx = (
             layer_types.index("sequence")
@@ -193,7 +196,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def _is_present(self, root_dir: Path, key: str) -> bool:
         spec = self._modalities[key]
-        fixed_parts = [l.value for l in self._layers if l.type == "fixed"]
+        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
         mapped = self._mapped_name(key)
         if fixed_parts:
             pattern = str(Path(*fixed_parts) / "**" / mapped / f"*{spec.ext}")
@@ -218,7 +221,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def _discover_native(self, key: str) -> list[Path]:
         spec = self._modalities[key]
-        fixed_parts = [l.value for l in self._layers if l.type == "fixed"]
+        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
         mapped = self._mapped_name(key)
 
         if fixed_parts:
@@ -230,10 +233,13 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         files = sorted(self._root.glob(pattern))
 
         if self._split_filter:
-            split_layer = next((l for l in self._layers if l.type == "split"), None)
+            split_layer = next(
+                (layer for layer in self._layers if layer.type == "split"), None
+            )
             if split_layer is not None:
                 files = [
-                    f for f in files
+                    f
+                    for f in files
                     if self._split_filter in f.relative_to(self._root).parts
                 ]
         return files
@@ -251,12 +257,25 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             path = self._files[key][idx]
             if key in self._modalities:
                 spec = self._modalities[key]
-                arr = np.fromfile(path, dtype=np.dtype(spec.dtype))
-                if spec.reshape:
-                    arr = arr.reshape(spec.reshape)
-                if spec.mask is not None:
-                    arr = arr & spec.mask
-                t = torch.from_numpy(np.ascontiguousarray(arr))
+                if spec.ext in _BINARY_EXTS:
+                    arr = np.fromfile(path, dtype=np.dtype(spec.dtype))
+                    if spec.reshape:
+                        arr = arr.reshape(spec.reshape)
+                    if spec.mask is not None:
+                        arr = arr & spec.mask
+                    t = torch.from_numpy(np.ascontiguousarray(arr))
+                else:
+                    loader_name = spec.loader or _EXT_TO_LOADER.get(spec.ext)
+                    if loader_name is None or loader_name not in DERIVED_LOADERS:
+                        raise ValueError(
+                            f"No loader for extension '{spec.ext}' on key '{key}'. "
+                            f"Set 'loader' in the profile or use a supported extension."
+                        )
+                    t = DERIVED_LOADERS[loader_name](path)
+                    if spec.reshape:
+                        t = t.reshape(spec.reshape)
+                    if spec.mask is not None:
+                        t = t & spec.mask
                 if spec.torch_dtype is not None:
                     t = t.to(getattr(torch, spec.torch_dtype))
                 data[key] = t

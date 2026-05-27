@@ -3,11 +3,11 @@ import numpy as np
 
 from apairo.utils.types import Timestamp
 from apairo.utils.timestamps import get_reference_timestamps
-from ..core import AbstractSampler
+from apairo.core import AbstractSampler
 
 
 class LatestSyncSampler(AbstractSampler):
-    r""" Implement :class:`AbstractSampler` using a update check for each data stream.
+    r"""Implement :class:`AbstractSampler` using a update check for each data stream.
 
     Samples the dataset by batching data when all data streams have been updated.
     It will replace the data in the batch with the latest data available for each data stream
@@ -17,7 +17,9 @@ class LatestSyncSampler(AbstractSampler):
     if the data taken is at the end of the dataset.
     """
 
-    def __init__(self, timestamp: Timestamp, sample_size: int = 1, shuffle: bool = False):
+    def __init__(
+        self, timestamp: Timestamp, sample_size: int = 1, shuffle: bool = False
+    ):
         super().__init__(timestamp, sample_size=sample_size)
         self.shuffle = shuffle
         self._updated = np.zeros(len(self.timestamps), dtype=bool)

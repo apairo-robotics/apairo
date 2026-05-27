@@ -15,6 +15,7 @@ apairo/core/abstract_sampler.py
 apairo/core/config.py
 apairo/core/configurable_dataset.py
 apairo/core/preprocessor.py
+apairo/core/profiled_dataset.py
 apairo/core/sample.py
 apairo/core/synchronous_dataset.py
 apairo/core/config/keys.yaml
@@ -29,6 +30,9 @@ apairo/dataset/goose/__init__.py
 apairo/dataset/goose/dataset.py
 apairo/dataset/kitti/__init__.py
 apairo/dataset/kitti/dataset.py
+apairo/dataset/profiles/goose.yaml
+apairo/dataset/profiles/rellis.yaml
+apairo/dataset/profiles/semantic_kitti.yaml
 apairo/dataset/rellis/__init__.py
 apairo/dataset/rellis/dataset.py
 apairo/dataset/semantic_kitti/__init__.py
@@ -57,5 +61,9 @@ apairo/utils/paths.py
 apairo/utils/timestamps.py
 apairo/utils/types.py
 apairo/utils/utils.py
+apairo/writer/__init__.py
+apairo/writer/bin_writer.py
+apairo/writer/npy_writer.py
+apairo/writer/pt_writer.py
 test/test_public_api.py
 test/test_utils.py

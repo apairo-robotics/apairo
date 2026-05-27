@@ -1,15 +1,16 @@
-from ..core.abstract_sampler import AbstractSampler
+from apairo.core.abstract_sampler import AbstractSampler
 from apairo.utils.timestamps import get_indexes, get_reference_timestamps
 
 
 class LowFreqUniformSampler(AbstractSampler):
-    """ Implement :class:`AbstractSampler` using frequency of the slowest data stream as reference.
+    """Implement :class:`AbstractSampler` using frequency of the slowest data stream as reference.
 
     Samples the dataset by batching data according to the flow with the lowest frequency.
     For each iteration, the sampler stacks data corresponding to the slowest data stream.
     To be sure that each sample has the same size (because different batch can have different size),
     we will take for each key, the lowest frequency that can be found for batch creation as reference.
     """
+
     sample_size: int
     timestamps: dict
     is_uniform: bool = True
@@ -26,8 +27,13 @@ class LowFreqUniformSampler(AbstractSampler):
         self.reference = get_reference_timestamps(self.timestamps)
         self.sample_last_indexes = get_indexes(self.timestamps, self.reference)
         self.sample_sizes = {
-            key: min([self.sample_last_indexes[key][i + 1] - self.sample_last_indexes[key][i]
-                     for i in range(len(self.sample_last_indexes[key]) - 1)])
+            key: min(
+                [
+                    self.sample_last_indexes[key][i + 1]
+                    - self.sample_last_indexes[key][i]
+                    for i in range(len(self.sample_last_indexes[key]) - 1)
+                ]
+            )
             for key in self.keys
         }
 
@@ -36,7 +42,10 @@ class LowFreqUniformSampler(AbstractSampler):
         if index >= len(self):
             raise IndexError("Index out of range")
         return {
-            key: [self.sample_last_indexes[key][index] + i for i in range(self.sample_sizes[key])]
+            key: [
+                self.sample_last_indexes[key][index] + i
+                for i in range(self.sample_sizes[key])
+            ]
             for key in self.keys
         }
 
@@ -50,6 +59,9 @@ class LowFreqUniformSampler(AbstractSampler):
     def __next__(self):
         if self._index >= len(self):
             raise StopIteration
-        batch = [self.get_sample(self._index * self.sample_size + i) for i in range(self.sample_size)]
+        batch = [
+            self.get_sample(self._index * self.sample_size + i)
+            for i in range(self.sample_size)
+        ]
         self._index += 1
         return batch

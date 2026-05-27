@@ -3,8 +3,8 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from ..core import AbstractLoader
-from ..core.utils.exceptions import FileExtensionError
+from apairo.core import AbstractLoader
+from apairo.core.utils.exceptions import FileExtensionError
 
 
 class NPYLoader(AbstractLoader):

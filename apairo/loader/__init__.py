@@ -9,6 +9,7 @@ from typing import Callable
 import numpy as np
 import torch
 import yaml
+from torchvision.io import read_image
 
 
 str_to_loader = {
@@ -23,6 +24,7 @@ DERIVED_LOADERS: dict[str, Callable[[Path], torch.Tensor]] = {
     "npy": lambda path: torch.from_numpy(np.load(path)),
     "pt": lambda path: torch.load(path, weights_only=True),
     "bin": lambda path: torch.from_numpy(np.fromfile(path, dtype=np.float32)),
+    "img": lambda path: read_image(str(path)),
 }
 
 __all__ = [
@@ -59,7 +61,9 @@ def loads_timestamps(keys: list, files: dict) -> dict:
     for key in keys:
         if key not in str_to_loader:
             if "timestamps.txt" in os.listdir(files[key]):
-                timestamps[key] = load_timestamps(os.path.join(files[key], "timestamps.txt"))
+                timestamps[key] = load_timestamps(
+                    os.path.join(files[key], "timestamps.txt")
+                )
             else:
                 no_ts_dirs.append(key)
 

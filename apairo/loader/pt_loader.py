@@ -4,8 +4,8 @@ from typing import Dict, Collection
 import numpy as np
 
 from apairo.utils import dict_flatten
-from ..core import AbstractLoader
-from ..core.utils.exceptions import FileExtensionError, EmptyLoaderWarning
+from apairo.core import AbstractLoader
+from apairo.core.utils.exceptions import FileExtensionError, EmptyLoaderWarning
 
 
 class PTLoader(AbstractLoader):
@@ -15,6 +15,7 @@ class PTLoader(AbstractLoader):
     In this case we consider the one from `Tartan Drive` dataset that contains at
     least the :attr:`dt` key that is the time between each frame.
     """
+
     data: Dict[str, torch.Tensor]
     lenght: int
 
@@ -25,11 +26,15 @@ class PTLoader(AbstractLoader):
         extension = file_path.split(".")[-1]
 
         if not extension == "pt":
-            raise FileExtensionError(f"This script extension {extension} is not pytorch file (pt)")
-        _data = torch.load(file_path, weights_only=True)  # Weights only for safety mesure (see torch.load doc)
+            raise FileExtensionError(
+                f"This script extension {extension} is not pytorch file (pt)"
+            )
+        _data = torch.load(
+            file_path, weights_only=True
+        )  # Weights only for safety mesure (see torch.load doc)
 
         self.data = dict_flatten(_data, format_key=lambda k, sk: "{}.{}".format(k, sk))
-        self.lenght = len(self.data['dt'])
+        self.lenght = len(self.data["dt"])
         for key in self.data.keys():
             assert self.lenght == self.data[key].shape[0], "Data size is not uniform"
 
@@ -41,17 +46,19 @@ class PTLoader(AbstractLoader):
         with :meth:`get_timestamps`.
         """
         keys = set(keys)
-        if 'dt' not in keys:
-            keys.add('dt')
+        if "dt" not in keys:
+            keys.add("dt")
         current_keys = set(self.data.keys())
         for key in current_keys:
             if key not in keys:
                 del self.data[key]
-        if self.data.keys() == {'dt'}:
-            raise EmptyLoaderWarning("No data left in the loader, reload the file to retrieve the data")
+        if self.data.keys() == {"dt"}:
+            raise EmptyLoaderWarning(
+                "No data left in the loader, reload the file to retrieve the data"
+            )
 
     def get_timestamps(self):
-        return np.cumsum(self.data['dt'])
+        return np.cumsum(self.data["dt"])
 
     def __len__(self):
         return self.lenght
@@ -68,9 +75,7 @@ class PTLoader(AbstractLoader):
     @property
     def shape(self):
         return {
-            key: self.data[key].shape[1:]
-            for key in self.data.keys()
-            if key != 'dt'
+            key: self.data[key].shape[1:] for key in self.data.keys() if key != "dt"
         }
 
     def reset(self):

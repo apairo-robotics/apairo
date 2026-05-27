@@ -1,7 +1,7 @@
 import os
 from typing import List, Tuple
 from torchvision.io import read_image
-from ..core import AbstractLoader
+from apairo.core import AbstractLoader
 
 
 class IMGLoader(AbstractLoader):
@@ -25,12 +25,13 @@ class IMGLoader(AbstractLoader):
     shape: Tuple[int, ...]
 
     def __init__(self, directory):
-
         self.directory = directory
-        self.files = list(sorted(
-            filter(lambda f: f[-3:] in {"png", "jpg"}, os.listdir(directory)),
-            key=lambda f: int(f.split(".")[0])
-        ))
+        self.files = list(
+            sorted(
+                filter(lambda f: f[-3:] in {"png", "jpg"}, os.listdir(directory)),
+                key=lambda f: int(f.split(".")[0]),
+            )
+        )
         self.index = 0
         self._shape = read_image(os.path.join(self.directory, self.files[0])).shape
 

@@ -2,14 +2,12 @@ import numpy as np
 import torch
 import os
 
-from ..core import AbstractLoader
+from apairo.core import AbstractLoader
 
 
 class BINLoader(AbstractLoader):
     def __init__(self, directory: str):
-        self.files = sorted(
-            [f for f in os.listdir(directory) if f.endswith(".bin")]
-        )
+        self.files = sorted([f for f in os.listdir(directory) if f.endswith(".bin")])
         self.directory = directory
         self._shape = (4,)  # (x, y, z, intensity)
 
