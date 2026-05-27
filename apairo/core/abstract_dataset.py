@@ -8,8 +8,8 @@ from typing import (
     Optional,
     Sequence,
     Union,
-    overload,
 )
+import numpy as np
 from . import abstract_loader
 
 from .utils.typing import _Key
@@ -17,37 +17,17 @@ from .utils.exceptions import KeysEmptyWarning, KeysDuplicateWarning
 
 
 class AbstractDataset(ABC):
-    r""":class:`AbstractDataset` is an abstract class for dataset from robots data.
+    """Base class for all robot datasets.
 
-    Each dataset that will be used will have a corresponding class that will inherit from this class.
-
-    The subclass of :class:`AbstractDataset` have to implement the :meth:`__getitem__` method overload for index in the :type:`dict` type.
-    This have to be in the timestamp order, ie the timestamp at the index i will be lower than the timestamp at the index i+1.
-    Furthermore, :meth:`__getitem__` have to return a :type:`dict` with this format:
-    ```python
-    { "key": key, "data": data, "timestamp": timestamp }
-    ```
-    where:
-    - key (string)
-    - data (torch.Tensor)
-    - timestamp (float) # We will have to specify float32 or float64 or double ...
-
-    .. note::
-        During the initialization we assume that the timestamps of the data need to be ordered. The :meth:`init_timeline`
-        method initalize the :attr:`timeline` attribute with the timestamps of the data.
+    Subclasses must implement ``__len__``, ``__getitem__``, ``__iter__``, ``__next__``.
+    ``__getitem__(idx)`` must return a :class:`~apairo.core.sample.Sample`.
 
     Attributes:
-        keys (list) :
-            The keys that are present in the dataset that will be used (keys belonging to the profile if is present)
-        timestamps (Timestamp dict) :
-            A dictionary with the timestamps for each key (see the timestamps.py file for more information)
-        dataloaders (dict):
-            A dictionary with the dataloaders (See the loaders.py file for more information)
-        synchronous (bool):
-            A bool parameter that indicate if the timestamps of the dara are synchronous
-        profile (Optional path) :
-            A loaded yaml file that give for each key the type of the data. (ex: npy, multiple npy or image for the time being)
-
+        available_keys: Frozenset of channel names this dataset type can provide.
+        keys: Active channels loaded for this instance.
+        timestamps: Per-channel timestamp arrays, or ``None`` for synchronous datasets.
+        loaders: Per-channel loader objects.
+        calibration: Sensor extrinsics — see :attr:`calibration`.
     """
 
     available_keys: ClassVar[FrozenSet[str]] = frozenset()
@@ -79,6 +59,22 @@ class AbstractDataset(ABC):
         """True if this dataset has no timestamps (synchronous frame access)."""
         return getattr(self, "timestamps", None) is None
 
+    @property
+    def calibration(self) -> Dict[str, np.ndarray]:
+        """Sensor extrinsics for this dataset.
+
+        Keys follow the convention ``"<from>_to_<to>"`` and values are 4×4
+        homogeneous transformation matrices (float64).  Returns an empty dict
+        when the dataset provides no calibration.
+
+        Override in a subclass to expose the dataset's calibration file::
+
+            @property
+            def calibration(self) -> dict[str, np.ndarray]:
+                return {"lidar_to_camera": self._load_calib()}
+        """
+        return {}
+
     @abstractmethod
     def __iter__(self): ...
 
@@ -88,19 +84,7 @@ class AbstractDataset(ABC):
     def load(self, key: str, idx: int):
         return self.loaders[key][idx]
 
-    @overload
-    def __getitem__(self, idx: int) -> Any: ...
-
-    @overload
-    def __getitem__(self, idx: Dict[str, Sequence[int]]) -> Dict[str, Any]: ...
-
-    @overload
-    def __getitem__(self, idx: int) -> Any: ...
-
     @abstractmethod
-    def __getitem__(
-        self,
-        idx: Union[int, Dict[str, Sequence[int]]],
-    ) -> Union[Any, Dict[str, Any]]: ...
+    def __getitem__(self, idx: int) -> Any: ...
 
     def __len__(self) -> int: ...
