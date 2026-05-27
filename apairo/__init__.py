@@ -19,9 +19,6 @@ from apairo.core.config import register_channel
 from apairo.writer import WRITERS
 from apairo.loader import DERIVED_LOADERS
 
-from apairo.sampler.low_freq_uniform_sampler import LowFreqUniformSampler
-from apairo.sampler.latest_sync_sampler import LatestSyncSampler
-
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 __version__ = "0.1.0"
@@ -42,7 +39,5 @@ __all__ = [
     "register_channel",
     "WRITERS",
     "DERIVED_LOADERS",
-    "LowFreqUniformSampler",
-    "LatestSyncSampler",
     "__version__",
 ]

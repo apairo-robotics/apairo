@@ -8,8 +8,6 @@ def test_public_names():
         "KittiDataset",
         "ConcatDataset",
         "split_sequences",
-        "LowFreqUniformSampler",
-        "LatestSyncSampler",
         "SemanticKittiDataset",
         "Rellis3DDataset",
         "Goose3DDataset",

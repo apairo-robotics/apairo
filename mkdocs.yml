@@ -68,5 +68,4 @@ nav:
   - Async Datasets: async-datasets.md
   - Preprocessing: preprocessing.md
   - Combining Datasets: combining.md
-  - Samplers: samplers.md
   - API Reference: api/reference.md

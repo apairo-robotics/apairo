@@ -120,20 +120,6 @@ tensor = DERIVED_LOADERS["npy"](Path("/data/output/000000.npy"))
 
 ---
 
-## Samplers
-
-### LowFreqUniformSampler
-
-::: apairo.sampler.low_freq_uniform_sampler.LowFreqUniformSampler
-
----
-
-### LatestSyncSampler
-
-::: apairo.sampler.latest_sync_sampler.LatestSyncSampler
-
----
-
 ## Data structures
 
 ### Sample
