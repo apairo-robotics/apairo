@@ -12,6 +12,11 @@ Handles the two fundamental layouts found in robotics datasets:
 ## Installation
 
 ```bash
+pip install -e .
+```
+
+And soon 
+```bash
 pip install apairo
 ```
 
