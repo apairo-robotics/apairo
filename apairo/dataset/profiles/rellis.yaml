@@ -13,3 +13,7 @@ modalities:
     ext: .label
     dtype: int32
     torch_dtype: int64
+  poses:
+    ext: .txt
+    dtype: float32
+    reshape: [3, 4]
