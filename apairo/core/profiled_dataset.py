@@ -8,6 +8,7 @@ import numpy as np
 
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
+from apairo.core.config import CONFIG_FILENAME
 from apairo.core.sample import Sample
 from apairo.loader import DERIVED_LOADERS
 
@@ -172,12 +173,6 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         native_keys = [k for k in keys if k in self._modalities]
         derived_keys = [k for k in keys if k not in self._modalities]
 
-        if derived_keys and not native_keys:
-            raise KeyError(
-                f"Derived keys {derived_keys} require at least one native key "
-                f"({sorted(self._modalities)}) alongside them."
-            )
-
         self._set_keys(list(keys))
         self._files: dict[str, list[Path]] = {}
 
@@ -207,15 +202,20 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         self._derived_loaders: dict[str, str] = {}
         if derived_keys:
-            if ref_key is None:
-                raise ValueError(
-                    "Cannot load derived keys without at least one native key that has files on disk."
-                )
-            seq_dirs = sorted({self._seq_root(f) for f in self._files[ref_key]})
-            for key in derived_keys:
-                ext = self._get_derived_ext(seq_dirs, key)
-                self._derived_loaders[key] = ext
-                self._files[key] = self._discover_derived(key, ext)
+            if ref_key is not None:
+                seq_dirs = sorted({self._seq_root(f) for f in self._files[ref_key]})
+                for key in derived_keys:
+                    ext = self._get_derived_ext(seq_dirs, key)
+                    self._derived_loaders[key] = ext
+                    self._files[key] = self._discover_derived(key, ext)
+            else:
+                # No native keys loaded — find seq dirs via .apairo and glob directly.
+                # _get_derived_ext raises KeyError if the key is not registered.
+                seq_dirs = sorted(p.parent for p in self._root.rglob(CONFIG_FILENAME))
+                for key in derived_keys:
+                    ext = self._get_derived_ext(seq_dirs, key)
+                    self._derived_loaders[key] = ext
+                    self._files[key] = self._discover_derived_direct(key, ext)
 
     def _seq_root(self, path: Path) -> Path:
         d = path
@@ -258,6 +258,26 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if isinstance(layer.value, dict):
             return layer.value.get(key, key)
         return key
+
+    def _discover_derived_direct(self, key: str, ext: str) -> list[Path]:
+        """Glob derived files without a native-key anchor.
+
+        Used when only derived keys are requested and no native files are loaded.
+        Applies the split filter the same way as _discover_native.
+        """
+        files = sorted(self._root.glob(f"**/{key}/**/*.{ext}"))
+        if self._split_filter:
+            files = [
+                f
+                for f in files
+                if self._split_filter in f.relative_to(self._root).parts
+            ]
+        if not files:
+            raise FileNotFoundError(
+                f"Derived key '{key}': no .{ext} files found under '{self._root}'. "
+                f"Run run_preprocess(...) to generate them."
+            )
+        return files
 
     def _discover_native(self, key: str) -> list[Path]:
         spec = self._modalities[key]

@@ -305,9 +305,12 @@ def test_derived_key_loaded(goose_root_with_derived):
     assert isinstance(s.data["elevation_map"], np.ndarray)
 
 
-def test_derived_only_raises(goose_root_with_derived):
-    with pytest.raises(KeyError):
-        _GooseDS(goose_root_with_derived, keys=["elevation_map"])
+def test_derived_only(goose_root_with_derived):
+    ds = _GooseDS(goose_root_with_derived, keys=["elevation_map"])
+    assert len(ds) == 6
+    s = ds[0]
+    assert "elevation_map" in s.data
+    assert isinstance(s.data["elevation_map"], np.ndarray)
 
 
 def test_derived_without_apairo_raises(goose_root):
