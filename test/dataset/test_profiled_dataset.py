@@ -83,7 +83,7 @@ def _make_label(path, n=N_POINTS):
 
 @pytest.fixture
 def goose_root(tmp_path):
-    # Mirrors real GOOSE: root/lidar/train/seq/file.bin
+    # Mirrors real GOOSE: root/train/lidar/train/seq/file.bin (fixture omits first split — glob is permissive)
     for seq in ["seq_a", "seq_b"]:
         (tmp_path / "lidar" / "train" / seq).mkdir(parents=True)
         (tmp_path / "labels" / "train" / seq).mkdir(parents=True)
@@ -243,7 +243,7 @@ def test_goose_seq_root(goose_root):
     ds = _GooseDS(goose_root, keys=["lidar"])
     first_file = ds._files["lidar"][0]
     seq = ds._seq_root(first_file)
-    # GOOSE: lidar/train/seq_a/000000.bin → _seq_depth=1 → seq_root = first_file.parent
+    # GOOSE: train/lidar/train/seq_a/000000.bin → _seq_depth=1 → seq_root = first_file.parent
     assert seq == first_file.parent
 
 
@@ -271,7 +271,9 @@ def _write_apairo(directory: Path, key: str, loader: str) -> None:
             key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}
         },
     }
-    with open(directory / ".apairo", "w") as f:
+    d = directory / ".apairo"
+    d.mkdir(exist_ok=True)
+    with open(d / "channels.yaml", "w") as f:
         yaml.dump(config, f)
 
 

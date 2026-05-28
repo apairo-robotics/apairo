@@ -16,8 +16,8 @@ def _make_label(path: Path, n: int = N_POINTS):
     np.random.randint(0, 64, n, dtype=np.int32).tofile(path)
 
 
-# Real GOOSE layout: <root>/lidar/split/seq/file.bin
-#                    <root>/labels/split/seq/file.label
+# Real GOOSE layout: <root>/split/lidar/split/seq/file.bin
+#                    <root>/split/labels/split/seq/file.label
 @pytest.fixture
 def goose_root(tmp_path):
     n_frames = 5
@@ -109,7 +109,9 @@ def _write_apairo(root: Path, key: str, loader: str) -> None:
             key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}
         },
     }
-    with open(root / ".apairo", "w") as f:
+    d = root / ".apairo"
+    d.mkdir(exist_ok=True)
+    with open(d / "channels.yaml", "w") as f:
         yaml.dump(config, f)
 
 

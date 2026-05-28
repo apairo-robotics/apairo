@@ -7,7 +7,7 @@ from apairo.core.config import (
     register_channel as _register_channel,
     read_config,
     write_config,
-    CONFIG_FILENAME,
+    config_exists,
 )
 from apairo.core.preprocessor import Preprocessor
 
@@ -127,10 +127,9 @@ class ConfigurableDataset:
             MyDataset.describe("/data/my_dataset/sequence_01")
         """
         sequence_dir = Path(sequence_dir)
-        config_path = sequence_dir / CONFIG_FILENAME
         config = (
             read_config(sequence_dir)
-            if config_path.exists()
+            if config_exists(sequence_dir)
             else cls(sequence_dir)._load_or_create_config(sequence_dir)
         )
         channels = config.get("channels", {})
@@ -178,12 +177,11 @@ class ConfigurableDataset:
             "preprocess": preprocess,
         }
 
-    def _load_or_create_config(self, sequence_dir: Path) -> dict:
-        """Read ``.apairo`` if it exists, otherwise bootstrap and write it."""
-        config_path = sequence_dir / CONFIG_FILENAME
-        if not config_path.exists():
-            config = self._bootstrap_config(sequence_dir)
-            write_config(sequence_dir, config)
+    def _load_or_create_config(self, root_dir: Path) -> dict:
+        """Read ``.apairo/channels.yaml`` if it exists, otherwise bootstrap and write it."""
+        if not config_exists(root_dir):
+            config = self._bootstrap_config(root_dir)
+            write_config(root_dir, config)
         else:
-            config = read_config(sequence_dir)
+            config = read_config(root_dir)
         return config

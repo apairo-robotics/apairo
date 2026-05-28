@@ -129,7 +129,7 @@ N_FRAMES_DERIVED = 3
 N_ELEV = 64
 
 
-def _write_apairo(seq_dir: Path, key: str, loader: str) -> None:
+def _write_apairo(root: Path, key: str, loader: str) -> None:
     import yaml
 
     config = {
@@ -138,7 +138,9 @@ def _write_apairo(seq_dir: Path, key: str, loader: str) -> None:
             key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}
         },
     }
-    with open(seq_dir / ".apairo", "w") as f:
+    d = root / ".apairo"
+    d.mkdir(exist_ok=True)
+    with open(d / "channels.yaml", "w") as f:
         yaml.dump(config, f)
 
 
@@ -152,7 +154,7 @@ def kitti_root_derived(tmp_path):
         for i in range(N_FRAMES_DERIVED):
             np.random.rand(N_POINTS, 4).astype(np.float32).tofile(vel / f"{i:06d}.bin")
             np.save(elev / f"{i:06d}.npy", np.random.rand(N_ELEV).astype(np.float32))
-        _write_apairo(tmp_path / "sequences" / seq, "elevation_map", "npys")
+    _write_apairo(tmp_path, "elevation_map", "npys")
     return tmp_path
 
 
@@ -181,6 +183,6 @@ def test_derived_key_missing_files_raises(tmp_path):
     vel.mkdir(parents=True)
     for i in range(2):
         np.random.rand(N_POINTS, 4).astype(np.float32).tofile(vel / f"{i:06d}.bin")
-    _write_apairo(tmp_path / "sequences" / "00", "elevation_map", "npys")
+    _write_apairo(tmp_path, "elevation_map", "npys")
     with pytest.raises(FileNotFoundError):
         SemanticKittiDataset(tmp_path, keys=["lidar", "elevation_map"])

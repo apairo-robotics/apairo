@@ -8,7 +8,6 @@ import numpy as np
 
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
-from apairo.core.config import CONFIG_FILENAME
 from apairo.core.sample import Sample
 from apairo.loader import DERIVED_LOADERS
 
@@ -203,17 +202,13 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         self._derived_loaders: dict[str, str] = {}
         if derived_keys:
             if ref_key is not None:
-                seq_dirs = sorted({self._seq_root(f) for f in self._files[ref_key]})
                 for key in derived_keys:
-                    ext = self._get_derived_ext(seq_dirs, key)
+                    ext = self._get_derived_ext(key)
                     self._derived_loaders[key] = ext
                     self._files[key] = self._discover_derived(key, ext)
             else:
-                # No native keys loaded — find seq dirs via .apairo and glob directly.
-                # _get_derived_ext raises KeyError if the key is not registered.
-                seq_dirs = sorted(p.parent for p in self._root.rglob(CONFIG_FILENAME))
                 for key in derived_keys:
-                    ext = self._get_derived_ext(seq_dirs, key)
+                    ext = self._get_derived_ext(key)
                     self._derived_loaders[key] = ext
                     self._files[key] = self._discover_derived_direct(key, ext)
 
@@ -236,13 +231,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def _is_present(self, root_dir: Path, key: str) -> bool:
         spec = self._modalities[key]
-        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
         mapped = self._mapped_name(key)
-        if fixed_parts:
-            pattern = str(Path(*fixed_parts) / "**" / mapped / f"*{spec.ext}")
-        else:
-            pattern = f"**/{mapped}/**/*{spec.ext}"
-        return any(root_dir.glob(pattern))
+        return any(root_dir.glob(f"{mapped}/**/*{spec.ext}"))
 
     def _bootstrap_config(self, root_dir: Path) -> dict:
         channels = {}

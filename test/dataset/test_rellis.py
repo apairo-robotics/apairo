@@ -21,7 +21,7 @@ def rellis_root(tmp_path):
     n_frames = 3
     for seq in ["00000", "00001"]:
         bin_dir = tmp_path / "Rellis-3D" / seq / "os1_cloud_node_kitti_bin"
-        lbl_dir = tmp_path / "Rellis-3D" / seq / "os1_cloud_node_kitti_label"
+        lbl_dir = tmp_path / "Rellis-3D" / seq / "os1_cloud_node_semantickitti_label_id"
         bin_dir.mkdir(parents=True)
         lbl_dir.mkdir(parents=True)
         for i in range(n_frames):
@@ -93,7 +93,7 @@ def test_is_synchronous(rellis_root):
 def test_mismatched_file_counts(tmp_path):
     """Init must fail if lidar and labels file counts differ."""
     bin_dir = tmp_path / "Rellis-3D" / "00000" / "os1_cloud_node_kitti_bin"
-    lbl_dir = tmp_path / "Rellis-3D" / "00000" / "os1_cloud_node_kitti_label"
+    lbl_dir = tmp_path / "Rellis-3D" / "00000" / "os1_cloud_node_semantickitti_label_id"
     bin_dir.mkdir(parents=True)
     lbl_dir.mkdir(parents=True)
     np.random.rand(60, 4).astype(np.float32).tofile(bin_dir / "000000.bin")
@@ -111,7 +111,7 @@ N_FRAMES_DERIVED = 3
 N_ELEV = 32
 
 
-def _write_apairo(seq_dir: Path, key: str, loader: str) -> None:
+def _write_apairo(root: Path, key: str, loader: str) -> None:
     import yaml
 
     config = {
@@ -120,7 +120,9 @@ def _write_apairo(seq_dir: Path, key: str, loader: str) -> None:
             key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}
         },
     }
-    with open(seq_dir / ".apairo", "w") as f:
+    d = root / ".apairo"
+    d.mkdir(exist_ok=True)
+    with open(d / "channels.yaml", "w") as f:
         yaml.dump(config, f)
 
 
@@ -138,7 +140,7 @@ def rellis_root_derived(tmp_path):
             np.save(
                 elev_dir / f"{i:06d}.npy", np.random.rand(N_ELEV).astype(np.float32)
             )
-        _write_apairo(tmp_path / "Rellis-3D" / seq, "elevation_map", "npys")
+    _write_apairo(tmp_path, "elevation_map", "npys")
     return tmp_path
 
 
@@ -167,6 +169,6 @@ def test_derived_key_missing_files_raises(tmp_path):
     bin_dir.mkdir(parents=True)
     for i in range(2):
         np.random.rand(N_POINTS, 4).astype(np.float32).tofile(bin_dir / f"{i:06d}.bin")
-    _write_apairo(tmp_path / "Rellis-3D" / "00000", "elevation_map", "npys")
+    _write_apairo(tmp_path, "elevation_map", "npys")
     with pytest.raises(FileNotFoundError):
         Rellis3DDataset(tmp_path, keys=["lidar", "elevation_map"])

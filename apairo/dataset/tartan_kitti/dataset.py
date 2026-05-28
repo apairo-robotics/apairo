@@ -8,16 +8,14 @@ from apairo.utils.files import get_files
 from apairo.utils.timestamps import get_end_of_time
 from apairo.dataset.kitti import KittiDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
-from apairo.core.config import read_config, CONFIG_FILENAME
+from apairo.core.config import read_config, config_exists
 
 _PROFILE_PATH = Path(__file__).parent / "profile.yaml"
 
 
 def _is_sequence_dir(path: Path, raw_profile: dict) -> bool:
     """True if *path* looks like a single TartanDrive sequence directory."""
-    return (path / CONFIG_FILENAME).exists() or any(
-        (path / k).is_dir() for k in raw_profile
-    )
+    return config_exists(path) or any((path / k).is_dir() for k in raw_profile)
 
 
 class TartanKittiDataset(KittiDataset, ConfigurableDataset):
@@ -309,8 +307,7 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
 
         result = {}
         for seq_dir in seq_dirs:
-            config_path = seq_dir / CONFIG_FILENAME
-            if config_path.exists():
+            if config_exists(seq_dir):
                 config = read_config(seq_dir)
             else:
                 instance = cls.__new__(cls)

@@ -52,18 +52,15 @@ class SynchronousDataset(AbstractDataset):
             )
         return paths
 
-    def _get_derived_ext(self, seq_dirs: list[Path], key: str) -> str:
-        """Look up the ext for a derived key from .apairo — root first, then per-seq dirs."""
-        from apairo.core.config import read_config, CONFIG_FILENAME
+    def _get_derived_ext(self, key: str) -> str:
+        """Look up the loader ext for a derived key from .apairo at the dataset root."""
+        from apairo.core.config import read_config, config_exists
 
-        for d in [self._root, *seq_dirs]:
-            config_path = d / CONFIG_FILENAME
-            if config_path.exists():
-                config = read_config(d)
-                ch = config.get("channels", {}).get(key)
-                if ch:
-                    loader = ch["loader"]
-                    return "npy" if loader in ("npys", "npys_img", "npy") else loader
+        if config_exists(self._root):
+            ch = read_config(self._root).get("channels", {}).get(key)
+            if ch:
+                loader = ch["loader"]
+                return "npy" if loader in ("npys", "npys_img", "npy") else loader
         raise KeyError(
             f"Key '{key}' not found in .apairo. "
             f"Run run_preprocess(..., output_key='{key}') first."

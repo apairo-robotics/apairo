@@ -3,7 +3,7 @@ layers:
   - sequence
   - modality:
       lidar: os1_cloud_node_kitti_bin
-      labels: os1_cloud_node_kitti_label
+      labels: os1_cloud_node_semantickitti_label_id
 modalities:
   lidar:
     ext: .bin
