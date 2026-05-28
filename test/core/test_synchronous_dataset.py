@@ -1,4 +1,4 @@
-import torch
+import numpy as np
 import pytest
 from pathlib import Path
 from apairo.core.synchronous_dataset import SynchronousDataset
@@ -16,7 +16,7 @@ class MockSyncDataset(SynchronousDataset):
     def __getitem__(self, idx: int) -> Sample:
         if not 0 <= idx < self._n:
             raise IndexError(idx)
-        return Sample(data={"lidar": torch.zeros(100, 4), "label": torch.zeros(100)})
+        return Sample(data={"lidar": np.zeros((100, 4)), "label": np.zeros(100)})
 
     def __iter__(self):
         self._pos = 0

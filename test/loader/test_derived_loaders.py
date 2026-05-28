@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import torch
 from apairo.loader import DERIVED_LOADERS
 
 
@@ -13,17 +12,6 @@ def test_npy_loader_returns_ndarray(tmp_path):
 
     assert isinstance(result, np.ndarray)
     assert np.allclose(result, data)
-
-
-def test_pt_loader_returns_ndarray(tmp_path):
-    data = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
-    pt_path = tmp_path / "test.pt"
-    torch.save(data, pt_path)
-
-    result = DERIVED_LOADERS["pt"](pt_path)
-
-    assert isinstance(result, np.ndarray)
-    assert np.allclose(result, data.numpy())
 
 
 def test_bin_loader_returns_ndarray(tmp_path):

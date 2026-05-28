@@ -3,7 +3,6 @@ import pytest
 from unittest.mock import MagicMock
 from apairo.dataset.concat import ConcatDataset
 from apairo.core.sample import Sample
-import torch
 
 
 def _make_mock_dataset(n: int, key: str = "imu"):
@@ -12,11 +11,13 @@ def _make_mock_dataset(n: int, key: str = "imu"):
     ds.timestamps = {key: np.arange(n, dtype=float)}
     ds.__len__ = MagicMock(return_value=n)
     ds.__getitem__ = MagicMock(
-        side_effect=lambda i: Sample(data={key: torch.zeros(3)}, timestamp=float(i))
+        side_effect=lambda i: Sample(data={key: np.zeros(3)}, timestamp=float(i))
     )
-    ds.__iter__ = MagicMock(return_value=iter([
-        Sample(data={key: torch.zeros(3)}, timestamp=float(i)) for i in range(n)
-    ]))
+    ds.__iter__ = MagicMock(
+        return_value=iter(
+            [Sample(data={key: np.zeros(3)}, timestamp=float(i)) for i in range(n)]
+        )
+    )
     return ds
 
 

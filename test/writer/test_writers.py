@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
-import torch
-from pathlib import Path
 
-from apairo.writer import NPYWriter, PTWriter, BINWriter, WRITERS
+from apairo.writer import NPYWriter, BINWriter, WRITERS
 
 
 @pytest.fixture
@@ -27,24 +25,6 @@ class TestNPYWriter:
         NPYWriter().write(arr, path)
         loaded = np.load(path)
         np.testing.assert_array_almost_equal(loaded, arr)
-
-
-class TestPTWriter:
-    def test_creates_file(self, tmp_path, arr):
-        path = tmp_path / "out.pt"
-        PTWriter().write(arr, path)
-        assert path.exists()
-
-    def test_creates_parent_dirs(self, tmp_path, arr):
-        path = tmp_path / "x" / "y" / "out.pt"
-        PTWriter().write(arr, path)
-        assert path.exists()
-
-    def test_content(self, tmp_path, arr):
-        path = tmp_path / "out.pt"
-        PTWriter().write(arr, path)
-        loaded = torch.load(path, weights_only=True)
-        np.testing.assert_array_almost_equal(loaded.numpy(), arr)
 
 
 class TestBINWriter:
@@ -71,9 +51,6 @@ class TestWRITERS:
 
     def test_npys_key(self):
         assert WRITERS["npys"] is NPYWriter
-
-    def test_pt_key(self):
-        assert WRITERS["pt"] is PTWriter
 
     def test_bin_key(self):
         assert WRITERS["bin"] is BINWriter

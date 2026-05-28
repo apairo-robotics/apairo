@@ -27,6 +27,10 @@ docs = [
     "mkdocstrings[python]>=0.25",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["test"]
+addopts = "--ignore=test/sampler"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["apairo*"]

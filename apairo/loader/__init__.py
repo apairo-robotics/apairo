@@ -1,7 +1,6 @@
 from .img_loader import IMGLoader
 from .npy_loader import NPYLoader
 from .npys_loader import NPYSLoader
-from .pt_loader import PTLoader
 from .bin_loader import BINLoader
 import os
 from pathlib import Path
@@ -19,17 +18,6 @@ str_to_loader = {
 }
 
 
-def _load_pt(path: Path) -> np.ndarray:
-    try:
-        import torch
-
-        return torch.load(path, weights_only=True).numpy()
-    except ImportError:
-        raise ImportError(
-            "Loading .pt files requires PyTorch. " "Install it with: pip install torch"
-        )
-
-
 def _load_img(path: Path) -> np.ndarray:
     try:
         from PIL import Image
@@ -44,7 +32,6 @@ def _load_img(path: Path) -> np.ndarray:
 
 DERIVED_LOADERS: dict[str, Callable[[Path], np.ndarray]] = {
     "npy": lambda path: np.load(path),
-    "pt": _load_pt,
     "bin": lambda path: np.fromfile(path, dtype=np.float32),
     "img": _load_img,
 }
@@ -53,7 +40,6 @@ __all__ = [
     "IMGLoader",
     "NPYLoader",
     "NPYSLoader",
-    "PTLoader",
     "BINLoader",
     "str_to_loader",
     "DERIVED_LOADERS",

@@ -8,9 +8,9 @@ modalities:
     ext: .bin
     dtype: float32
     reshape: [-1, 4]
-    stem_suffix: _vls128
+    frame_id_pattern: "^(.+)_vls128$"
   labels:
     ext: .label
     dtype: int32
     torch_dtype: int64
-    stem_suffix: _goose
+    frame_id_pattern: "^(.+)_goose$"

@@ -1,5 +1,4 @@
 import pytest
-import torch
 import numpy as np
 from apairo.loader.npys_loader import NPYSLoader
 from test.utils import create_random_npy_files
@@ -30,13 +29,13 @@ def test_getitem(npys_loader_data):
     loader = NPYSLoader(str(npys_loader_data))
 
     file0_path = npys_loader_data / "000000.npy"
-    file0 = torch.from_numpy(np.load(str(file0_path)))
+    file0 = np.load(str(file0_path))
 
     # Default format is ""
     assert np.allclose(loader[0], file0)
 
     loader.set_format("intensity")
     file0_intensity_path = npys_loader_data / "000000_intensity.npy"
-    file0_intensity = torch.from_numpy(np.load(str(file0_intensity_path)))
+    file0_intensity = np.load(str(file0_intensity_path))
 
     assert np.allclose(loader[0], file0_intensity)
