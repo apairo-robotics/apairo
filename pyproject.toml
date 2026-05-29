@@ -12,6 +12,21 @@ authors = [
 ]
 license = { text = "MIT" }
 requires-python = ">=3.11"
+keywords = ["lidar", "robotics", "dataset", "point-cloud", "traversability"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Robotics",
+    "Intended Audience :: Science/Research",
+]
+
+[project.urls]
+Homepage = "https://github.com/apairo-robotics/apairo"
+Repository = "https://github.com/apairo-robotics/apairo"
+Issues = "https://github.com/apairo-robotics/apairo/issues"
 dependencies = [
     "numpy",
     "PyYAML",
