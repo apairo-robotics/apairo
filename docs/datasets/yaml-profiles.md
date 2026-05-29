@@ -92,12 +92,12 @@ modalities:
 
 | Field | Required | Description |
 |---|---|---|
-| `ext` | yes | File extension, with or without leading dot (`.bin`, `bin`, `.label`, `.npy`, `.png`, `.jpg`, `.pt`) |
-| `dtype` | yes | NumPy dtype string used by `np.fromfile` for binary formats (`.bin`, `.label`). Ignored for structured formats. |
-| `reshape` | no | List of ints passed to `ndarray.reshape()` after loading. Use `[-1, 4]` for `(N, 4)` point clouds. |
-| `mask` | no | Integer bitmask applied as `arr & mask` before tensor conversion. Use `65535` (`0xFFFF`) to strip SemanticKITTI instance bits. |
-| `torch_dtype` | no | Torch dtype name for a final `.to()` cast — e.g., `int64` to convert `int32` labels to `torch.int64`. |
-| `loader` | no | Override the loader selected from the file extension. One of `bin`, `npy`, `img`, `pt`. |
+| `ext` | yes* | File extension, with or without leading dot (`.bin`, `bin`, `.label`, `.npy`, `.png`, `.jpg`, `.pt`, `.txt`). Required for per-frame modalities; can be omitted for sequence-file loaders that imply their own extension. |
+| `dtype` | no | NumPy dtype string used by `np.fromfile` for binary formats (`.bin`, `.label`). Not used for structured formats or sequence-file loaders. |
+| `reshape` | no | List of ints passed to `ndarray.reshape()` after loading. Use `[-1, 4]` for `(N, 4)` point clouds, `[3, 4]` for a 3×4 pose matrix. |
+| `mask` | no | Integer bitmask applied as `arr & mask` before dtype conversion. Use `65535` (`0xFFFF`) to strip SemanticKITTI instance bits. |
+| `torch_dtype` | no | NumPy dtype name for a final `.astype()` cast — e.g., `int64` to convert `int32` labels. |
+| `loader` | no | Override the default loader. Per-frame: `bin`, `npy`, `img`, `pt`. Sequence-file: `txt_rows` (one row per frame in a single `.txt` file). |
 | `subpath` | no | Extra path components below the modality directory. Use when there is an additional sub-folder between the channel directory and the files. |
 | `optional` | no | If `true`, the key is silently skipped when absent from disk instead of raising `FileNotFoundError`. Default: `false`. |
 
@@ -172,7 +172,7 @@ For structured formats, the appropriate loader is selected by extension:
       - sequence                    # Rellis-3D/00000/, Rellis-3D/00001/, ...
       - modality:
           lidar: os1_cloud_node_kitti_bin
-          labels: os1_cloud_node_kitti_label
+          labels: os1_cloud_node_semantickitti_label_id
 
     modalities:
       lidar:
@@ -183,4 +183,9 @@ For structured formats, the appropriate loader is selected by extension:
         ext: .label
         dtype: int32
         torch_dtype: int64
+      poses:
+        ext: .txt
+        loader: txt_rows    # single file per sequence, one row = one frame
+        reshape: [3, 4]     # 12 floats → 3×4 transformation matrix
+        optional: true
     ```

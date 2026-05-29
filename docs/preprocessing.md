@@ -22,10 +22,12 @@ class TraversabilityLabel(FramePreprocessor):
     sources         = ["labels"]     # provenance metadata in .apairo
 
     def process(self, sample: Sample) -> np.ndarray:
-        labels = sample.data["labels"]          # torch.Tensor (N,)
+        labels = sample.data["labels"]          # np.ndarray (N,)
         traversable_ids = {1, 2, 5, 9}
-        mask = sum(labels == i for i in traversable_ids).bool()
-        return mask.numpy().astype(np.uint8)    # (N,)  uint8
+        mask = np.zeros(len(labels), dtype=bool)
+        for i in traversable_ids:
+            mask |= labels == i
+        return mask.astype(np.uint8)            # (N,)  uint8
 
 
 Goose3DDataset.run_preprocess(TraversabilityLabel(), "/data/goose/seq_001")
@@ -87,9 +89,15 @@ Goose3DDataset.run_preprocess(preprocessor, "/data/goose", overwrite=True)
 
 ---
 
-## The `.apairo` sidecar
+## The `.apairo` directory
 
-After a successful run, `run_preprocess` writes or updates a `.apairo` file at the dataset root:
+After a successful run, `run_preprocess` writes or updates `.apairo/channels.yaml` at the dataset root:
+
+```
+dataset_root/
+└── .apairo/
+    └── channels.yaml
+```
 
 ```yaml
 version: 1
@@ -101,7 +109,7 @@ channels:
     sources: [labels]
 ```
 
-This file is read automatically on the next dataset load — no code change needed to use the new key.
+This file is read automatically on the next dataset load — no code change needed to use the new key. The `.apairo/` directory can be deleted entirely to reset a dataset to its raw state without touching any data.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Compute and persist per-point traversability labels from a GOOSE3D sequence.
+"""Compute and persist per-point traversability labels from a GOOSE3D dataset.
 
 Defines a FramePreprocessor that maps semantic labels to a binary traversability
 mask (0 / 1) using a YAML config. The runner handles file naming, saving, and
@@ -6,7 +6,7 @@ mask (0 / 1) using a YAML config. The runner handles file naming, saving, and
 
 Usage:
     python examples/goose_traversability.py \
-        --seq /data/goose/seq_a \
+        --root /data/goose/GOOSE_3D \
         --config examples/goose_traversable_labels.yaml
 """
 
@@ -15,7 +15,6 @@ import logging
 from pathlib import Path
 
 import numpy as np
-import torch
 import yaml
 
 from apairo import Goose3DDataset, FramePreprocessor
@@ -41,20 +40,26 @@ class TraversabilityPreprocessor(FramePreprocessor):
         self._traversable: set[int] = set(cfg["traversable_map"])
 
     def process(self, sample: Sample) -> np.ndarray:
-        labels: torch.Tensor = sample.data["labels"]  # (N,)
-        mask = torch.zeros(len(labels), dtype=torch.bool)
+        labels: np.ndarray = sample.data["labels"]  # (N,)
+        mask = np.zeros(len(labels), dtype=bool)
         for lbl in self._traversable:
             mask |= labels == lbl
-        return mask.numpy().astype(np.uint8)
+        return mask.astype(np.uint8)
 
 
 def main():
     logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", required=True, help="GOOSE split root (e.g. GOOSE_3D/train)")
+    parser.add_argument(
+        "--root", required=True, help="GOOSE split root (e.g. GOOSE_3D/train)"
+    )
     parser.add_argument("--config", default="examples/goose_traversable_labels.yaml")
-    parser.add_argument("--overwrite", action="store_true", help="Recompute even if output already exists")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Recompute even if output already exists",
+    )
     args = parser.parse_args()
 
     root_dir = Path(args.root).resolve()
@@ -63,13 +68,19 @@ def main():
     logging.info("Config          : %s", Path(args.config).resolve())
     logging.info("Traversable IDs : %s", sorted(preprocessor._traversable))
     logging.info("Dataset root    : %s", root_dir)
-    logging.info("Output key      : %s  (format: %s)", preprocessor.output_key, preprocessor.output_loader)
+    logging.info(
+        "Output key      : %s  (format: %s)",
+        preprocessor.output_key,
+        preprocessor.output_loader,
+    )
     logging.info("")
 
     Goose3DDataset.run_preprocess(preprocessor, root_dir, overwrite=args.overwrite)
 
     logging.info("")
-    logging.info("Channel '%s' registered in %s/.apairo", preprocessor.output_key, root_dir)
+    logging.info(
+        "Channel '%s' registered in %s/.apairo", preprocessor.output_key, root_dir
+    )
 
 
 if __name__ == "__main__":
