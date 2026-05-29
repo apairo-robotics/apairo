@@ -23,14 +23,15 @@ classifiers = [
     "Intended Audience :: Science/Research",
 ]
 
-[project.urls]
-Homepage = "https://github.com/apairo-robotics/apairo"
-Repository = "https://github.com/apairo-robotics/apairo"
-Issues = "https://github.com/apairo-robotics/apairo/issues"
 dependencies = [
     "numpy",
     "PyYAML",
 ]
+
+[project.urls]
+Homepage = "https://github.com/apairo-robotics/apairo"
+Repository = "https://github.com/apairo-robotics/apairo"
+Issues = "https://github.com/apairo-robotics/apairo/issues"
 
 [project.optional-dependencies]
 torch = ["torch"]
