@@ -12,6 +12,7 @@ outputs
 build/
 
 **.egg-info**
-
-
 site
+
+
+!.github
