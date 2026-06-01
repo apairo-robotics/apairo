@@ -185,6 +185,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         root_dir: str | Path,
         keys: list[str] | None = None,
         split: str | None = None,
+        sequence_ids: list[str] | None = None,
     ) -> None:
         profile_path = (
             Path(self._profile)
@@ -210,6 +211,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         self._root = Path(root_dir)
         self._split_filter = split
+        self._sequence_ids_filter: frozenset[str] | None = (
+            frozenset(sequence_ids) if sequence_ids is not None else None
+        )
 
         if keys is None:
             keys = [k for k in self._modalities if not self._modalities[k].optional]
@@ -334,7 +338,10 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         else:
             pattern = f"**/{mapped}{spec.ext}"
 
-        return sorted(self._root.glob(pattern))
+        paths = sorted(self._root.glob(pattern))
+        if self._sequence_ids_filter is not None:
+            paths = [p for p in paths if p.parent.name in self._sequence_ids_filter]
+        return paths
 
     def _discover_derived_direct(self, key: str, ext: str) -> list[Path]:
         """Glob derived files without a native-key anchor."""
@@ -345,6 +352,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 for f in files
                 if self._split_filter in f.relative_to(self._root).parts
             ]
+        if self._sequence_ids_filter is not None:
+            files = [f for f in files if self._seq_root(f).name in self._sequence_ids_filter]
         if not files:
             raise FileNotFoundError(
                 f"Derived key '{key}': no .{ext} files found under '{self._root}'. "
@@ -375,6 +384,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                     for f in files
                     if self._split_filter in f.relative_to(self._root).parts
                 ]
+        if self._sequence_ids_filter is not None:
+            files = [f for f in files if self._seq_root(f).name in self._sequence_ids_filter]
         return files
 
     def __len__(self) -> int:

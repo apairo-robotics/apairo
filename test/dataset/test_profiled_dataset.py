@@ -315,3 +315,39 @@ def test_derived_missing_files_raises(goose_root):
     # No actual elevation_map files on disk
     with pytest.raises(FileNotFoundError):
         _GooseDS(goose_root, keys=["lidar", "elevation_map"])
+
+
+# --- sequence_ids filter ---
+
+
+def test_kitti_sequence_ids_filter(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar", "labels"], sequence_ids=["00"])
+    assert len(ds) == 4  # only seq "00" (4 frames), not "01"
+    assert ds.sequence_ids == ["00"]
+
+
+def test_kitti_sequence_ids_filter_multiple(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar", "labels"], sequence_ids=["00", "01"])
+    assert len(ds) == 8  # both sequences
+
+
+def test_kitti_sequence_ids_filter_empty_result(kitti_root):
+    with pytest.raises(FileNotFoundError):
+        _KittiDS(kitti_root, keys=["lidar"], sequence_ids=["99"])
+
+
+def test_goose_sequence_ids_filter(goose_root):
+    ds = _GooseDS(goose_root, keys=["lidar"], sequence_ids=["seq_a"])
+    assert len(ds) == 3  # only seq_a (3 frames)
+    assert ds.sequence_ids == ["seq_a"]
+
+
+def test_rellis_sequence_ids_filter(rellis_root):
+    ds = _RellisDS(rellis_root, keys=["lidar"], sequence_ids=["00000"])
+    assert len(ds) == 3  # only seq "00000"
+    assert ds.sequence_ids == ["00000"]
+
+
+def test_sequence_ids_none_loads_all(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar"], sequence_ids=None)
+    assert len(ds) == 8
