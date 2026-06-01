@@ -351,3 +351,34 @@ def test_rellis_sequence_ids_filter(rellis_root):
 def test_sequence_ids_none_loads_all(kitti_root):
     ds = _KittiDS(kitti_root, keys=["lidar"], sequence_ids=None)
     assert len(ds) == 8
+
+
+# --- describe ---
+
+
+def test_describe_raw_present(rellis_root):
+    ds = _RellisDS(rellis_root, keys=["lidar"])
+    result = ds.describe()
+    assert "lidar" in result["raw"]["present"]
+    assert "lidar" not in result["raw"]["missing"]
+
+
+def test_describe_raw_missing(rellis_root):
+    # labels not on disk in this fixture
+    ds = _RellisDS(rellis_root, keys=["lidar"])
+    result = ds.describe()
+    assert "labels" in result["raw"]["missing"]
+
+
+def test_describe_with_sequence_id(rellis_root, capsys):
+    ds = _RellisDS(rellis_root, keys=["lidar"])
+    ds.describe("00000")
+    out = capsys.readouterr().out
+    assert "00000" in out
+
+
+def test_describe_no_crash_without_apairo(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar"])
+    result = ds.describe()
+    assert "raw" in result
+    assert "preprocess" in result

@@ -307,9 +307,13 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def _is_present(self, root_dir: Path, key: str) -> bool:
         spec = self._modalities[key]
         mapped = self._mapped_name(key)
+        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
         if spec.is_sequence_file:
             return any(root_dir.glob(f"**/{mapped}{spec.ext}"))
-        return any(root_dir.glob(f"{mapped}/**/*{spec.ext}"))
+        if fixed_parts:
+            prefix = Path(*fixed_parts)
+            return any(root_dir.glob(str(prefix / "**" / mapped / f"*{spec.ext}")))
+        return any(root_dir.glob(f"**/{mapped}/**/*{spec.ext}"))
 
     def _bootstrap_config(self, root_dir: Path) -> dict:
         channels = {}
@@ -393,9 +397,80 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             return 0
         return len(next(iter(self._loaders.values())))
 
+    def describe(self, sequence_id: str | None = None) -> dict:
+        """Describe available channels for this dataset.
+
+        Reads ``.apairo`` at the dataset root (creating it if absent) and
+        cross-references it with the profile's declared modalities to show
+        which raw channels are present or missing, and which preprocessed
+        channels have been registered.
+
+        Args:
+            sequence_id: Optional sequence identifier -- used as the display
+                label only. Channel availability is dataset-wide.
+
+        Returns:
+            ``{"raw": {"present": [...], "missing": [...]}, "preprocess": {...}}``
+
+        Example::
+
+            ds = Rellis3DDataset("/data/RELLIS")
+            ds.describe("00000")
+        """
+        from apairo.core.config import config_exists, read_config
+
+        if config_exists(self._root):
+            config = read_config(self._root)
+        else:
+            config = self._bootstrap_config(self._root)
+
+        channels = config.get("channels", {})
+        raw_present = sorted(k for k, v in channels.items() if v.get("kind", "raw") == "raw")
+        preprocess = {k: v for k, v in channels.items() if v.get("kind") == "preprocess"}
+        raw_missing = sorted(k for k in self.available_keys if k not in channels)
+
+        label = sequence_id if sequence_id is not None else self._root.name
+        print(f"\n{type(self).__name__} -- {label}")
+        print("─" * 50)
+        print("Raw channels")
+        if raw_present:
+            print("  present  :", ", ".join(raw_present))
+        if raw_missing:
+            print("  missing  :", ", ".join(raw_missing))
+        if not raw_present and not raw_missing:
+            print("  (none)")
+        print("Preprocessed channels")
+        if preprocess:
+            for key, meta in sorted(preprocess.items()):
+                ts_info = (
+                    f"<- timestamps from {meta['timestamps_from']}"
+                    if "timestamps_from" in meta
+                    else "<- own timestamps"
+                )
+                src_info = f"  sources: {meta['sources']}" if meta.get("sources") else ""
+                print(f"  {key:<20} {meta['loader']:<6} {ts_info}{src_info}")
+        else:
+            print("  (none)")
+        print()
+        return {
+            "raw": {"present": raw_present, "missing": raw_missing},
+            "preprocess": preprocess,
+        }
+
+    @property
+    def splits(self) -> list[str]:
+        for layer in self._layers:
+            if layer.type == "split" and isinstance(layer.value, list):
+                return list(layer.value)
+        return []
+
     @property
     def sequence_ids(self) -> list[str]:
         return list(self._seq_groups.keys())
+
+    def sequences(self) -> "list[SequenceView]":
+        from apairo.core.sequence_view import SequenceView  # noqa: F401
+        return [self.sequence(sid) for sid in self.sequence_ids]
 
     def sequence(self, seq_id: str) -> "SequenceView":
         if seq_id not in self._seq_groups:
