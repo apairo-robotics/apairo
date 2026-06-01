@@ -17,7 +17,7 @@ _LOADER_TO_EXT = {
     "npys_img": "npy",
     "npy": "npy",
     "bin": "bin",
-    "pt": "pt",
+
 }
 
 

@@ -36,7 +36,7 @@ _EXT_TO_LOADER: dict[str, str] = {
     ".npy": "npy",
     ".png": "img",
     ".jpg": "img",
-    ".pt": "pt",
+
 }
 
 _BINARY_EXTS: frozenset[str] = frozenset({".bin", ".label"})
@@ -419,15 +419,18 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         """
         from apairo.core.config import config_exists, read_config
 
+        # Raw channels: probe filesystem directly — .apairo only stores preprocessed ones.
+        raw_present = sorted(k for k in self.available_keys if self._is_present(self._root, k))
+        raw_missing = sorted(k for k in self.available_keys if not self._is_present(self._root, k))
+
+        preprocess = {}
         if config_exists(self._root):
             config = read_config(self._root)
-        else:
-            config = self._bootstrap_config(self._root)
-
-        channels = config.get("channels", {})
-        raw_present = sorted(k for k, v in channels.items() if v.get("kind", "raw") == "raw")
-        preprocess = {k: v for k, v in channels.items() if v.get("kind") == "preprocess"}
-        raw_missing = sorted(k for k in self.available_keys if k not in channels)
+            preprocess = {
+                k: v
+                for k, v in config.get("channels", {}).items()
+                if v.get("kind") == "preprocess"
+            }
 
         label = sequence_id if sequence_id is not None else self._root.name
         print(f"\n{type(self).__name__} -- {label}")
