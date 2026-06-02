@@ -208,3 +208,78 @@ def test_derived_key_missing_files_raises(tmp_path):
     _write_apairo(tmp_path, "elevation_map", "npys")
     with pytest.raises(FileNotFoundError):
         Rellis3DDataset(tmp_path, keys=["lidar", "elevation_map"])
+
+
+# ---------------------------------------------------------------------------
+# Split tests
+# ---------------------------------------------------------------------------
+
+N_SPLIT_FRAMES = 5
+N_TRAIN = 3
+N_VAL = 2
+
+
+def _write_lst(path: Path, entries: list[tuple[str, str]]) -> None:
+    lines = [
+        f"{seq}/os1_cloud_node_kitti_bin/{stem}.bin"
+        f" {seq}/os1_cloud_node_semantickitti_label_id/{stem}.label"
+        for seq, stem in entries
+    ]
+    path.write_text("\n".join(lines))
+
+
+@pytest.fixture
+def rellis_root_with_splits(tmp_path):
+    seqs = ["00000", "00001"]
+    for seq in seqs:
+        bin_dir = tmp_path / "Rellis-3D" / seq / "os1_cloud_node_kitti_bin"
+        lbl_dir = tmp_path / "Rellis-3D" / seq / "os1_cloud_node_semantickitti_label_id"
+        bin_dir.mkdir(parents=True)
+        lbl_dir.mkdir(parents=True)
+        for i in range(N_SPLIT_FRAMES):
+            _make_bin(bin_dir / f"{i:06d}.bin")
+            _make_label(lbl_dir / f"{i:06d}.label")
+
+    # train: first N_TRAIN frames of each seq; val: remaining N_VAL
+    train_entries = [(seq, f"{i:06d}") for seq in seqs for i in range(N_TRAIN)]
+    val_entries = [(seq, f"{i:06d}") for seq in seqs for i in range(N_TRAIN, N_SPLIT_FRAMES)]
+    _write_lst(tmp_path / "pt_train.lst", train_entries)
+    _write_lst(tmp_path / "pt_val.lst", val_entries)
+
+    return tmp_path
+
+
+def test_split_train_len(rellis_root_with_splits):
+    ds = Rellis3DDataset(rellis_root_with_splits, keys=["lidar", "labels"], split="train")
+    assert len(ds) == N_TRAIN * 2  # 2 sequences
+
+
+def test_split_val_len(rellis_root_with_splits):
+    ds = Rellis3DDataset(rellis_root_with_splits, keys=["lidar", "labels"], split="val")
+    assert len(ds) == N_VAL * 2
+
+
+def test_split_and_sequence_ids(rellis_root_with_splits):
+    ds = Rellis3DDataset(
+        rellis_root_with_splits,
+        keys=["lidar", "labels"],
+        split="train",
+        sequence_ids=["00000"],
+    )
+    assert len(ds) == N_TRAIN
+
+
+def test_splits_property(rellis_root_with_splits):
+    ds = Rellis3DDataset(rellis_root_with_splits, keys=["lidar"])
+    assert set(ds.splits) == {"train", "val", "test"}
+
+
+def test_split_method(rellis_root_with_splits):
+    ds = Rellis3DDataset(rellis_root_with_splits, keys=["lidar", "labels"])
+    train_ds = ds.split("train")
+    assert len(train_ds) == N_TRAIN * 2
+
+
+def test_split_invalid(rellis_root_with_splits):
+    with pytest.raises(ValueError, match="not declared in profile"):
+        Rellis3DDataset(rellis_root_with_splits, keys=["lidar"], split="unknown")

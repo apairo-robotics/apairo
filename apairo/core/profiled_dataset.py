@@ -46,6 +46,41 @@ _SEQUENCE_LOADERS: frozenset[str] = frozenset({"txt_rows"})
 
 
 @dataclass
+class SplitSpec:
+    type: str
+    files: dict[str, str]  # split_name -> relative path to the lst file
+
+
+def _parse_splits_spec(raw: dict) -> "SplitSpec | None":
+    if not raw:
+        return None
+    split_type = raw.get("type")
+    if not split_type:
+        return None
+    return SplitSpec(type=split_type, files={k: v for k, v in raw.items() if k != "type"})
+
+
+def _read_lst_frame_set(lst_path: Path) -> set[tuple[str, str]]:
+    """Parse a .lst split file into a set of (seq_id, stem) pairs.
+
+    Each non-empty line is expected to have space-separated columns; the first
+    column is a relative path of the form ``<seq>/<modality_dir>/<stem>.ext``.
+    """
+    result: set[tuple[str, str]] = set()
+    with open(lst_path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            first_col = line.split()[0]
+            parts = Path(first_col).parts
+            seq_id = parts[0]
+            stem = Path(parts[-1]).stem
+            result.add((seq_id, stem))
+    return result
+
+
+@dataclass
 class ModalitySpec:
     ext: str
     dtype: Optional[str] = None
@@ -215,6 +250,15 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             frozenset(sequence_ids) if sequence_ids is not None else None
         )
 
+        self._splits_spec: SplitSpec | None = _parse_splits_spec(raw.get("splits", {}))
+        self._frame_filter: set[tuple[str, str]] | None = None
+        if split is not None and self._splits_spec is not None and self._splits_spec.type == "lst":
+            lst_rel = self._splits_spec.files.get(split)
+            if lst_rel is None:
+                available = list(self._splits_spec.files.keys())
+                raise ValueError(f"Split '{split}' not declared in profile. Available: {available}")
+            self._frame_filter = _read_lst_frame_set(self._root / lst_rel)
+
         if keys is None:
             keys = [k for k in self._modalities if not self._modalities[k].optional]
 
@@ -358,6 +402,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             ]
         if self._sequence_ids_filter is not None:
             files = [f for f in files if self._seq_root(f).name in self._sequence_ids_filter]
+        if self._frame_filter is not None:
+            files = [f for f in files if (self._seq_root(f).name, f.stem) in self._frame_filter]
         if not files:
             raise FileNotFoundError(
                 f"Derived key '{key}': no .{ext} files found under '{self._root}'. "
@@ -390,6 +436,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 ]
         if self._sequence_ids_filter is not None:
             files = [f for f in files if self._seq_root(f).name in self._sequence_ids_filter]
+        if self._frame_filter is not None:
+            files = [f for f in files if (self._seq_root(f).name, f.stem) in self._frame_filter]
         return files
 
     def __len__(self) -> int:
@@ -462,10 +510,21 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     @property
     def splits(self) -> list[str]:
+        if self._splits_spec is not None:
+            return list(self._splits_spec.files.keys())
         for layer in self._layers:
             if layer.type == "split" and isinstance(layer.value, list):
                 return list(layer.value)
         return []
+
+    def split(self, name: str) -> "ProfiledDataset":
+        """Return a new dataset instance filtered to the named split."""
+        return type(self)(
+            self._root,
+            keys=list(self._keys),
+            split=name,
+            sequence_ids=list(self._sequence_ids_filter) if self._sequence_ids_filter else None,
+        )
 
     @property
     def sequence_ids(self) -> list[str]:

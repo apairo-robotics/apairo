@@ -18,3 +18,8 @@ modalities:
     loader: txt_rows
     reshape: [3, 4]
     optional: true
+splits:
+  type: lst
+  train: pt_train.lst
+  val: pt_val.lst
+  test: pt_test.lst
