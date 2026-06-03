@@ -5,6 +5,8 @@ from typing import Optional
 
 from apairo.core.config import (
     register_channel as _register_channel,
+    register_raw_channel as _register_raw_channel,
+    verify_config as _verify_config,
     read_config,
     write_config,
     config_exists,
@@ -176,6 +178,54 @@ class ConfigurableDataset:
             "raw": {"present": raw_present, "missing": raw_missing},
             "preprocess": preprocess,
         }
+
+    @classmethod
+    def register_raw_channel(
+        cls,
+        sequence_dir: str | Path,
+        key: str,
+        loader: str,
+        *,
+        has_timestamps: Optional[bool] = None,
+    ) -> None:
+        """Declare a raw channel in ``sequence_dir/.apairo``.
+
+        Use this to manually add or override a raw channel declaration, for
+        example after :meth:`init` detected the wrong loader type.
+
+        Args:
+            sequence_dir: Dataset sequence directory.
+            key: Channel name -- must match its subdirectory name.
+            loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, or ``"img"``.
+            has_timestamps: Whether the channel has ``timestamps.txt``.
+                Auto-detected when ``None``.
+        """
+        _register_raw_channel(sequence_dir, key, loader, has_timestamps=has_timestamps)
+
+    @classmethod
+    def verify(cls, sequence_dir: str | Path) -> bool:
+        """Verify that ``.apairo`` is coherent with what is on disk.
+
+        Prints any issues found and returns ``True`` when the config is clean.
+
+        Args:
+            sequence_dir: Dataset sequence directory containing ``.apairo``.
+
+        Returns:
+            ``True`` if no issues were found, ``False`` otherwise.
+
+        Example::
+
+            ok = MyDataset.verify("/data/my_dataset/seq_01")
+        """
+        issues = _verify_config(sequence_dir)
+        if not issues:
+            print(f"OK  {Path(sequence_dir)}/.apairo")
+            return True
+        print(f"{len(issues)} issue(s) in {Path(sequence_dir)}/.apairo :")
+        for issue in issues:
+            print(f"  - {issue}")
+        return False
 
     def _load_or_create_config(self, root_dir: Path) -> dict:
         """Read ``.apairo/channels.yaml`` if it exists, otherwise bootstrap and write it."""

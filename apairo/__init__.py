@@ -16,7 +16,7 @@ from apairo.dataset.semantic_kitti import SemanticKittiDataset
 from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
 
-from apairo.core.config import register_channel
+from apairo.core.config import register_channel, register_raw_channel, verify_config
 from apairo.writer import WRITERS
 from apairo.loader import DERIVED_LOADERS
 
@@ -39,6 +39,8 @@ __all__ = [
     "Rellis3DDataset",
     "Goose3DDataset",
     "register_channel",
+    "register_raw_channel",
+    "verify_config",
     "WRITERS",
     "DERIVED_LOADERS",
     "__version__",

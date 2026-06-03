@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 import numpy as np
 
 from apairo.utils.timestamps import get_end_of_time
@@ -8,20 +8,57 @@ from apairo.loader import str_to_loader, loads_timestamps, load_profile
 from apairo.utils.files import get_files
 from apairo.core import AbstractDataset, AbstractLoader
 from apairo.core.sample import Sample
+from apairo.core.config import (
+    config_exists,
+    read_config,
+    write_config,
+)
+
+
+def _detect_loader(channel_dir: Path) -> str | None:
+    """Infer loader type from file extensions found in *channel_dir*."""
+    data_files = [
+        f for f in channel_dir.iterdir()
+        if f.is_file() and f.name != "timestamps.txt"
+    ]
+    if not data_files:
+        return None
+    exts = {f.suffix.lower() for f in data_files}
+    if ".bin" in exts:
+        return "bin"
+    if exts & {".png", ".jpg", ".jpeg", ".bmp"}:
+        return "img"
+    npy_files = [f for f in data_files if f.suffix == ".npy"]
+    if npy_files:
+        # Multiple per-frame files → npys; single file → npy.
+        return "npys" if len(npy_files) > 1 else "npy"
+    return None
 
 
 class KittiDataset(AbstractDataset):
     r"""Generic dataset for KITTI-layout directories (one subdirectory per modality).
 
-    Each modality subdirectory must contain a ``timestamps.txt`` file (or have one
-    declared via the loader profile) and data files in a format known to the loader
-    registry (``npys``, ``npy``, ``bin``, ``img``).
+    Each modality subdirectory must contain a ``timestamps.txt`` file and data
+    files in a format known to the loader registry (``npys``, ``npy``, ``bin``,
+    ``img``).
+
+    **Usage with an explicit profile (original API)**::
+
+        ds = KittiDataset(seq_dir, keys=["lidar", "cam"], dataset_profile="my.yaml")
+
+    **Usage with** ``.apairo`` **(after** :meth:`init` **has been called)**::
+
+        KittiDataset.init(seq_dir)          # once, auto-detects channels
+        ds = KittiDataset(seq_dir)          # keys and loaders come from .apairo
+        ds = KittiDataset(seq_dir, keys=["lidar"])  # restrict to a subset
 
     Args:
-        directory: Path to the dataset root directory.
-        keys: Modality names to load (must match subdirectory names).
+        directory: Path to the dataset root / sequence directory.
+        keys: Modality names to load.  ``None`` → all channels declared in
+            ``.apairo`` (requires ``.apairo`` to exist).
         dataset_profile: YAML profile filename **or** absolute Path mapping keys
-            to loader types.
+            to loader types.  ``None`` → loaders are read from ``.apairo``
+            (requires ``.apairo`` to exist).
     """
 
     synchronous: bool = False
@@ -29,10 +66,32 @@ class KittiDataset(AbstractDataset):
     def __init__(
         self,
         directory: str | Path,
-        keys: List[str],
-        dataset_profile: str | Path,
+        keys: Optional[List[str]] = None,
+        dataset_profile: Optional[str | Path] = None,
     ) -> None:
-        self._profile: Dict[str, str] = load_profile(dataset_profile)
+        directory = Path(directory)
+
+        if dataset_profile is not None:
+            self._profile: Dict[str, str] = load_profile(dataset_profile)
+        elif config_exists(directory):
+            config = read_config(directory)
+            channels = config.get("channels", {})
+            self._profile = {k: v["loader"] for k, v in channels.items() if "loader" in v}
+            if keys is None:
+                keys = sorted(channels.keys())
+        else:
+            raise FileNotFoundError(
+                f"No dataset_profile given and no .apairo found in '{directory}'. "
+                f"Either pass dataset_profile=..., or initialize with "
+                f"{type(self).__name__}.init('{directory}')."
+            )
+
+        if keys is None:
+            raise ValueError(
+                "keys must be specified when dataset_profile is given. "
+                "Pass keys=[...] or use .apairo (call init() first)."
+            )
+
         self._files: Dict[str, str] = get_files(str(directory))
 
         missing = set(keys) - set(self._files)
@@ -42,6 +101,70 @@ class KittiDataset(AbstractDataset):
         self._keys: List[str] = []
         self._set_keys(keys)
         self._init()
+
+    @classmethod
+    def init(
+        cls,
+        directory: str | Path,
+        *,
+        raw_keys: Optional[List[str]] = None,
+        overwrite: bool = False,
+    ) -> None:
+        """Scan a KITTI-layout directory and write ``.apairo/channels.yaml``.
+
+        All detected subdirectories are registered as raw channels.  Loader
+        type is inferred from file extensions:
+
+        * ``.bin`` → ``bin``
+        * ``.png`` / ``.jpg`` / … → ``img``
+        * multiple ``.npy`` files → ``npys``
+        * single ``.npy`` file → ``npy``
+
+        For ambiguous cases (e.g. a single-frame ``.npy`` that is actually
+        per-frame), call :func:`~apairo.core.config.register_raw_channel`
+        afterwards to override the detected loader.
+
+        Args:
+            directory: KITTI root / sequence directory to initialize.
+            raw_keys: Subdirectory names to include.  ``None`` → all detected
+                subdirectories with recognizable file types.
+            overwrite: Replace an existing ``.apairo`` if one is present.
+
+        Raises:
+            FileExistsError: If ``.apairo`` already exists and
+                ``overwrite=False``.
+            ValueError: If no recognizable channels are found.
+        """
+        directory = Path(directory)
+        if config_exists(directory) and not overwrite:
+            raise FileExistsError(
+                f".apairo already exists in '{directory}'. "
+                f"Pass overwrite=True to reinitialize."
+            )
+
+        channels: dict = {}
+        for channel_dir in sorted(directory.iterdir()):
+            if not channel_dir.is_dir() or channel_dir.name.startswith("."):
+                continue
+            if raw_keys is not None and channel_dir.name not in raw_keys:
+                continue
+            loader = _detect_loader(channel_dir)
+            if loader is None:
+                continue
+            channels[channel_dir.name] = {
+                "has_timestamps": (channel_dir / "timestamps.txt").exists(),
+                "kind": "raw",
+                "loader": loader,
+            }
+
+        if not channels:
+            detail = f" (checked: {raw_keys})" if raw_keys else ""
+            raise ValueError(
+                f"No recognizable channels found in '{directory}'{detail}. "
+                f"Expected subdirectories containing .bin, .npy, or image files."
+            )
+
+        write_config(directory, {"version": 1, "channels": channels})
 
     # ------------------------------------------------------------------ keys
 
