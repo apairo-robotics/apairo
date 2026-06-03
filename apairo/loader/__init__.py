@@ -3,6 +3,8 @@ from .npy_loader import NPYLoader
 from .npys_loader import NPYSLoader
 from .bin_loader import BINLoader
 from .txt_loader import TXTLoader
+from .zarr_loader import ZarrLoader
+from .tar_loader import TarImageLoader
 import os
 from pathlib import Path
 from typing import Callable
@@ -43,6 +45,8 @@ __all__ = [
     "NPYSLoader",
     "BINLoader",
     "TXTLoader",
+    "ZarrLoader",
+    "TarImageLoader",
     "str_to_loader",
     "DERIVED_LOADERS",
     "loads_timestamps",

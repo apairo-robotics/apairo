@@ -15,6 +15,7 @@ from apairo.core.sequence_view import SequenceView
 from apairo.dataset.semantic_kitti import SemanticKittiDataset
 from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
+from apairo.dataset.mnt import MNTDataset
 
 from apairo.core.config import register_channel, register_raw_channel, verify_config
 from apairo.writer import WRITERS
@@ -38,6 +39,7 @@ __all__ = [
     "SemanticKittiDataset",
     "Rellis3DDataset",
     "Goose3DDataset",
+    "MNTDataset",
     "register_channel",
     "register_raw_channel",
     "verify_config",
