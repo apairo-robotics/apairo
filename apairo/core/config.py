@@ -7,8 +7,8 @@ CONFIG_DIR = ".apairo"
 CHANNELS_FILE = "channels.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
-# Keep in sync with str_to_loader in apairo/loader/__init__.py.
-KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "npys_img", "bin", "img"})
+# Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
+KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "npys_img", "bin", "img", "zarr"})
 
 
 def _apairo_dir(root_dir: Path) -> Path:

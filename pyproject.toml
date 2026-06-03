@@ -36,7 +36,8 @@ Issues = "https://github.com/apairo-robotics/apairo/issues"
 [project.optional-dependencies]
 torch = ["torch"]
 vision = ["Pillow"]
-dev = ["pytest", "matplotlib", "Pillow"]
+mnt = ["zarr>=3.0", "Pillow"]
+dev = ["pytest", "matplotlib", "Pillow", "zarr>=3.0"]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
