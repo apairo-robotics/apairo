@@ -12,6 +12,7 @@ from apairo.core.config import (
     config_exists,
     read_config,
     write_config,
+    register_raw_channel as _register_raw_channel,
 )
 
 
@@ -109,6 +110,7 @@ class KittiDataset(AbstractDataset):
         *,
         raw_keys: Optional[List[str]] = None,
         overwrite: bool = False,
+        merge: bool = False,
     ) -> None:
         """Scan a KITTI-layout directory and write ``.apairo/channels.yaml``.
 
@@ -128,18 +130,50 @@ class KittiDataset(AbstractDataset):
             directory: KITTI root / sequence directory to initialize.
             raw_keys: Subdirectory names to include.  ``None`` → all detected
                 subdirectories with recognizable file types.
-            overwrite: Replace an existing ``.apairo`` if one is present.
+            overwrite: Discard the existing ``.apairo`` and rebuild from
+                scratch.  Incompatible with ``merge``.
+            merge: Add newly detected raw channels to an existing ``.apairo``
+                without touching channels already declared (raw or
+                preprocessed).  If ``.apairo`` does not yet exist, behaves
+                like a normal init.  Incompatible with ``overwrite``.
 
         Raises:
-            FileExistsError: If ``.apairo`` already exists and
-                ``overwrite=False``.
-            ValueError: If no recognizable channels are found.
+            ValueError: If both ``overwrite`` and ``merge`` are ``True``.
+            FileExistsError: If ``.apairo`` already exists and both
+                ``overwrite`` and ``merge`` are ``False``.
+            ValueError: If no new recognizable channels are found.
         """
+        if overwrite and merge:
+            raise ValueError("overwrite and merge are mutually exclusive.")
+
         directory = Path(directory)
+
+        if merge and config_exists(directory):
+            existing = read_config(directory).get("channels", {})
+            added = 0
+            for channel_dir in sorted(directory.iterdir()):
+                if not channel_dir.is_dir() or channel_dir.name.startswith("."):
+                    continue
+                if raw_keys is not None and channel_dir.name not in raw_keys:
+                    continue
+                if channel_dir.name in existing:
+                    continue
+                loader = _detect_loader(channel_dir)
+                if loader is None:
+                    continue
+                _register_raw_channel(directory, channel_dir.name, loader)
+                added += 1
+            if added == 0:
+                detail = f" (checked: {raw_keys})" if raw_keys else ""
+                raise ValueError(
+                    f"No new recognizable channels found in '{directory}'{detail}."
+                )
+            return
+
         if config_exists(directory) and not overwrite:
             raise FileExistsError(
                 f".apairo already exists in '{directory}'. "
-                f"Pass overwrite=True to reinitialize."
+                f"Pass overwrite=True to reinitialize, or merge=True to add new channels."
             )
 
         channels: dict = {}
