@@ -71,7 +71,7 @@ from apairo.core.sample import Sample
 
 # Maps channel key -> sub-path components relative to mission dir.
 # Empty list signals a special-case loader (e.g. TarImageLoader for "image").
-_RAW_CHANNEL_PATHS: dict[str, list[str]] = {
+RAW_CHANNEL_PATHS: dict[str, list[str]] = {
     # ── images / lidar ───────────────────────────────────────────────────────
     "image":                 [],  # images.tar -- handled specially
     "points":                ["points.zarr"],
@@ -91,7 +91,17 @@ _RAW_CHANNEL_PATHS: dict[str, list[str]] = {
     "yaw_waypoints_dist":    ["traj_dist.zarr", "yaws.zarr"],
 }
 
-_DEFAULT_KEYS = list(_RAW_CHANNEL_PATHS.keys())
+_DEFAULT_KEYS = list(RAW_CHANNEL_PATHS.keys())
+
+
+def _scan_mission_channels(mission_dir: Path) -> dict:
+    """Return a channels config dict for all raw channels present in *mission_dir*."""
+    channels: dict = {}
+    for key in sorted(RAW_CHANNEL_PATHS.keys()):
+        if _channel_exists(mission_dir, key):
+            loader_tag = "img" if key == "image" else "zarr"
+            channels[key] = {"has_timestamps": False, "kind": "raw", "loader": loader_tag}
+    return channels
 
 
 def _is_mission_dir(path: Path) -> bool:
@@ -106,7 +116,7 @@ def _is_mission_dir(path: Path) -> bool:
 def _channel_exists(mission_dir: Path, key: str) -> bool:
     if key == "image":
         return (mission_dir / "images.tar").is_file()
-    parts = _RAW_CHANNEL_PATHS.get(key, [])
+    parts = RAW_CHANNEL_PATHS.get(key, [])
     if not parts:
         return False
     return (mission_dir / Path(*parts)).is_dir()
@@ -117,7 +127,7 @@ def _detect_n_frames(mission_dir: Path) -> int:
     from apairo.loader.zarr_loader import ZarrLoader
 
     for key in ("position", "yaw", "timestamp", "points", "waypoints_time", "waypoints_dist"):
-        parts = _RAW_CHANNEL_PATHS.get(key, [])
+        parts = RAW_CHANNEL_PATHS.get(key, [])
         if not parts:
             continue
         zarr_path = mission_dir / Path(*parts)
@@ -141,7 +151,7 @@ def _build_raw_loader(mission_dir: Path, key: str, n_frames: int):
         from apairo.loader.tar_loader import TarImageLoader
         return TarImageLoader(tar_path, n_frames)
 
-    parts = _RAW_CHANNEL_PATHS[key]
+    parts = RAW_CHANNEL_PATHS[key]
     zarr_path = mission_dir / Path(*parts)
     if not zarr_path.is_dir():
         return None
@@ -186,7 +196,7 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
         available_keys: Raw channels the dataset can provide.
     """
 
-    available_keys = frozenset(_RAW_CHANNEL_PATHS.keys())
+    available_keys = frozenset(RAW_CHANNEL_PATHS.keys())
 
     def __init__(
         self,
@@ -216,7 +226,7 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
         self._loaders: dict = {}
 
         for key in keys:
-            if key in _RAW_CHANNEL_PATHS:
+            if key in RAW_CHANNEL_PATHS:
                 loader = _build_raw_loader(mission_dir, key, self._n_frames)
             else:
                 loader = _build_derived_loader(mission_dir, key)
@@ -256,14 +266,49 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
 
     # ---------------------------------------------------------------- ConfigurableDataset
 
+    @classmethod
+    def init(
+        cls,
+        mission_dir: str | Path,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Scan a mission directory and write ``.apairo/channels.yaml``.
+
+        Detects which raw channels (zarr arrays, ``images.tar``) are present
+        and registers them.  Call this once before using
+        :class:`MNTDataset` with ``.apairo``-based introspection or
+        :meth:`~apairo.core.configurable_dataset.ConfigurableDataset.verify`.
+
+        Args:
+            mission_dir: Path to a single MNT mission directory.
+            overwrite: Replace an existing ``.apairo`` if present.
+
+        Raises:
+            FileExistsError: If ``.apairo`` already exists and
+                ``overwrite=False``.
+            ValueError: If no known channels are detected.
+        """
+        from apairo.core.config import config_exists, write_config
+
+        mission_dir = Path(mission_dir)
+        if config_exists(mission_dir) and not overwrite:
+            raise FileExistsError(
+                f".apairo already exists in '{mission_dir}'. "
+                f"Pass overwrite=True to reinitialize."
+            )
+
+        channels = _scan_mission_channels(mission_dir)
+        if not channels:
+            raise ValueError(
+                f"No known MNT channels found in '{mission_dir}'. "
+                f"Expected trajectory.zarr/, points.zarr/, or images.tar."
+            )
+        write_config(mission_dir, {"version": 1, "channels": channels})
+
     def _bootstrap_config(self, root_dir: Path) -> dict:
         """Auto-discover raw channels in *root_dir* and write the initial .apairo."""
-        channels: dict = {}
-        for key in sorted(self.available_keys):
-            if _channel_exists(root_dir, key):
-                loader_tag = "img" if key == "image" else "zarr"
-                channels[key] = {"loader": loader_tag, "has_timestamps": False}
-        return {"version": 1, "channels": channels}
+        return {"version": 1, "channels": _scan_mission_channels(root_dir)}
 
     def derived_path(self, idx: int, key: str, ext: str) -> Path:
         """Return the path where a preprocessed frame should be saved.
