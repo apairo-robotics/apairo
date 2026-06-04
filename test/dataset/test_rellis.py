@@ -242,7 +242,9 @@ def rellis_root_with_splits(tmp_path):
 
     # train: first N_TRAIN frames of each seq; val: remaining N_VAL
     train_entries = [(seq, f"{i:06d}") for seq in seqs for i in range(N_TRAIN)]
-    val_entries = [(seq, f"{i:06d}") for seq in seqs for i in range(N_TRAIN, N_SPLIT_FRAMES)]
+    val_entries = [
+        (seq, f"{i:06d}") for seq in seqs for i in range(N_TRAIN, N_SPLIT_FRAMES)
+    ]
     _write_lst(tmp_path / "pt_train.lst", train_entries)
     _write_lst(tmp_path / "pt_val.lst", val_entries)
 
@@ -250,7 +252,9 @@ def rellis_root_with_splits(tmp_path):
 
 
 def test_split_train_len(rellis_root_with_splits):
-    ds = Rellis3DDataset(rellis_root_with_splits, keys=["lidar", "labels"], split="train")
+    ds = Rellis3DDataset(
+        rellis_root_with_splits, keys=["lidar", "labels"], split="train"
+    )
     assert len(ds) == N_TRAIN * 2  # 2 sequences
 
 
@@ -283,3 +287,12 @@ def test_split_method(rellis_root_with_splits):
 def test_split_invalid(rellis_root_with_splits):
     with pytest.raises(ValueError, match="not declared in profile"):
         Rellis3DDataset(rellis_root_with_splits, keys=["lidar"], split="unknown")
+
+
+def test_derived_only_without_source(rellis_root_derived):
+    ds = Rellis3DDataset(rellis_root_derived, keys=["elevation_map"])
+    assert len(ds) == N_FRAMES_DERIVED * 2
+    s = ds[0]
+    assert "elevation_map" in s.data
+    assert "lidar" not in s.data
+    assert isinstance(s.data["elevation_map"], np.ndarray)

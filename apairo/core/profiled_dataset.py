@@ -36,7 +36,6 @@ _EXT_TO_LOADER: dict[str, str] = {
     ".npy": "npy",
     ".png": "img",
     ".jpg": "img",
-
 }
 
 _BINARY_EXTS: frozenset[str] = frozenset({".bin", ".label"})
@@ -57,7 +56,9 @@ def _parse_splits_spec(raw: dict) -> "SplitSpec | None":
     split_type = raw.get("type")
     if not split_type:
         return None
-    return SplitSpec(type=split_type, files={k: v for k, v in raw.items() if k != "type"})
+    return SplitSpec(
+        type=split_type, files={k: v for k, v in raw.items() if k != "type"}
+    )
 
 
 def _read_lst_frame_set(lst_path: Path) -> set[tuple[str, str]]:
@@ -252,27 +253,56 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         self._splits_spec: SplitSpec | None = _parse_splits_spec(raw.get("splits", {}))
         self._frame_filter: set[tuple[str, str]] | None = None
-        if split is not None and self._splits_spec is not None and self._splits_spec.type == "lst":
+        if (
+            split is not None
+            and self._splits_spec is not None
+            and self._splits_spec.type == "lst"
+        ):
             lst_rel = self._splits_spec.files.get(split)
             if lst_rel is None:
                 available = list(self._splits_spec.files.keys())
-                raise ValueError(f"Split '{split}' not declared in profile. Available: {available}")
+                raise ValueError(
+                    f"Split '{split}' not declared in profile. Available: {available}"
+                )
             self._frame_filter = _read_lst_frame_set(self._root / lst_rel)
 
-        if keys is None:
-            keys = [k for k in self._modalities if not self._modalities[k].optional]
+        # .apairo is the source of truth: raw channels present + preprocessed channels created.
+        config = self._load_or_create_config(self._root)
+        channels: dict = config.get("channels", {})
 
-        native_keys = [k for k in keys if k in self._modalities]
-        derived_keys = [k for k in keys if k not in self._modalities]
+        if keys is None:
+            keys = [
+                k
+                for k, v in channels.items()
+                if v.get("kind", "raw") == "raw" and not self._modalities[k].optional
+            ]
+
+        # Classify each requested key.
+        raw_keys: list[str] = []
+        derived_keys: list[str] = []
+        for k in keys:
+            ch = channels.get(k)
+            if ch is None:
+                # Not in .apairo — allow if it is a profile key (raw, not yet scanned).
+                if k not in self._modalities:
+                    raise KeyError(
+                        f"Key '{k}' is not available in '{self._root}'. "
+                        f"Available: {sorted(channels)}. "
+                        f"Register preprocessed channels with "
+                        f"{type(self).__name__}.register_channel()."
+                    )
+                raw_keys.append(k)
+            elif ch.get("kind", "raw") == "raw":
+                raw_keys.append(k)
+            else:
+                derived_keys.append(k)
 
         self._set_keys(list(keys))
-        self._files: dict[
-            str, list[Path]
-        ] = {}  # per-frame native keys only (for derived_path)
+        self._files: dict[str, list[Path]] = {}
         self._loaders: dict[str, _PerFrameLoader | TXTLoader] = {}
         self._ref_key: str | None = None
 
-        for key in native_keys:
+        for key in raw_keys:
             spec = self._modalities[key]
             if spec.is_sequence_file:
                 paths = self._discover_sequence_files(key)
@@ -295,12 +325,10 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                     if self._ref_key is None:
                         self._ref_key = key
 
-        # Count check via loaders -- each loader is the authority on its own length.
         frame_counts = {k: len(v) for k, v in self._loaders.items()}
         if len(set(frame_counts.values())) > 1:
             raise ValueError(f"Mismatched frame counts per key: {frame_counts}")
 
-        # Detect modality_idx dynamically from first discovered per-frame file.
         self._modality_idx: int = self._modality_layer_idx
         if self._ref_key and self._files.get(self._ref_key):
             first = self._files[self._ref_key][0]
@@ -309,26 +337,30 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             if mapped in rel_parts:
                 self._modality_idx = rel_parts.index(mapped)
 
-        if derived_keys:
-            discover = (
-                self._discover_derived
-                if self._ref_key is not None
-                else self._discover_derived_direct
-            )
-            for key in derived_keys:
-                ext = self._get_derived_ext(key)
-                paths = discover(key, ext)
-                spec = ModalitySpec(ext=f".{ext}", loader=ext)
-                self._loaders[key] = _PerFrameLoader(paths, spec)
+        for key in derived_keys:
+            loader = channels[key]["loader"]
+            ext = "npy" if loader in ("npys", "npys_img", "npy") else loader
+            paths = self._discover_derived(key, ext)
+            spec = ModalitySpec(ext=f".{ext}", loader=ext)
+            self._loaders[key] = _PerFrameLoader(paths, spec)
 
-        # Optional native keys with no files on disk are not in _loaders; drop them
-        # so _keys stays consistent with what __getitem__ can actually serve.
         self._set_keys([k for k in keys if k in self._loaders])
 
-        # Build sequence groups: seq_name -> sorted list of global frame indices.
         self._seq_groups: dict[str, list[int]] = {}
-        if self._ref_key and self._files.get(self._ref_key):
-            for i, path in enumerate(self._files[self._ref_key]):
+        anchor = (
+            self._files.get(self._ref_key)
+            if self._ref_key
+            else next(
+                (
+                    v.paths
+                    for v in self._loaders.values()
+                    if isinstance(v, _PerFrameLoader)
+                ),
+                None,
+            )
+        )
+        if anchor:
+            for i, path in enumerate(anchor):
                 seq_name = self._seq_root(path).name
                 self._seq_groups.setdefault(seq_name, []).append(i)
 
@@ -361,7 +393,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def _bootstrap_config(self, root_dir: Path) -> dict:
         channels = {}
-        for key in self.available_keys:
+        for key in sorted(self.available_keys):
             if self._is_present(root_dir, key):
                 spec = self._modalities[key]
                 loader = spec.loader or _EXT_TO_LOADER.get(spec.ext, "bin")
@@ -391,9 +423,15 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             paths = [p for p in paths if p.parent.name in self._sequence_ids_filter]
         return paths
 
-    def _discover_derived_direct(self, key: str, ext: str) -> list[Path]:
-        """Glob derived files without a native-key anchor."""
-        files = sorted(self._root.glob(f"**/{key}/**/*.{ext}"))
+    def _discover_derived(self, key: str, ext: str) -> list[Path]:
+        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        if fixed_parts:
+            prefix = Path(*fixed_parts)
+            pattern = str(prefix / "**" / key / f"*.{ext}")
+        else:
+            pattern = f"**/{key}/**/*.{ext}"
+
+        files = sorted(self._root.glob(pattern))
         if self._split_filter:
             files = [
                 f
@@ -401,9 +439,15 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 if self._split_filter in f.relative_to(self._root).parts
             ]
         if self._sequence_ids_filter is not None:
-            files = [f for f in files if self._seq_root(f).name in self._sequence_ids_filter]
+            files = [
+                f for f in files if self._seq_root(f).name in self._sequence_ids_filter
+            ]
         if self._frame_filter is not None:
-            files = [f for f in files if (self._seq_root(f).name, f.stem) in self._frame_filter]
+            files = [
+                f
+                for f in files
+                if (self._seq_root(f).name, f.stem) in self._frame_filter
+            ]
         if not files:
             raise FileNotFoundError(
                 f"Derived key '{key}': no .{ext} files found under '{self._root}'. "
@@ -435,9 +479,15 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                     if self._split_filter in f.relative_to(self._root).parts
                 ]
         if self._sequence_ids_filter is not None:
-            files = [f for f in files if self._seq_root(f).name in self._sequence_ids_filter]
+            files = [
+                f for f in files if self._seq_root(f).name in self._sequence_ids_filter
+            ]
         if self._frame_filter is not None:
-            files = [f for f in files if (self._seq_root(f).name, f.stem) in self._frame_filter]
+            files = [
+                f
+                for f in files
+                if (self._seq_root(f).name, f.stem) in self._frame_filter
+            ]
         return files
 
     def __len__(self) -> int:
@@ -468,8 +518,12 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         from apairo.core.config import config_exists, read_config
 
         # Raw channels: probe filesystem directly — .apairo only stores preprocessed ones.
-        raw_present = sorted(k for k in self.available_keys if self._is_present(self._root, k))
-        raw_missing = sorted(k for k in self.available_keys if not self._is_present(self._root, k))
+        raw_present = sorted(
+            k for k in self.available_keys if self._is_present(self._root, k)
+        )
+        raw_missing = sorted(
+            k for k in self.available_keys if not self._is_present(self._root, k)
+        )
 
         preprocess = {}
         if config_exists(self._root):
@@ -498,7 +552,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                     if "timestamps_from" in meta
                     else "<- own timestamps"
                 )
-                src_info = f"  sources: {meta['sources']}" if meta.get("sources") else ""
+                src_info = (
+                    f"  sources: {meta['sources']}" if meta.get("sources") else ""
+                )
                 print(f"  {key:<20} {meta['loader']:<6} {ts_info}{src_info}")
         else:
             print("  (none)")
@@ -523,7 +579,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             self._root,
             keys=list(self._keys),
             split=name,
-            sequence_ids=list(self._sequence_ids_filter) if self._sequence_ids_filter else None,
+            sequence_ids=list(self._sequence_ids_filter)
+            if self._sequence_ids_filter
+            else None,
         )
 
     @property
@@ -532,6 +590,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def sequences(self) -> "list[SequenceView]":
         from apairo.core.sequence_view import SequenceView  # noqa: F401
+
         return [self.sequence(sid) for sid in self.sequence_ids]
 
     def sequence(self, seq_id: str) -> "SequenceView":

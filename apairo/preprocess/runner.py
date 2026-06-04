@@ -17,7 +17,6 @@ _LOADER_TO_EXT = {
     "npys_img": "npy",
     "npy": "npy",
     "bin": "bin",
-
 }
 
 
@@ -105,7 +104,7 @@ def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:
         path = dataset.derived_path(idx, preprocessor.output_key, ext)
         writer.write(result, path)
 
-        if preprocessor.timestamps_from is None and sample.timestamp is not None:
+        if sample.timestamp is not None:
             seq_timestamps.setdefault(path.parent, []).append(sample.timestamp)
 
     for seq_dir, timestamps in seq_timestamps.items():
@@ -119,6 +118,5 @@ def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None
     )
     WRITERS[preprocessor.output_loader]().write(result, out)
 
-    if preprocessor.timestamps_from is None:
-        key = preprocessor.input_keys[0]
-        np.savetxt(out.parent / "timestamps.txt", dataset.timestamps[key])
+    ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
+    np.savetxt(out.parent / "timestamps.txt", dataset.timestamps[ts_key])

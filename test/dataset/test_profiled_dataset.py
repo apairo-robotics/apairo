@@ -382,3 +382,59 @@ def test_describe_no_crash_without_apairo(kitti_root):
     result = ds.describe()
     assert "raw" in result
     assert "preprocess" in result
+
+
+# ---------------------------------------------------------------------------
+# Derived-from-derived
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def goose_root_chained(goose_root):
+    """Chain: lidar (raw) -> elevation_map (preprocess) -> traversability (preprocess)."""
+    config = {
+        "version": 1,
+        "channels": {
+            "elevation_map": {
+                "kind": "preprocess",
+                "loader": "npys",
+                "has_timestamps": False,
+                "sources": ["lidar"],
+            },
+            "traversability": {
+                "kind": "preprocess",
+                "loader": "npys",
+                "has_timestamps": False,
+                "sources": ["elevation_map"],
+            },
+        },
+    }
+    apairo_dir = goose_root / ".apairo"
+    apairo_dir.mkdir(exist_ok=True)
+    with open(apairo_dir / "channels.yaml", "w") as f:
+        yaml.dump(config, f)
+    for seq in ["seq_a", "seq_b"]:
+        for key in ["elevation_map", "traversability"]:
+            d = goose_root / key / "train" / seq
+            d.mkdir(parents=True)
+            for i in range(3):
+                np.save(d / f"{i:06d}.npy", np.random.rand(8).astype(np.float32))
+    return goose_root
+
+
+def test_derived_from_derived(goose_root_chained):
+    ds = _GooseDS(goose_root_chained, keys=["traversability"])
+    assert len(ds) == 6
+    s = ds[0]
+    assert "traversability" in s.data
+    assert "elevation_map" not in s.data
+    assert "lidar" not in s.data
+    assert isinstance(s.data["traversability"], np.ndarray)
+
+
+def test_derived_from_derived_with_intermediate(goose_root_chained):
+    ds = _GooseDS(goose_root_chained, keys=["elevation_map", "traversability"])
+    assert len(ds) == 6
+    s = ds[0]
+    assert "elevation_map" in s.data
+    assert "traversability" in s.data

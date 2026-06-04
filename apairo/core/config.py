@@ -8,7 +8,9 @@ CHANNELS_FILE = "channels.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
-KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "npys_img", "bin", "img", "zarr"})
+KNOWN_LOADERS: frozenset[str] = frozenset(
+    {"npy", "npys", "npys_img", "bin", "img", "zarr"}
+)
 
 
 def _apairo_dir(root_dir: Path) -> Path:
@@ -56,8 +58,8 @@ def register_channel(
         root_dir: Dataset root directory.
         key: Channel name -- must match its subdirectory name.
         loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, or ``"img"``.
-        timestamps_from: Channel whose timestamps to share when this channel
-            has no ``timestamps.txt`` of its own.
+        timestamps_from: Source channel whose timestamps this channel shares
+            (provenance only -- the channel always has its own ``timestamps.txt``).
         sources: Provenance -- raw channels this channel was derived from.
     """
     root_dir = Path(root_dir)

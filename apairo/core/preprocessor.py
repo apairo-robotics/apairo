@@ -23,9 +23,9 @@ class Preprocessor(ABC):
     input_keys : list[str]
         Dataset channels needed as input.
     timestamps_from : str or None
-        If ``None`` the runner writes a ``timestamps.txt`` from the input
-        timestamps.  If set to a channel name the output borrows that channel's
-        timestamps and no file is written.
+        The source channel whose timestamps this output shares.  Stored in
+        ``.apairo`` as provenance.  The runner always writes a
+        ``timestamps.txt`` into the output channel's directory.
     sources : list[str] or None
         Provenance -- channels this output was derived from (stored in
         ``.apairo`` for reference).

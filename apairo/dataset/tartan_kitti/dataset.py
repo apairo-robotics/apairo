@@ -81,12 +81,6 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                 f"Verify that the path points to a valid sequence directory."
             )
 
-        missing_dirs = [k for k in channels if not (sequence_dir / k).is_dir()]
-        if missing_dirs:
-            raise FileNotFoundError(
-                f".apairo lists channels whose directories are missing: {missing_dirs}"
-            )
-
         self._sequence_dir = sequence_dir
         self._available_channels = channels
         self._effective_profile: dict[str, str] = {
@@ -112,6 +106,11 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                     f"Keys {unknown} are not declared in .apairo. "
                     f"Register preprocessed channels with "
                     f"{type(self).__name__}.register_channel()."
+                )
+            missing_dirs = [k for k in keys if not (sequence_dir / k).is_dir()]
+            if missing_dirs:
+                raise FileNotFoundError(
+                    f"Channel directories missing on disk: {missing_dirs}"
                 )
             super().__init__(
                 directory=sequence_dir, keys=list(keys), dataset_profile=_PROFILE_PATH
@@ -188,6 +187,15 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                 return SequenceView(seq, range(len(seq)), seq_id)
         raise KeyError(f"Sequence '{seq_id}' not found. Available: {self.sequence_ids}")
 
+    # ---------------------------------------------------------------- preprocessing
+
+    @property
+    def root_dir(self) -> Path:
+        return self._root_dir if self._is_root else self._sequence_dir
+
+    def derived_path(self, idx: int, key: str, ext: str) -> Path:
+        return self._sequence_dir / key / f"{idx:06d}.{ext}"
+
     # ---------------------------------------------------------------- keys
 
     @property
@@ -213,6 +221,11 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                     f"Keys {unknown} are not declared in .apairo. "
                     f"Register preprocessed channels with "
                     f"{type(self).__name__}.register_channel()."
+                )
+            missing_dirs = [k for k in keys if not (self._sequence_dir / k).is_dir()]
+            if missing_dirs:
+                raise FileNotFoundError(
+                    f"Channel directories missing on disk: {missing_dirs}"
                 )
             self._set_keys(list(keys))
             self._init()
@@ -273,34 +286,37 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
     # ---------------------------------------------------------------- loaders
 
     def _init_loaders(self) -> None:
-        aliased = {
-            k: self._timestamp_aliases[k]
-            for k in self._keys
-            if k in self._timestamp_aliases
-        }
-        standard = [k for k in self._keys if k not in aliased]
-
         self.loaders = {
             key: str_to_loader[self._effective_profile[key]](self._files[key])
             for key in self._keys
         }
 
-        extra_sources = set(aliased.values()) - set(self._keys)
-        for src in extra_sources:
-            if src not in self._files:
-                raise ValueError(
-                    f"Channel '{src}' is required as a timestamp source for "
-                    f"{[k for k, v in aliased.items() if v == src]} "
-                    f"but its directory was not found in the sequence."
-                )
+        self.timestamps: dict[str, np.ndarray] = {}
+        raw_fallback: list[str] = []
 
-        ts_keys = list({*standard, *aliased.values()})
-        base_ts = loads_timestamps(ts_keys, self._files)
+        for key in self._keys:
+            ts_path = Path(self._files[key]) / "timestamps.txt"
+            if ts_path.exists():
+                self.timestamps[key] = np.loadtxt(ts_path)
+            elif key in self._timestamp_aliases:
+                # Backward compat: derived channel created before own-timestamps convention.
+                src = self._timestamp_aliases[key]
+                if src not in self.timestamps:
+                    src_path = Path(self._files[src]) / "timestamps.txt"
+                    if not src_path.exists():
+                        raise ValueError(
+                            f"'{key}' has no timestamps.txt and its alias source "
+                            f"'{src}' has no timestamps.txt either. "
+                            f"Re-run run_preprocess() to regenerate."
+                        )
+                    self.timestamps[src] = np.loadtxt(src_path)
+                self.timestamps[key] = self.timestamps[src]
+            else:
+                raw_fallback.append(key)
 
-        self.timestamps: dict[str, np.ndarray] = {
-            k: base_ts[self._timestamp_aliases[k]] if k in aliased else base_ts[k]
-            for k in self._keys
-        }
+        if raw_fallback:
+            self.timestamps.update(loads_timestamps(raw_fallback, self._files))
+
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
 
     # ---------------------------------------------------------------- describe

@@ -42,30 +42,6 @@ class SynchronousDataset(AbstractDataset):
         ref = next(iter(self._files.values()))[idx]
         return self._seq_root(ref) / key / f"{ref.stem}.{ext}"
 
-    def _discover_derived(self, key: str, ext: str) -> list[Path]:
-        paths = [self.derived_path(i, key, ext) for i in range(len(self))]
-        missing = [p for p in paths if not p.exists()]
-        if missing:
-            raise FileNotFoundError(
-                f"Derived key '{key}': {len(missing)} file(s) missing. "
-                f"Run run_preprocess(...) to generate them."
-            )
-        return paths
-
-    def _get_derived_ext(self, key: str) -> str:
-        """Look up the loader ext for a derived key from .apairo at the dataset root."""
-        from apairo.core.config import read_config, config_exists
-
-        if config_exists(self._root):
-            ch = read_config(self._root).get("channels", {}).get(key)
-            if ch:
-                loader = ch["loader"]
-                return "npy" if loader in ("npys", "npys_img", "npy") else loader
-        raise KeyError(
-            f"Key '{key}' not found in .apairo. "
-            f"Run run_preprocess(..., output_key='{key}') first."
-        )
-
     @abstractmethod
     def __len__(self) -> int: ...
 

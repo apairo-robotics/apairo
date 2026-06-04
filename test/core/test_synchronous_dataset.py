@@ -95,11 +95,3 @@ def test_derived_path_structure(tmp_path):
     assert result.stem == "000000"
     assert result.suffix == ".npy"
     assert result.parent.name == "elevation_map"
-
-
-def test_discover_derived_raises_when_files_missing(tmp_path):
-    lidar_path = tmp_path / "seq0" / "lidar" / "000000.bin"
-    files = {"lidar": [lidar_path]}
-    ds = MockSyncDatasetWithFiles(tmp_path, files)
-    with pytest.raises(FileNotFoundError, match="key"):
-        ds._discover_derived("key", "npy")
