@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     FrozenSet,
@@ -14,6 +15,7 @@ from . import abstract_loader
 
 from .utils.typing import _Key
 from .utils.exceptions import KeysEmptyWarning, KeysDuplicateWarning
+from .sample import Sample
 
 
 class AbstractDataset(ABC):
@@ -80,6 +82,33 @@ class AbstractDataset(ABC):
 
     @abstractmethod
     def __next__(self): ...
+
+    def transform(self, key: str, fn: Callable) -> "AbstractDataset":
+        """Register a transform applied to *key* at access time.
+
+        Multiple calls on the same key compose in order (first registered,
+        first applied).  Returns ``self`` for chaining::
+
+            ds.transform("poses", To4x4()) \\
+              .transform("lidar", RangeFilter(max=50)) \\
+              .transform("lidar", Normalize())
+        """
+        if not hasattr(self, "_transforms"):
+            self._transforms: dict[str, list[Callable]] = {}
+        self._transforms.setdefault(key, []).append(fn)
+        return self
+
+    def _apply_transforms(self, sample: Sample) -> Sample:
+        transforms = getattr(self, "_transforms", {})
+        if not transforms:
+            return sample
+        for key, fns in transforms.items():
+            if key in sample.data:
+                val = sample.data[key]
+                for fn in fns:
+                    val = fn(val)
+                sample.data[key] = val
+        return sample
 
     def load(self, key: str, idx: int):
         return self.loaders[key][idx]

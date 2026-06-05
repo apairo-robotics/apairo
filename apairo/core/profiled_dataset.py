@@ -608,7 +608,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             return self.sequence(seq_id)[local_idx]
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        return Sample(data={key: self._loaders[key][idx] for key in self._keys})
+        sample = Sample(data={key: self._loaders[key][idx] for key in self._keys})
+        return self._apply_transforms(sample)
 
     def __iter__(self):
         self._iter_pos = 0

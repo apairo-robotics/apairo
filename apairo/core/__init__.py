@@ -4,6 +4,7 @@ from .synchronous_dataset import SynchronousDataset
 from .configurable_dataset import ConfigurableDataset
 from .sample import Sample
 from .sequence_view import SequenceView
+from .transform import Compose
 
 from . import utils
 
@@ -14,5 +15,6 @@ __all__ = [
     "ConfigurableDataset",
     "Sample",
     "SequenceView",
+    "Compose",
     "utils",
 ]
