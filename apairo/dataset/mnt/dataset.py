@@ -326,10 +326,11 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
             return int(self._cumulative_lengths[-1])
         return self._n_frames
 
-    def __getitem__(self, idx) -> Sample:
+    def _load(self, idx) -> Sample:
         if isinstance(idx, tuple):
             seq_id, local_idx = idx
-            return self.sequence(seq_id)[local_idx]
+            view = self.sequence(seq_id)
+            return self._load(view._indices[local_idx])
 
         if self._is_root:
             if not hasattr(self, "_cumulative_lengths"):
@@ -340,7 +341,7 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
                 np.searchsorted(self._cumulative_lengths[1:], idx, side="right")
             )
             local_idx = idx - int(self._cumulative_lengths[seq_idx])
-            return self._missions[seq_idx][local_idx]
+            return self._missions[seq_idx]._load(local_idx)
 
         if not 0 <= idx < self._n_frames:
             raise IndexError(f"Index {idx} out of range [0, {self._n_frames})")

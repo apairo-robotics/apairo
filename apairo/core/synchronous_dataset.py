@@ -46,9 +46,6 @@ class SynchronousDataset(AbstractDataset):
     def __len__(self) -> int: ...
 
     @abstractmethod
-    def __getitem__(self, idx: int) -> Sample: ...
-
-    @abstractmethod
     def __iter__(self): ...
 
     @abstractmethod

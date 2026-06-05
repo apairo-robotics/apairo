@@ -1,6 +1,8 @@
 # Preprocessing
 
-apairo provides a framework for running and persisting preprocessing pipelines alongside datasets. Results are stored following the dataset's layout conventions and registered automatically in a `.apairo` sidecar.
+apairo provides a framework for running and persisting preprocessing pipelines alongside datasets.
+
+> **Companion library:** [`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) ships ready-made preprocessors (ICP registration, normal estimation, ground removal, …) built on top of this API. Results are stored following the dataset's layout conventions and registered automatically in a `.apairo` sidecar.
 
 ---
 

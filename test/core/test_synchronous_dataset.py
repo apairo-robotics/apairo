@@ -13,7 +13,7 @@ class MockSyncDataset(SynchronousDataset):
     def __len__(self) -> int:
         return self._n
 
-    def __getitem__(self, idx: int) -> Sample:
+    def _load(self, idx: int) -> Sample:
         if not 0 <= idx < self._n:
             raise IndexError(idx)
         return Sample(data={"lidar": np.zeros((100, 4)), "label": np.zeros(100)})
@@ -39,7 +39,7 @@ class MockSyncDatasetWithFiles(SynchronousDataset):
     def __len__(self) -> int:
         return self._n
 
-    def __getitem__(self, idx: int) -> Sample:
+    def _load(self, idx: int) -> Sample:
         return Sample(data={})
 
     def __iter__(self):

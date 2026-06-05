@@ -270,7 +270,7 @@ class KittiDataset(AbstractDataset):
     def __len__(self) -> int:
         return len(self._tl_key_idxs)
 
-    def __getitem__(self, idx: int) -> Sample:
+    def _load(self, idx: int) -> Sample:
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         key = self._keys[self._tl_key_idxs[idx]]

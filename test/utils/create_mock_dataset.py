@@ -23,7 +23,7 @@ class MockDataset(AbstractDataset):
     def __next__(self):
         return self.data
 
-    def __getitem__(self, idx):
+    def _load(self, idx):
         return self.data
 
 

@@ -81,6 +81,9 @@ See [`examples/`](examples/) for complete usage patterns.
 
 ## Preprocessing
 
+Persist computed channels alongside raw data with `FramePreprocessor` or `SequencePreprocessor`.
+See [`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) for a collection of ready-made preprocessors.
+
 ```python
 from apairo.preprocess import FramePreprocessor
 from apairo.dataset import Goose3DDataset
@@ -98,6 +101,22 @@ class TravLabel(FramePreprocessor):
 Goose3DDataset.run_preprocess(TravLabel(), "/data/goose")
 # writes  trav_label/train/seq/000000.npy, ...
 # updates .apairo config automatically
+```
+
+---
+
+## Transforms
+
+Apply callables to channel data at access time -- no disk writes.
+See [`apairo_transform`](https://github.com/apairo/apairo_transform) for a collection of ready-made transforms.
+
+```python
+from apairo import Compose
+
+ds = apairo.Goose3DDataset("/data/goose", keys=["lidar", "labels"])
+ds.transform("lidar", Compose([RangeFilter(max_range=50), ZNorm()]))
+
+sample = ds[0]   # transform applied transparently
 ```
 
 ---

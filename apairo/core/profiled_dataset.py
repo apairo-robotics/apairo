@@ -602,14 +602,14 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         return SequenceView(self, self._seq_groups[seq_id], seq_id)
 
-    def __getitem__(self, idx) -> Sample:
+    def _load(self, idx) -> Sample:
         if isinstance(idx, tuple):
             seq_id, local_idx = idx
-            return self.sequence(seq_id)[local_idx]
+            view = self.sequence(seq_id)
+            return self._load(view._indices[local_idx])
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        sample = Sample(data={key: self._loaders[key][idx] for key in self._keys})
-        return self._apply_transforms(sample)
+        return Sample(data={key: self._loaders[key][idx] for key in self._keys})
 
     def __iter__(self):
         self._iter_pos = 0

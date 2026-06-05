@@ -67,5 +67,6 @@ nav:
     - Adding a Dataset: datasets/adding-a-dataset.md
   - Async Datasets: async-datasets.md
   - Preprocessing: preprocessing.md
+  - Transforms: transform.md
   - Combining Datasets: combining.md
   - API Reference: api/reference.md

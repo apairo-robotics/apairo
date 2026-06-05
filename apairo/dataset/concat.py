@@ -82,7 +82,7 @@ class ConcatDataset(AbstractDataset):
     def __len__(self) -> int:
         return int(self._cumulative[-1])
 
-    def __getitem__(self, idx: int) -> Sample:
+    def _load(self, idx: int) -> Sample:
         ds_idx, offset = self._dataset_idx_and_offset(idx)
         return self.datasets[ds_idx][idx - offset]
 

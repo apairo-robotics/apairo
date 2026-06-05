@@ -241,10 +241,11 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
             raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
         return super().__len__()
 
-    def __getitem__(self, idx):
+    def _load(self, idx):
         if isinstance(idx, tuple):
             seq_id, local_idx = idx
-            return self.sequence(seq_id)[local_idx]
+            view = self.sequence(seq_id)
+            return self._load(view._indices[local_idx])
         if self._is_root:
             if not hasattr(self, "_cumulative_lengths"):
                 raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
@@ -254,10 +255,10 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                 np.searchsorted(self._cumulative_lengths[1:], idx, side="right")
             )
             local_idx = idx - int(self._cumulative_lengths[seq_idx])
-            return self._sequences[seq_idx][local_idx]
+            return self._sequences[seq_idx]._load(local_idx)
         if not self._keys:
             raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
-        return super().__getitem__(idx)
+        return super()._load(idx)
 
     def __iter__(self):
         self._iter_pos = 0

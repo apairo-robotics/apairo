@@ -98,22 +98,48 @@ class AbstractDataset(ABC):
         self._transforms.setdefault(key, []).append(fn)
         return self
 
+    def sample_transform(self, fn: Callable[["Sample"], "Sample"]) -> "AbstractDataset":
+        """Register a transform applied to the full :class:`~apairo.core.sample.Sample` at access time.
+
+        Use this when an operation must touch several channels consistently
+        (e.g. a range filter that must keep the same points in both ``lidar``
+        and ``labels``).  The callable receives and returns a
+        :class:`~apairo.core.sample.Sample`.
+
+        Multiple calls compose in registration order.  Returns ``self`` for
+        chaining::
+
+            def sync_filter(sample):
+                mask = sample.data["lidar"][:, 0] < 50
+                sample.data["lidar"]  = sample.data["lidar"][mask]
+                sample.data["labels"] = sample.data["labels"][mask]
+                return sample
+
+            ds.sample_transform(sync_filter)
+        """
+        if not hasattr(self, "_sample_transforms"):
+            self._sample_transforms: list[Callable] = []
+        self._sample_transforms.append(fn)
+        return self
+
     def _apply_transforms(self, sample: Sample) -> Sample:
-        transforms = getattr(self, "_transforms", {})
-        if not transforms:
-            return sample
-        for key, fns in transforms.items():
+        for key, fns in getattr(self, "_transforms", {}).items():
             if key in sample.data:
                 val = sample.data[key]
                 for fn in fns:
                     val = fn(val)
                 sample.data[key] = val
+        for fn in getattr(self, "_sample_transforms", []):
+            sample = fn(sample)
         return sample
 
     def load(self, key: str, idx: int):
         return self.loaders[key][idx]
 
     @abstractmethod
-    def __getitem__(self, idx: int) -> Any: ...
+    def _load(self, idx: int) -> "Sample": ...
+
+    def __getitem__(self, idx: int) -> "Sample":
+        return self._apply_transforms(self._load(idx))
 
     def __len__(self) -> int: ...

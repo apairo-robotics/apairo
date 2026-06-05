@@ -46,7 +46,8 @@ sample = ds[0]
 
 - **YAML-driven dataset profiles** -- adding a new synchronous dataset requires one `.yaml` file and two lines of Python
 - **Derived key loading** -- preprocessed outputs live alongside raw data, registered in a `.apairo` sidecar and loaded transparently
-- **Preprocessing framework** -- `FramePreprocessor` and `SequencePreprocessor` run pipelines and persist results automatically
+- **Preprocessing framework** -- `FramePreprocessor` and `SequencePreprocessor` run pipelines and persist results automatically ([`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) for ready-made preprocessors)
+- **At-access transforms** -- `dataset.transform(key, fn)` and `Compose` apply callables at read time without writing to disk ([`apairo_transform`](https://github.com/apairo/apairo_transform) for ready-made transforms)
 - **PyTorch integration** -- `TorchConcatDataset` and `TorchKittiDataset` wrap any dataset for use with `DataLoader`
 - **Sequence-level splits** -- `split_sequences()` avoids temporal leakage across train/val/test
 
