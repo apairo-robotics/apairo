@@ -260,17 +260,6 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
             raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
         return super()._load(idx)
 
-    def __iter__(self):
-        self._iter_pos = 0
-        return self
-
-    def __next__(self):
-        if self._iter_pos >= len(self):
-            raise StopIteration
-        sample = self[self._iter_pos]
-        self._iter_pos += 1
-        return sample
-
     # ---------------------------------------------------------------- bootstrap
 
     def _bootstrap_config(self, sequence_dir: Path) -> dict:

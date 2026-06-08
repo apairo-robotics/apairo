@@ -57,17 +57,6 @@ class SampleDataset(AbstractDataset):
     def __len__(self):
         return 1
 
-    def __iter__(self):
-        self._i = 0
-        return self
-
-    def __next__(self):
-        if self._i >= len(self):
-            raise StopIteration
-        s = self[self._i]
-        self._i += 1
-        return s
-
     def _load(self, idx):
         return Sample(data={
             "lidar":  np.array([[1.0, 2.0], [3.0, 4.0]]),

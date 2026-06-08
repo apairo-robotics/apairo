@@ -21,8 +21,11 @@ from .sample import Sample
 class AbstractDataset(ABC):
     """Base class for all robot datasets.
 
-    Subclasses must implement ``__len__``, ``__getitem__``, ``__iter__``, ``__next__``.
-    ``__getitem__(idx)`` must return a :class:`~apairo.core.sample.Sample`.
+    Subclasses must implement ``__len__`` and ``_load``.
+    ``_load(idx)`` must return a :class:`~apairo.core.sample.Sample` with raw data
+    (no transforms applied).  ``__getitem__``, ``__iter__``, and ``__next__`` are
+    provided by this base class: ``__getitem__`` applies registered transforms on
+    top of ``_load``; iteration uses index-based access over ``__len__``.
 
     Attributes:
         available_keys: Frozenset of channel names this dataset type can provide.
@@ -77,11 +80,16 @@ class AbstractDataset(ABC):
         """
         return {}
 
-    @abstractmethod
-    def __iter__(self): ...
+    def __iter__(self):
+        self._iter_pos = 0
+        return self
 
-    @abstractmethod
-    def __next__(self): ...
+    def __next__(self):
+        if self._iter_pos >= len(self):
+            raise StopIteration
+        sample = self[self._iter_pos]
+        self._iter_pos += 1
+        return sample
 
     def transform(self, key: str, fn: Callable) -> "AbstractDataset":
         """Register a transform applied to *key* at access time.

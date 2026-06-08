@@ -17,9 +17,6 @@ class MockDataset(AbstractDataset):
     def shape(self):
         return (1,)
 
-    def __iter__(self):
-        return self
-
     def __next__(self):
         return self.data
 

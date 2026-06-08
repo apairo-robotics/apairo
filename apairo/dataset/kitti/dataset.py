@@ -280,13 +280,3 @@ class KittiDataset(AbstractDataset):
             timestamp=float(self.timestamps[key][frame]),
         )
 
-    def __iter__(self):
-        self._iter_pos = 0
-        return self
-
-    def __next__(self) -> Sample:
-        if self._iter_pos >= len(self):
-            raise StopIteration
-        sample = self[self._iter_pos]
-        self._iter_pos += 1
-        return sample

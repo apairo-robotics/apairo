@@ -13,7 +13,7 @@ class SynchronousDataset(AbstractDataset):
     ``sample.timestamp`` is always ``None``.  Random access and standard PyTorch
     ``DataLoader`` shuffling work without any additional wrappers.
 
-    Subclasses must implement ``__len__``, ``__getitem__``, ``__iter__``, ``__next__``.
+    Subclasses must implement ``__len__`` and ``_load``.
 
     For new synchronous datasets, prefer extending
     :class:`~apairo.core.profiled_dataset.ProfiledDataset` with a YAML profile
@@ -45,8 +45,3 @@ class SynchronousDataset(AbstractDataset):
     @abstractmethod
     def __len__(self) -> int: ...
 
-    @abstractmethod
-    def __iter__(self): ...
-
-    @abstractmethod
-    def __next__(self) -> Sample: ...

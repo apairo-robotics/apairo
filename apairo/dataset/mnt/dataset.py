@@ -347,16 +347,6 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
             raise IndexError(f"Index {idx} out of range [0, {self._n_frames})")
         return Sample(data={key: self._loaders[key][idx] for key in self._keys})
 
-    def __iter__(self):
-        self._iter_pos = 0
-        return self
-
-    def __next__(self) -> Sample:
-        if self._iter_pos >= len(self):
-            raise StopIteration
-        sample = self[self._iter_pos]
-        self._iter_pos += 1
-        return sample
 
     # ---------------------------------------------------------------- sequences / missions
 

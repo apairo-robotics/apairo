@@ -18,18 +18,6 @@ class MockSyncDataset(SynchronousDataset):
             raise IndexError(idx)
         return Sample(data={"lidar": np.zeros((100, 4)), "label": np.zeros(100)})
 
-    def __iter__(self):
-        self._pos = 0
-        return self
-
-    def __next__(self) -> Sample:
-        if self._pos >= self._n:
-            raise StopIteration
-        s = self[self._pos]
-        self._pos += 1
-        return s
-
-
 class MockSyncDatasetWithFiles(SynchronousDataset):
     def __init__(self, root: Path, files: dict[str, list[Path]]):
         self._root = root
@@ -41,18 +29,6 @@ class MockSyncDatasetWithFiles(SynchronousDataset):
 
     def _load(self, idx: int) -> Sample:
         return Sample(data={})
-
-    def __iter__(self):
-        self._pos = 0
-        return self
-
-    def __next__(self) -> Sample:
-        if self._pos >= self._n:
-            raise StopIteration
-        s = self[self._pos]
-        self._pos += 1
-        return s
-
 
 def test_no_timestamps():
     ds = MockSyncDataset(5)

@@ -344,6 +344,22 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             spec = ModalitySpec(ext=f".{ext}", loader=ext)
             self._loaders[key] = _PerFrameLoader(paths, spec)
 
+        # If no native key was loaded (e.g. preprocessing a derived channel),
+        # fall back to the first derived key as the path reference so that
+        # derived_path() can resolve output locations.
+        if self._ref_key is None:
+            for key in derived_keys:
+                loader = self._loaders.get(key)
+                if loader is not None and loader.paths:
+                    self._files[key] = loader.paths
+                    self._ref_key = key
+                    first = self._files[self._ref_key][0]
+                    rel_parts = first.relative_to(self._root).parts
+                    mapped = self._mapped_name(self._ref_key)
+                    if mapped in rel_parts:
+                        self._modality_idx = rel_parts.index(mapped)
+                    break
+
         self._set_keys([k for k in keys if k in self._loaders])
 
         self._seq_groups: dict[str, list[int]] = {}
@@ -611,13 +627,3 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         return Sample(data={key: self._loaders[key][idx] for key in self._keys})
 
-    def __iter__(self):
-        self._iter_pos = 0
-        return self
-
-    def __next__(self) -> Sample:
-        if self._iter_pos >= len(self):
-            raise StopIteration
-        sample = self[self._iter_pos]
-        self._iter_pos += 1
-        return sample
