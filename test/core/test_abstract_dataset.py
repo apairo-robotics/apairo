@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 from test.utils.create_mock_dataset import create_mock_dataset
-from apairo.core import AbstractDataset
+from apairo.core import AbstractDataset, FilteredView
 from apairo.core.utils.exceptions import KeysEmptyWarning, KeysDuplicateWarning
 from apairo.core.sample import Sample
 
@@ -134,3 +134,69 @@ def test_transform_published_channel_available_to_next_step(sample_ds):
     sample = sample_ds[0]
     assert sample.data["lidar_f"].shape == (1, 2)
     assert sample.data["labels_f"].shape == (1,)
+
+
+# ------------------------------------------------------------------ filter
+
+class MultiSampleDataset(AbstractDataset):
+    """Five-frame dataset: lidar row count matches the frame index + 1."""
+
+    def __init__(self):
+        self.keys = ["lidar", "labels"]
+        self.loaders = {}
+
+    def __len__(self):
+        return 5
+
+    def _load(self, idx):
+        return Sample(data={
+            "lidar":  np.ones((idx + 1, 3)),   # frame i has i+1 points
+            "labels": np.array([idx % 2]),      # 0 or 1
+        })
+
+
+@pytest.fixture
+def multi_ds():
+    return MultiSampleDataset()
+
+
+def test_filter_sample_level(multi_ds):
+    view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] >= 3)
+    assert isinstance(view, FilteredView)
+    assert len(view) == 3   # frames 2, 3, 4 (3, 4, 5 points)
+
+
+def test_filter_per_channel(multi_ds):
+    view = multi_ds.filter("labels", lambda lbl: lbl[0] == 1)
+    assert len(view) == 2   # frames 1, 3 (odd indices)
+
+
+def test_filter_returns_correct_data(multi_ds):
+    view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] == 1)
+    assert len(view) == 1
+    sample = view[0]
+    assert sample.data["lidar"].shape == (1, 3)
+
+
+def test_filter_empty(multi_ds):
+    view = multi_ds.filter(lambda s: False)
+    assert len(view) == 0
+
+
+def test_filter_chaining_with_transform(multi_ds):
+    view = (
+        multi_ds
+        .filter(lambda s: s.data["lidar"].shape[0] >= 3)
+        .transform("lidar", lambda x: x * 2)
+    )
+    sample = view[0]
+    np.testing.assert_array_equal(sample.data["lidar"], np.ones((3, 3)) * 2)
+
+
+def test_filter_chaining_filter_on_filter(multi_ds):
+    view = (
+        multi_ds
+        .filter(lambda s: s.data["lidar"].shape[0] >= 2)   # frames 1-4
+        .filter(lambda s: s.data["labels"][0] == 1)         # odd indices only
+    )
+    assert len(view) == 2   # frames 1 and 3

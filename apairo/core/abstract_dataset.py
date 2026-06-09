@@ -161,6 +161,46 @@ class AbstractDataset(ABC):
             sample.data.pop(key, None)
         return sample
 
+    def filter(
+        self,
+        key_or_fn,
+        fn: Callable | None = None,
+    ) -> "AbstractDataset":
+        """Return a filtered view of this dataset.
+
+        Both forms are **eager**: the full dataset is swept once to build the
+        index list.  The result is a
+        :class:`~apairo.core.filtered_view.FilteredView` that supports full
+        chaining (``.transform()``, ``.filter()``, etc.).
+
+        **Sample-level** -- ``filter(fn)``
+
+        ``fn`` receives the full :class:`~apairo.core.sample.Sample` (transforms
+        applied) and returns ``True`` to keep the frame::
+
+            ds.filter(lambda s: s.data["lidar"].shape[0] > 100)
+
+        **Per-channel** -- ``filter(key, fn)``
+
+        ``fn`` receives ``sample.data[key]`` (raw, before transforms) and returns
+        ``True`` to keep the frame.  Only the specified channel is evaluated
+        during the sweep::
+
+            ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
+
+        Returns:
+            :class:`~apairo.core.filtered_view.FilteredView`
+        """
+        from apairo.core.filtered_view import FilteredView
+
+        if fn is None:
+            indices = [i for i in range(len(self)) if key_or_fn(self[i])]
+        else:
+            key = key_or_fn
+            indices = [i for i in range(len(self)) if fn(self._load(i).data[key])]
+
+        return FilteredView(self, indices)
+
     def load(self, key: str, idx: int):
         return self.loaders[key][idx]
 
