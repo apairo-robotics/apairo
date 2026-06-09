@@ -14,6 +14,27 @@ from apairo.core.config import (
 from apairo.core.preprocessor import Preprocessor
 
 
+class _RunPreprocessDescriptor:
+    """Descriptor that makes run_preprocess work on both classes and instances.
+
+    - ``Dataset.run_preprocess(preprocessor, root_dir, **kwargs)`` — standard
+    - ``ds.run_preprocess(preprocessor, **kwargs)``  — root_dir inferred from instance
+    """
+
+    def __get__(self, obj, cls):
+        from apairo.preprocess.runner import run
+
+        if obj is not None:
+            root_dir = obj.root_dir
+            def _instance_run(preprocessor, *, overwrite=False, **dataset_kwargs):
+                run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+            return _instance_run
+
+        def _class_run(preprocessor, root_dir, *, overwrite=False, **dataset_kwargs):
+            run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+        return _class_run
+
+
 class ConfigurableDataset:
     """Mixin for datasets that support preprocessed-channel extensibility via ``.apairo``.
 
@@ -83,38 +104,24 @@ class ConfigurableDataset:
         """
         ...
 
-    @classmethod
-    def run_preprocess(
-        cls,
-        preprocessor: Preprocessor,
-        root_dir: str | Path,
-        *,
-        overwrite: bool = False,
-        **dataset_kwargs,
-    ) -> None:
-        """Run a preprocessor on a dataset and persist the output channel.
+    run_preprocess = _RunPreprocessDescriptor()
+    """Run a preprocessor and persist the output channel.
 
-        Delegates to :func:`apairo.preprocess.run`, which handles file placement
-        via ``derived_path()``, format-specific saving, timestamp writing, and
-        ``.apairo`` registration at ``root_dir``.
+    Can be called on the class or on an existing instance:
 
-        Extra keyword arguments are forwarded to the dataset constructor, so
-        dataset-specific options such as ``split`` or ``sequence_ids`` work
-        transparently::
+    **Class form** -- root_dir required::
 
-            Goose3DDataset.run_preprocess(preprocessor, "/data/GOOSE_3D", split="train")
+        Goose3DDataset.run_preprocess(preprocessor, "/data/GOOSE_3D", split="train")
 
-        Args:
-            preprocessor: A :class:`~apairo.core.preprocessor.FramePreprocessor`
-                or :class:`~apairo.core.preprocessor.SequencePreprocessor`.
-            root_dir: Dataset root directory.
-            overwrite: Recompute if output already exists.
-            **dataset_kwargs: Extra arguments passed to the dataset constructor
-                (e.g. ``split``, ``sequence_ids``).
-        """
-        from apairo.preprocess.runner import run
+    **Instance form** -- root_dir inferred from the dataset::
 
-        run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+        ds = Goose3DDataset("/data/GOOSE_3D", keys=["lidar"], split="train")
+        ds.run_preprocess(preprocessor)
+
+    Extra keyword arguments are forwarded to the dataset constructor (class form)
+    or ignored (instance form, since the instance is already configured).
+    ``overwrite=True`` recomputes even if the output already exists.
+    """
 
     @classmethod
     def describe(cls, sequence_dir: str | Path) -> dict:

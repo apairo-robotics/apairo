@@ -21,6 +21,14 @@ from apairo import Goose3DDataset, FramePreprocessor
 from apairo.core.sample import Sample
 
 
+TRAVERSABLE_LABELS = {
+     23 # Asphalt
+    ,24 # Gravel
+    ,31 # Soil
+    ,50 # Low grass
+    ,51 # High grass
+}
+
 class TraversabilityPreprocessor(FramePreprocessor):
     """Map GOOSE semantic labels to a binary traversability mask.
 
@@ -37,7 +45,7 @@ class TraversabilityPreprocessor(FramePreprocessor):
     def __init__(self, config_path: str | Path) -> None:
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
-        self._traversable: set[int] = set(cfg["traversable_map"])
+        self._traversable: set[int] = set(cfg.get('traversable_map') or TRAVERSABLE_LABELS)
 
     def process(self, sample: Sample) -> np.ndarray:
         labels: np.ndarray = sample.data["labels"]  # (N,)
@@ -54,7 +62,7 @@ def main():
     parser.add_argument(
         "--root", required=True, help="GOOSE split root (e.g. GOOSE_3D/train)"
     )
-    parser.add_argument("--config", default="examples/goose_traversable_labels.yaml")
+    parser.add_argument("--config", default=None)
     parser.add_argument(
         "--overwrite",
         action="store_true",
