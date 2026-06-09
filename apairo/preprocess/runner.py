@@ -32,6 +32,7 @@ def run(
     root_dir: str | Path,
     *,
     overwrite: bool = False,
+    **dataset_kwargs,
 ) -> None:
     """Run a preprocessor on a dataset and persist the output channel.
 
@@ -53,7 +54,7 @@ def run(
             ``SequencePreprocessor``.
     """
     root_dir = Path(root_dir)
-    dataset = dataset_cls(root_dir, keys=preprocessor.input_keys)
+    dataset = dataset_cls(root_dir, keys=preprocessor.input_keys, **dataset_kwargs)
     n = len(dataset)
 
     ext = _LOADER_TO_EXT[preprocessor.output_loader]

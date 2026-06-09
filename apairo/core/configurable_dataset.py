@@ -90,6 +90,7 @@ class ConfigurableDataset:
         root_dir: str | Path,
         *,
         overwrite: bool = False,
+        **dataset_kwargs,
     ) -> None:
         """Run a preprocessor on a dataset and persist the output channel.
 
@@ -97,19 +98,23 @@ class ConfigurableDataset:
         via ``derived_path()``, format-specific saving, timestamp writing, and
         ``.apairo`` registration at ``root_dir``.
 
+        Extra keyword arguments are forwarded to the dataset constructor, so
+        dataset-specific options such as ``split`` or ``sequence_ids`` work
+        transparently::
+
+            Goose3DDataset.run_preprocess(preprocessor, "/data/GOOSE_3D", split="train")
+
         Args:
             preprocessor: A :class:`~apairo.core.preprocessor.FramePreprocessor`
                 or :class:`~apairo.core.preprocessor.SequencePreprocessor`.
             root_dir: Dataset root directory.
             overwrite: Recompute if output already exists.
-
-        Example::
-
-            MyDataset.run_preprocess(MyPreprocessor(), "/data/my_dataset")
+            **dataset_kwargs: Extra arguments passed to the dataset constructor
+                (e.g. ``split``, ``sequence_ids``).
         """
         from apairo.preprocess.runner import run
 
-        run(preprocessor, cls, root_dir, overwrite=overwrite)
+        run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
 
     @classmethod
     def describe(cls, sequence_dir: str | Path) -> dict:
