@@ -45,7 +45,7 @@ class FilteredView(AbstractDataset):
     def _load(self, idx: int) -> "Sample":
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        return self._parent._load(int(self._indices[idx]))
+        return self._parent[int(self._indices[idx])]
 
     def __repr__(self) -> str:
         return f"FilteredView(n={len(self)}, parent={self._parent.__class__.__name__})"

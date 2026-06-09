@@ -218,6 +218,14 @@ def test_filter_from_precomputed_indices(multi_ds):
     assert view[2].data["lidar"].shape == (5, 3)   # frame 4 has 5 points
 
 
+def test_filter_parent_transforms_applied(multi_ds):
+    """Transforms registered on the parent must be visible in the filtered view."""
+    multi_ds.transform("lidar", lambda x: x * 10)
+    view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] >= 3)
+    sample = view[0]
+    np.testing.assert_array_equal(sample.data["lidar"], np.ones((3, 3)) * 10)
+
+
 def test_filter_indices_roundtrip(tmp_path, multi_ds):
     view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] >= 3)
     path = tmp_path / "indices.npy"
