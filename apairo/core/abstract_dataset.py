@@ -91,54 +91,74 @@ class AbstractDataset(ABC):
         self._iter_pos += 1
         return sample
 
-    def transform(self, key: str, fn: Callable) -> "AbstractDataset":
-        """Register a transform applied to *key* at access time.
+    def transform(
+        self,
+        key_or_fn,
+        fn: Callable | None = None,
+        output: str | None = None,
+        keep: bool = True,
+    ) -> "AbstractDataset":
+        """Register a transform in the pipeline, applied at access time.
 
-        Multiple calls on the same key compose in order (first registered,
-        first applied).  Returns ``self`` for chaining::
+        Two forms:
 
-            ds.transform("poses", To4x4()) \\
-              .transform("lidar", RangeFilter(max=50)) \\
-              .transform("lidar", Normalize())
-        """
-        if not hasattr(self, "_transforms"):
-            self._transforms: dict[str, list[Callable]] = {}
-        self._transforms.setdefault(key, []).append(fn)
-        return self
+        **Per-channel** -- ``transform(key, fn, output=None, keep=True)``
 
-    def sample_transform(self, fn: Callable[["Sample"], "Sample"]) -> "AbstractDataset":
-        """Register a transform applied to the full :class:`~apairo.core.sample.Sample` at access time.
+        ``fn`` receives ``sample.data[key]`` and returns the transformed value.
+        By default the result overwrites ``key``.  Pass ``output`` to publish it
+        as a new channel while leaving ``key`` untouched::
 
-        Use this when an operation must touch several channels consistently
-        (e.g. a range filter that must keep the same points in both ``lidar``
-        and ``labels``).  The callable receives and returns a
-        :class:`~apairo.core.sample.Sample`.
+            ds.transform("lidar", RangeFilter(max=50), output="lidar_f")
+            ds.transform("lidar_f", Normalize())          # reads published channel
+            ds.transform("lidar_f", Voxelize())           # same source, different branch
 
-        Multiple calls compose in registration order.  Returns ``self`` for
-        chaining::
+        Set ``keep=False`` together with ``output`` to drop the published channel
+        from the final sample (useful for intermediate results)::
 
-            def sync_filter(sample):
-                mask = sample.data["lidar"][:, 0] < 50
+            ds.transform("lidar", compute_mask, output="_mask", keep=False)
+            ds.transform(lambda s: apply_mask(s, "_mask"))
+
+        **Sample-level** -- ``transform(fn)``
+
+        ``fn`` receives and returns the full :class:`~apairo.core.sample.Sample`.
+        Use this when an operation must touch several channels consistently::
+
+            def range_filter(sample):
+                mask = sample.data["lidar"][:, :3].max(axis=1) < 50
                 sample.data["lidar"]  = sample.data["lidar"][mask]
                 sample.data["labels"] = sample.data["labels"][mask]
                 return sample
 
-            ds.sample_transform(sync_filter)
+            ds.transform(range_filter)
+
+        Both forms compose in registration order and return ``self`` for chaining.
         """
-        if not hasattr(self, "_sample_transforms"):
-            self._sample_transforms: list[Callable] = []
-        self._sample_transforms.append(fn)
+        if fn is None:
+            step = key_or_fn
+        else:
+            key = key_or_fn
+            def step(sample: Sample, _key=key, _fn=fn, _out=output) -> Sample:
+                if _key in sample.data:
+                    result = _fn(sample.data[_key])
+                    sample.data[_out if _out is not None else _key] = result
+                return sample
+
+        if not hasattr(self, "_pipeline"):
+            self._pipeline: list[Callable] = []
+        self._pipeline.append(step)
+
+        if output is not None and not keep:
+            if not hasattr(self, "_drop_keys"):
+                self._drop_keys: set[str] = set()
+            self._drop_keys.add(output)
+
         return self
 
     def _apply_transforms(self, sample: Sample) -> Sample:
-        for key, fns in getattr(self, "_transforms", {}).items():
-            if key in sample.data:
-                val = sample.data[key]
-                for fn in fns:
-                    val = fn(val)
-                sample.data[key] = val
-        for fn in getattr(self, "_sample_transforms", []):
+        for fn in getattr(self, "_pipeline", []):
             sample = fn(sample)
+        for key in getattr(self, "_drop_keys", set()):
+            sample.data.pop(key, None)
         return sample
 
     def load(self, key: str, idx: int):
