@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from apairo.core.abstract_dataset import AbstractDataset
 
 if TYPE_CHECKING:
@@ -20,15 +22,22 @@ class FilteredView(AbstractDataset):
 
     Example::
 
+        # From a predicate
         view = ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
-        len(view)       # number of frames that passed the filter
-        view[0]         # first kept frame (transforms applied)
-        view.transform("lidar", Normalize())   # chaining works
+
+        # Persist and reload — skips the sweep entirely next run
+        np.save("valid_indices.npy", view.indices)
+        view = ds.filter(np.load("valid_indices.npy"))
     """
 
-    def __init__(self, parent: AbstractDataset, indices: list[int]) -> None:
+    def __init__(self, parent: AbstractDataset, indices) -> None:
         self._parent = parent
-        self._indices = indices
+        self._indices = np.asarray(indices, dtype=np.int64)
+
+    @property
+    def indices(self) -> np.ndarray:
+        """Global indices in the parent dataset that this view covers."""
+        return self._indices
 
     def __len__(self) -> int:
         return len(self._indices)
@@ -36,7 +45,7 @@ class FilteredView(AbstractDataset):
     def _load(self, idx: int) -> "Sample":
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        return self._parent._load(self._indices[idx])
+        return self._parent._load(int(self._indices[idx]))
 
     def __repr__(self) -> str:
         return f"FilteredView(n={len(self)}, parent={self._parent.__class__.__name__})"

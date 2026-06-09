@@ -163,40 +163,50 @@ class AbstractDataset(ABC):
 
     def filter(
         self,
-        key_or_fn,
+        key_or_fn_or_indices,
         fn: Callable | None = None,
     ) -> "AbstractDataset":
         """Return a filtered view of this dataset.
 
-        Both forms are **eager**: the full dataset is swept once to build the
-        index list.  The result is a
-        :class:`~apairo.core.filtered_view.FilteredView` that supports full
-        chaining (``.transform()``, ``.filter()``, etc.).
+        Three forms:
+
+        **Pre-computed indices** -- ``filter(indices)``
+
+        Pass a previously saved index array directly — no sweep::
+
+            np.save("valid.npy", view.indices)
+            # later:
+            view = ds.filter(np.load("valid.npy"))
 
         **Sample-level** -- ``filter(fn)``
 
         ``fn`` receives the full :class:`~apairo.core.sample.Sample` (transforms
-        applied) and returns ``True`` to keep the frame::
+        applied) and returns ``True`` to keep the frame.  Sweeps the full
+        dataset once::
 
             ds.filter(lambda s: s.data["lidar"].shape[0] > 100)
 
         **Per-channel** -- ``filter(key, fn)``
 
         ``fn`` receives ``sample.data[key]`` (raw, before transforms) and returns
-        ``True`` to keep the frame.  Only the specified channel is evaluated
-        during the sweep::
+        ``True`` to keep the frame.  Only the specified channel is loaded during
+        the sweep::
 
             ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
 
         Returns:
             :class:`~apairo.core.filtered_view.FilteredView`
         """
+        import numpy as np
         from apairo.core.filtered_view import FilteredView
 
+        if isinstance(key_or_fn_or_indices, (np.ndarray, list)):
+            return FilteredView(self, key_or_fn_or_indices)
+
         if fn is None:
-            indices = [i for i in range(len(self)) if key_or_fn(self[i])]
+            indices = [i for i in range(len(self)) if key_or_fn_or_indices(self[i])]
         else:
-            key = key_or_fn
+            key = key_or_fn_or_indices
             indices = [i for i in range(len(self)) if fn(self._load(i).data[key])]
 
         return FilteredView(self, indices)

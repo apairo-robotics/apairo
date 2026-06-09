@@ -200,3 +200,30 @@ def test_filter_chaining_filter_on_filter(multi_ds):
         .filter(lambda s: s.data["labels"][0] == 1)         # odd indices only
     )
     assert len(view) == 2   # frames 1 and 3
+
+
+def test_filter_indices_property(multi_ds):
+    view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] >= 3)
+    idx = view.indices
+    assert isinstance(idx, np.ndarray)
+    np.testing.assert_array_equal(idx, [2, 3, 4])
+
+
+def test_filter_from_precomputed_indices(multi_ds):
+    indices = np.array([0, 2, 4], dtype=np.int64)
+    view = multi_ds.filter(indices)
+    assert len(view) == 3
+    assert view[0].data["lidar"].shape == (1, 3)   # frame 0 has 1 point
+    assert view[1].data["lidar"].shape == (3, 3)   # frame 2 has 3 points
+    assert view[2].data["lidar"].shape == (5, 3)   # frame 4 has 5 points
+
+
+def test_filter_indices_roundtrip(tmp_path, multi_ds):
+    view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] >= 3)
+    path = tmp_path / "indices.npy"
+    np.save(path, view.indices)
+
+    view2 = multi_ds.filter(np.load(path))
+    assert len(view2) == len(view)
+    for i in range(len(view)):
+        np.testing.assert_array_equal(view[i].data["lidar"], view2[i].data["lidar"])
