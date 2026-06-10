@@ -1,6 +1,6 @@
 # apairo
 
-Unified Python loader for robotics sensor datasets -- synchronous (SemanticKITTI, GOOSE, Rellis-3D) and asynchronous (TartanDrive, KITTI) layouts with built-in preprocessing pipelines.
+Unified Python loader for robotics sensor datasets — one API across synchronous and asynchronous layouts, with built-in preprocessing, filtering, and dataset composition.
 
 All data is returned as `numpy.ndarray`. Convert to the framework of your choice.
 
@@ -8,11 +8,6 @@ All data is returned as `numpy.ndarray`. Convert to the framework of your choice
 
 ## Installation
 
-```bash
-pip install -e .
-```
-
-And soon
 ```bash
 pip install apairo
 ```
@@ -33,37 +28,11 @@ Requires Python ≥ 3.11.
 ```python
 import apairo
 
-# Synchronous: SemanticKITTI -- index i returns one complete frame
 ds = apairo.SemanticKittiDataset("/data/semantic_kitti", keys=["lidar", "labels"])
 sample = ds[0]
 # sample.data["lidar"]   -> np.ndarray (N, 4)  float32  [x, y, z, intensity]
 # sample.data["labels"]  -> np.ndarray (N,)    int64
-# sample.timestamp       -> None
-
-# Asynchronous: TartanDrive -- index i returns one event from the merged timeline
-ds = apairo.TartanKittiDataset("/data/tartan/2024-01-01_forest")
-sample = ds[0]
-# sample.data        -> {"velodyne_0": np.ndarray}   (one modality per event)
-# sample.timestamp   -> float
 ```
-
-### Framework conversion
-
-```python
-# PyTorch
-import torch
-lidar = torch.from_numpy(sample.data["lidar"])
-
-# JAX
-import jax.numpy as jnp
-lidar = jnp.array(sample.data["lidar"])
-
-# TensorFlow
-import tensorflow as tf
-lidar = tf.constant(sample.data["lidar"])
-```
-
-See [`examples/`](examples/) for complete usage patterns.
 
 ---
 
@@ -72,51 +41,128 @@ See [`examples/`](examples/) for complete usage patterns.
 | Class | Layout | Modalities |
 |---|---|---|
 | `SemanticKittiDataset` | synchronous | lidar, labels |
-| `Rellis3DDataset` | synchronous | lidar, labels |
+| `Rellis3DDataset` | synchronous | lidar, labels, poses |
 | `Goose3DDataset` | synchronous | lidar, labels |
+| `MNTDataset` | synchronous | lidar, labels, poses |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
 | `KittiDataset` | asynchronous | any KITTI-layout channel |
 
 ---
 
+## Pipeline
+
+apairo provides a composable set of operations that chain together — each returns a full dataset:
+
+```python
+from apairo import Rellis3DDataset, FramePreprocessor
+from torch.utils.data import DataLoader
+import numpy as np
+
+# 1. Preprocess — run once, persisted in .apairo, reloaded transparently
+class TravLabel(FramePreprocessor):
+    output_key = "trav_gt";  output_loader = "npys"
+    input_keys = ["labels"]; timestamps_from = "lidar"; sources = ["labels"]
+    def process(self, sample): return (sample.data["labels"] < 10).astype(np.uint8)
+
+ds = Rellis3DDataset(root, keys=["lidar", "labels", "ground_height_csf"])
+ds.run_preprocess(TravLabel())
+
+# 2. Cache an expensive derived channel — computed once, served from RAM
+ds.transform("ground_height_csf", expensive_smooth)
+ds_prior = ds.select(["ground_height_csf"]).cache()
+
+# 3. Build train split — filter, join cached prior, apply augmentation
+valid = np.load("cache/valid_indices.npy")
+ds_train = (
+    Rellis3DDataset(root, keys=["lidar", "trav_gt"])
+    .filter(valid)
+    .join(ds_prior)
+    .transform("lidar", RangeFilter(max=50.0))
+)
+
+# 4. Drop into DataLoader — no adapter needed
+loader = DataLoader(ds_train, batch_size=8, shuffle=True, collate_fn=my_collate)
+```
+
+See [`examples/`](examples/) for complete runnable pipelines.
+
+---
+
 ## Preprocessing
 
-Persist computed channels alongside raw data with `FramePreprocessor` or `SequencePreprocessor`.
-See [`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) for a collection of ready-made preprocessors.
+Define a `FramePreprocessor` or `SequencePreprocessor`, run it once — apairo persists the output and reloads it transparently on subsequent runs.
 
 ```python
 from apairo.preprocess import FramePreprocessor
-from apairo.dataset import Goose3DDataset
-import numpy as np
 
 class TravLabel(FramePreprocessor):
     output_key      = "trav_label"
     output_loader   = "npys"
     input_keys      = ["labels"]
     timestamps_from = "labels"
+    sources         = ["labels"]
 
     def process(self, sample) -> np.ndarray:
         return (sample.data["labels"] < 10).astype(np.uint8)
 
-Goose3DDataset.run_preprocess(TravLabel(), "/data/goose")
-# writes  trav_label/train/seq/000000.npy, ...
-# updates .apairo config automatically
+ds = apairo.Goose3DDataset("/data/goose", keys=["lidar", "labels"])
+ds.run_preprocess(TravLabel())
 ```
+
+See [`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) for a collection of ready-made preprocessors.
 
 ---
 
 ## Transforms
 
-Apply callables to channel data at access time -- no disk writes.
-See [`apairo_transform`](https://github.com/apairo/apairo_transform) for a collection of ready-made transforms.
+Apply callables at access time — no disk writes.
 
 ```python
-from apairo import Compose
+# Per-channel
+ds.transform("lidar", RangeFilter(max=50.0))
 
-ds = apairo.Goose3DDataset("/data/goose", keys=["lidar", "labels"])
-ds.transform("lidar", Compose([RangeFilter(max_range=50), ZNorm()]))
+# Sample-level — consistent mask across aligned channels
+def sync_filter(sample):
+    mask = np.linalg.norm(sample.data["lidar"][:, :3], axis=1) < 50.0
+    sample.data["lidar"]  = sample.data["lidar"][mask]
+    sample.data["labels"] = sample.data["labels"][mask]
+    return sample
 
-sample = ds[0]   # transform applied transparently
+ds.transform(sync_filter)
+```
+
+See [`apairo_transform`](https://github.com/apairo/apairo_transform) for a collection of ready-made transforms.
+
+---
+
+## Filtering
+
+`filter()` returns a dataset view restricted to frames that pass a predicate. Sweep once, persist the indices, reload without I/O cost on subsequent runs:
+
+```python
+# Compute and save
+view = ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
+np.save("cache/valid.npy", view.indices)
+
+# Reload — no sweep
+view = ds.filter(np.load("cache/valid.npy"))
+```
+
+---
+
+## Select & cache
+
+`select(keys)` narrows a dataset to a subset of channels. `cache()` materialises it in RAM. Together they let you cache only the channels worth caching:
+
+```python
+ds.transform("ground_height_csf", expensive_smooth)
+
+# Compute once, store in RAM
+ds_prior = ds.select(["ground_height_csf"]).cache()
+
+# Reuse across training runs — prior served from RAM, base channels from disk
+ds_v1 = base.join(ds_prior).transform(augment_v1)
+ds_v2 = base.join(ds_prior).transform(augment_v2)
 ```
 
 ---
@@ -124,35 +170,23 @@ sample = ds[0]   # transform applied transparently
 ## Combining datasets
 
 ```python
-# One instance loads all sequences under the root automatically
-ds = apairo.SemanticKittiDataset("/data/kitti/dataset", keys=["lidar", "labels"])
+# ConcatDataset — frame axis (different recording sessions)
+combined = apairo.ConcatDataset([ds_session1, ds_session2])
 
-# Datasets with a split layer support train/val/test filtering
-ds_train = apairo.Goose3DDataset("/data/goose/GOOSE_3D", keys=["lidar", "labels"], split="train")
-ds_val   = apairo.Goose3DDataset("/data/goose/GOOSE_3D", keys=["lidar", "labels"], split="val")
+# ZipDataset — channel axis (same frames, different modalities)
+combined = apairo.ZipDataset(ds_base, ds_prior)
+# or: ds_base.join(ds_prior)
 
-# Combine multiple independent datasets (e.g. different data sources)
-combined = apairo.ConcatDataset([ds_train, ds_val])
-```
-
----
-
-## PyTorch DataLoader
-
-```python
-from torch.utils.data import DataLoader
-
-loader = DataLoader(apairo.ConcatDataset(sequences), batch_size=8, shuffle=True)
-
-for batch in loader:
-    lidar = torch.from_numpy(batch["lidar"])   # (8, N, 4)
+# Built-in splits
+ds_train = apairo.Rellis3DDataset(root, keys=["lidar", "labels"]).split("train")
+ds_val   = apairo.Rellis3DDataset(root, keys=["lidar", "labels"]).split("val")
 ```
 
 ---
 
 ## Extending apairo
 
-Add a new synchronous dataset with a YAML profile and a 2-line subclass.
+Add a new synchronous dataset with a YAML profile and a minimal subclass.
 See [documentation](https://apairo.readthedocs.io) for the full guide.
 
 ---

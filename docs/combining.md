@@ -1,5 +1,45 @@
 # Combining Datasets
 
+## ZipDataset — merging channels
+
+`ZipDataset` merges channels from multiple datasets of the **same length**. Where `ConcatDataset` concatenates along the frame axis, `ZipDataset` merges along the channel axis: `zip_ds[i].data` is the union of each parent's `data` at index `i`.
+
+```python
+ds_base  = Rellis3DDataset(root, keys=["lidar", "trav_gt"])
+ds_prior = Rellis3DDataset(root, keys=["ground_height_csf"])
+
+combined = apairo.ZipDataset(ds_base, ds_prior)
+sample = combined[0]
+# sample.data == {"lidar": ..., "trav_gt": ..., "ground_height_csf": ...}
+```
+
+Transforms registered on each parent are applied before merging. The result is a full apairo dataset — `.transform()`, `.filter()`, `.cache()` all chain naturally.
+
+### Fluent form — `ds.join()`
+
+```python
+combined = ds_base.join(ds_prior)
+```
+
+### Key collisions
+
+By default `ZipDataset` raises at construction if two parents share a key:
+
+```python
+ZipDataset(ds_a, ds_b)                          # raises KeyError if keys overlap
+ZipDataset(ds_a, ds_b, on_collision="last")     # last dataset wins silently
+```
+
+### Three or more datasets
+
+```python
+combined = apairo.ZipDataset(ds_base, ds_prior, ds_extra)
+# or
+combined = ds_base.join(ds_prior, ds_extra)
+```
+
+---
+
 ## ConcatDataset
 
 `ConcatDataset` concatenates multiple dataset instances into one. It intersects the available keys across all datasets, so every index always returns the same set of modalities.

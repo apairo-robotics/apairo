@@ -18,3 +18,5 @@ site
 !.github
 
 dist
+
+Makefile

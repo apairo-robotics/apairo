@@ -68,5 +68,7 @@ nav:
   - Async Datasets: async-datasets.md
   - Preprocessing: preprocessing.md
   - Transforms: transform.md
+  - Filtering: filter.md
+  - Views & Caching: views.md
   - Combining Datasets: combining.md
   - API Reference: api/reference.md
