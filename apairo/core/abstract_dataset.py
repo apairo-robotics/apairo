@@ -161,6 +161,26 @@ class AbstractDataset(ABC):
             sample.data.pop(key, None)
         return sample
 
+    def join(self, *others: "AbstractDataset", on_collision: str = "raise") -> "AbstractDataset":
+        """Merge channels from this dataset and *others* into a single dataset.
+
+        Sugar for ``ZipDataset(self, *others)``.  All datasets must have the
+        same length.  Transforms registered on each parent are applied before
+        merging::
+
+            combined = ds_base.join(ds_prior)
+            combined[0].data  # union of both datasets' channels
+
+        Args:
+            others: One or more datasets of the same length as ``self``.
+            on_collision: ``"raise"`` (default) or ``"last"``.
+
+        Returns:
+            :class:`~apairo.dataset.zip.ZipDataset`
+        """
+        from apairo.dataset.zip import ZipDataset
+        return ZipDataset(self, *others, on_collision=on_collision)
+
     def filter(
         self,
         key_or_fn_or_indices,
