@@ -1,6 +1,7 @@
-/__pycache__
+__pycache__/
 *.pyc
-**cache**
+cache/
+.cache/
 
 data
 outputs
