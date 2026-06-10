@@ -61,6 +61,18 @@ def _parse_splits_spec(raw: dict) -> "SplitSpec | None":
     )
 
 
+def _apply_lst_filter(ds, frame_filter: "set[tuple[str, str]]") -> "AbstractDataset":
+    """Return a FilteredView of *ds* keeping only frames in *frame_filter*."""
+    seq_ids = ds.frame_sequence_ids
+    stems = ds.frame_stems
+    mask = np.fromiter(
+        ((s, t) in frame_filter for s, t in zip(seq_ids, stems)),
+        dtype=bool,
+        count=len(ds),
+    )
+    return ds.filter(np.where(mask)[0])
+
+
 def _read_lst_frame_set(lst_path: Path) -> set[tuple[str, str]]:
     """Parse a .lst split file into a set of (seq_id, stem) pairs.
 
@@ -626,6 +638,36 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         for seq_id, indices in self._seq_groups.items():
             result[indices] = seq_id
         return result
+
+    @property
+    def frame_stems(self) -> np.ndarray:
+        """Filename stem for every frame, indexed by global frame index."""
+        result = np.empty(len(self), dtype=object)
+        anchor = self._files.get(self._ref_key)
+        if anchor:
+            for i, path in enumerate(anchor):
+                result[i] = path.stem
+        return result
+
+    def filter_split(self, name: str) -> "AbstractDataset":
+        """Return a FilteredView restricted to the named predefined split.
+
+        Applies the split without re-instantiating the dataset — registered
+        transforms are preserved.  Replaces :meth:`split` for use mid-chain::
+
+            ds.transform("lidar", RobotFilter())
+            ds_train = ds.filter_split("train")  # transforms kept
+        """
+        return _apply_lst_filter(self, self._lst_frame_filter(name))
+
+    def _lst_frame_filter(self, name: str) -> "set[tuple[str, str]]":
+        if self._splits_spec is None or self._splits_spec.type != "lst":
+            raise ValueError(f"{type(self).__name__} has no LST-based splits defined.")
+        lst_rel = self._splits_spec.files.get(name)
+        if lst_rel is None:
+            available = list(self._splits_spec.files)
+            raise ValueError(f"Split '{name}' not found. Available: {available}")
+        return _read_lst_frame_set(self._root / lst_rel)
 
     def sequences(self) -> "list[SequenceView]":
         from apairo.core.sequence_view import SequenceView  # noqa: F401

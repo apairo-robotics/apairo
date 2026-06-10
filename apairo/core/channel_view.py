@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from apairo.core.abstract_dataset import AbstractDataset
 
 if TYPE_CHECKING:
@@ -33,6 +35,14 @@ class ChannelView(AbstractDataset):
 
     def __len__(self) -> int:
         return len(self._parent)
+
+    @property
+    def frame_sequence_ids(self) -> "np.ndarray":
+        return self._parent.frame_sequence_ids
+
+    @property
+    def frame_stems(self) -> "np.ndarray":
+        return self._parent.frame_stems
 
     def _load(self, idx: int) -> "Sample":
         from apairo.core.sample import Sample

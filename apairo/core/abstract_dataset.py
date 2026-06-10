@@ -233,6 +233,20 @@ class AbstractDataset(ABC):
         from apairo.dataset.zip import ZipDataset
         return ZipDataset(self, *others, on_collision=on_collision)
 
+    def filter_sequences(self, seq_ids) -> "AbstractDataset":
+        """Return a FilteredView restricted to frames from *seq_ids*.
+
+        Requires ``frame_sequence_ids`` to be available on this dataset
+        (provided by :class:`~apairo.core.profiled_dataset.ProfiledDataset`
+        and :class:`~apairo.core.filtered_view.FilteredView`)::
+
+            ds_train = ds_filtered.filter_sequences(train_seqs)
+            ds_val   = ds_filtered.filter_sequences([val_seq])
+        """
+        import numpy as np
+        ids = self.frame_sequence_ids
+        return self.filter(np.where(np.isin(ids, seq_ids))[0])
+
     def filter(
         self,
         key_or_fn_or_indices,

@@ -39,6 +39,26 @@ class FilteredView(AbstractDataset):
         """Global indices in the parent dataset that this view covers."""
         return self._indices
 
+    @property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence ID for every frame in this view (delegated from parent)."""
+        return self._parent.frame_sequence_ids[self._indices]
+
+    @property
+    def frame_stems(self) -> np.ndarray:
+        """Filename stem for every frame in this view (delegated from parent)."""
+        return self._parent.frame_stems[self._indices]
+
+    def filter_split(self, name: str) -> "FilteredView":
+        """Return a FilteredView restricted to the named predefined split."""
+        from apairo.core.profiled_dataset import ProfiledDataset, _apply_lst_filter
+        ds = self._parent
+        while ds is not None and not isinstance(ds, ProfiledDataset):
+            ds = getattr(ds, "_parent", None)
+        if ds is None:
+            raise AttributeError("No ProfiledDataset found in parent chain.")
+        return _apply_lst_filter(self, ds._lst_frame_filter(name))
+
     def __len__(self) -> int:
         return len(self._indices)
 

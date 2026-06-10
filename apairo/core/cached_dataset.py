@@ -55,5 +55,12 @@ class CachedDataset(AbstractDataset):
         s = self._cache[idx]
         return Sample(data={k: copy.copy(v) for k, v in s.data.items()}, timestamp=s.timestamp)
 
+    def cache(self) -> "AbstractDataset":
+        logger.warning(
+            "cache() called on an already-cached dataset — "
+            "this duplicates the data in RAM. Cache before branching."
+        )
+        return CachedDataset(self)
+
     def __repr__(self) -> str:
         return f"CachedDataset(n={len(self)}, keys={self._keys})"
