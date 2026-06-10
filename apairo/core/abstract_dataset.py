@@ -161,6 +161,40 @@ class AbstractDataset(ABC):
             sample.data.pop(key, None)
         return sample
 
+    def select(self, keys: list[str]) -> "AbstractDataset":
+        """Return a view of this dataset restricted to *keys*.
+
+        Calls ``self[idx]`` (transforms applied) then projects to the requested
+        channels.  The primary use case is narrowing scope before caching::
+
+            ds.transform("ground_height_csf", expensive_smooth)
+            ds_prior = ds.select(["ground_height_csf"]).cache()
+
+        Returns:
+            :class:`~apairo.core.channel_view.ChannelView`
+        """
+        from apairo.core.channel_view import ChannelView
+        return ChannelView(self, keys)
+
+    def cache(self) -> "AbstractDataset":
+        """Materialise all samples into RAM and return a cached dataset.
+
+        The full dataset is iterated once at call time; all subsequent accesses
+        are served from memory with no I/O.  Use after ``.filter()`` or
+        ``.select()`` to keep the memory footprint manageable::
+
+            ds_prior = ds.select(["ground_height_csf"]).cache()
+
+        .. warning::
+            All samples are loaded into RAM.  Ensure the dataset fits in memory
+            before calling.
+
+        Returns:
+            :class:`~apairo.core.cached_dataset.CachedDataset`
+        """
+        from apairo.core.cached_dataset import CachedDataset
+        return CachedDataset(self)
+
     def join(self, *others: "AbstractDataset", on_collision: str = "raise") -> "AbstractDataset":
         """Merge channels from this dataset and *others* into a single dataset.
 

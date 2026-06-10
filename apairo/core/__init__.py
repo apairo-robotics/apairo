@@ -5,6 +5,8 @@ from .configurable_dataset import ConfigurableDataset
 from .sample import Sample
 from .sequence_view import SequenceView
 from .filtered_view import FilteredView
+from .channel_view import ChannelView
+from .cached_dataset import CachedDataset
 from .transform import Compose
 
 from . import utils
@@ -17,6 +19,8 @@ __all__ = [
     "Sample",
     "SequenceView",
     "FilteredView",
+    "ChannelView",
+    "CachedDataset",
     "Compose",
     "utils",
 ]
