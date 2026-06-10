@@ -438,3 +438,45 @@ def test_derived_from_derived_with_intermediate(goose_root_chained):
     s = ds[0]
     assert "elevation_map" in s.data
     assert "traversability" in s.data
+
+
+# --- frame_sequence_ids ---
+
+def test_frame_sequence_ids_shape(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar"])
+    ids = ds.frame_sequence_ids
+    assert len(ids) == len(ds)
+
+
+def test_frame_sequence_ids_values(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar"])
+    ids = ds.frame_sequence_ids
+    # kitti_root has seq "00" (4 frames) and "01" (4 frames)
+    assert set(ids) == {"00", "01"}
+
+
+def test_frame_sequence_ids_contiguous(kitti_root):
+    ds = _KittiDS(kitti_root, keys=["lidar"])
+    ids = ds.frame_sequence_ids
+    # all frames of seq "00" come before all frames of seq "01"
+    first_01 = np.where(ids == "01")[0][0]
+    assert all(ids[:first_01] == "00")
+
+
+def test_frame_sequence_ids_with_filter(kitti_root):
+    """Split a filtered dataset by sequence without a second sweep."""
+    ds = _KittiDS(kitti_root, keys=["lidar"])
+    # keep first 3 frames of each sequence (all 8 frames pass a trivially true filter)
+    view = ds.filter(lambda s: True)
+
+    seq_ids = ds.frame_sequence_ids[view.indices]
+
+    train_idx = np.where(seq_ids == "00")[0]
+    val_idx   = np.where(seq_ids == "01")[0]
+
+    ds_train = view.filter(train_idx)
+    ds_val   = view.filter(val_idx)
+
+    assert len(ds_train) == 4
+    assert len(ds_val)   == 4
+    assert len(ds_train) + len(ds_val) == len(view)

@@ -604,6 +604,29 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def sequence_ids(self) -> list[str]:
         return list(self._seq_groups.keys())
 
+    @property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence ID for every frame, indexed by global frame index.
+
+        Returns a string array of shape ``(len(self),)`` where
+        ``frame_sequence_ids[i]`` is the sequence ID that frame ``i`` belongs
+        to.  Combined with :attr:`FilteredView.indices`, this lets you split a
+        pre-filtered dataset by sequence without a second disk sweep::
+
+            ds_filtered = ds.filter("trav_gt", HasMinPositives(min_pos))
+            seq_ids = ds.frame_sequence_ids[ds_filtered.indices]
+
+            for train_seqs, val_seqs in folds:
+                train_idx = np.where(np.isin(seq_ids, train_seqs))[0]
+                val_idx   = np.where(np.isin(seq_ids, val_seqs))[0]
+                ds_train  = ds_filtered.filter(train_idx)
+                ds_val    = ds_filtered.filter(val_idx)
+        """
+        result = np.empty(len(self), dtype=object)
+        for seq_id, indices in self._seq_groups.items():
+            result[indices] = seq_id
+        return result
+
     def sequences(self) -> "list[SequenceView]":
         from apairo.core.sequence_view import SequenceView  # noqa: F401
 
