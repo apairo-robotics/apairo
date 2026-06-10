@@ -43,8 +43,6 @@ class ConcatDataset(AbstractDataset):
         for ds in self.datasets[1:]:
             keys &= set(ds.keys)
         self._keys = sorted(keys)
-        for ds in self.datasets:
-            ds.keys = self._keys
 
     @property
     def keys(self) -> List[str]:
@@ -53,8 +51,6 @@ class ConcatDataset(AbstractDataset):
     @keys.setter
     def keys(self, keys) -> None:
         self._set_keys(list(keys))
-        for ds in self.datasets:
-            ds.keys = self._keys
         self.__dict__.pop("timestamps", None)
 
     @functools.cached_property
@@ -84,19 +80,8 @@ class ConcatDataset(AbstractDataset):
 
     def _load(self, idx: int) -> Sample:
         ds_idx, offset = self._dataset_idx_and_offset(idx)
-        return self.datasets[ds_idx][idx - offset]
-
-    def __iter__(self):
-        self._iter_ds = 0
-        self._iter_inner = iter(self.datasets[0])
-        return self
-
-    def __next__(self) -> Sample:
-        while True:
-            try:
-                return next(self._iter_inner)
-            except StopIteration:
-                self._iter_ds += 1
-                if self._iter_ds >= len(self.datasets):
-                    raise
-                self._iter_inner = iter(self.datasets[self._iter_ds])
+        sample = self.datasets[ds_idx][idx - offset]
+        return Sample(
+            data={k: sample.data[k] for k in self._keys if k in sample.data},
+            timestamp=sample.timestamp,
+        )

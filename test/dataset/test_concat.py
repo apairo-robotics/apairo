@@ -77,3 +77,38 @@ def test_timestamps_none_for_sync_datasets():
     cd = ConcatDataset([ds, ds])
     assert cd.timestamps is None
     assert cd.is_synchronous is True
+
+
+def test_no_mutation_of_sub_datasets():
+    """ConcatDataset must not change .keys on its sub-datasets."""
+    a = _make_mock_dataset(3, "imu")
+    b = _make_mock_dataset(2, "imu")
+    original_keys_a = list(a.keys)
+    original_keys_b = list(b.keys)
+    ConcatDataset([a, b])
+    assert a.keys == original_keys_a
+    assert b.keys == original_keys_b
+
+
+def test_key_intersection_projected_in_load():
+    """_load must return only intersection keys even when sub-datasets have more."""
+    from apairo.core.sample import Sample
+
+    def make_ds(n, keys):
+        ds = MagicMock()
+        ds.keys = keys
+        ds.timestamps = None
+        ds.__len__ = MagicMock(return_value=n)
+        ds.__getitem__ = MagicMock(
+            side_effect=lambda i: Sample(data={k: np.zeros(3) for k in keys}, timestamp=float(i))
+        )
+        return ds
+
+    a = make_ds(3, ["lidar", "labels", "extra"])
+    b = make_ds(2, ["lidar", "labels"])
+    cd = ConcatDataset([a, b])
+    assert set(cd.keys) == {"lidar", "labels"}
+    assert "extra" in a.keys  # original not mutated
+    sample = cd[0]
+    assert set(sample.data.keys()) == {"lidar", "labels"}
+    assert "extra" not in sample.data
