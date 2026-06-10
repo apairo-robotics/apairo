@@ -195,6 +195,24 @@ class AbstractDataset(ABC):
         from apairo.core.cached_dataset import CachedDataset
         return CachedDataset(self)
 
+    def concat(self, *others: "AbstractDataset") -> "AbstractDataset":
+        """Concatenate this dataset with *others* along the frame axis.
+
+        Sugar for ``ConcatDataset([self, *others])``.  Symmetric counterpart
+        to :meth:`join`, which merges along the channel axis::
+
+            # frame axis  — more samples, same channels
+            combined = ds_kitti.concat(ds_goose)
+
+            # channel axis — same samples, more channels
+            combined = ds_base.join(ds_prior)
+
+        Returns:
+            :class:`~apairo.dataset.concat.ConcatDataset`
+        """
+        from apairo.dataset.concat import ConcatDataset
+        return ConcatDataset([self, *others])
+
     def join(self, *others: "AbstractDataset", on_collision: str = "raise") -> "AbstractDataset":
         """Merge channels from this dataset and *others* into a single dataset.
 

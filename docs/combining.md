@@ -40,9 +40,9 @@ combined = ds_base.join(ds_prior, ds_extra)
 
 ---
 
-## ConcatDataset
+## ConcatDataset — stacking frames
 
-`ConcatDataset` concatenates multiple dataset instances into one. It intersects the available keys across all datasets, so every index always returns the same set of modalities.
+`ConcatDataset` concatenates multiple dataset instances along the **frame axis**. It intersects the available keys across all datasets, so every index always returns the same set of modalities.
 
 A single dataset instance already loads all sequences under its root, so `ConcatDataset` is for combining **multiple independent roots** (different drives, different recording sessions):
 
@@ -53,11 +53,25 @@ ds1 = apairo.SemanticKittiDataset("/data/kitti_drive1", keys=["lidar", "labels"]
 ds2 = apairo.SemanticKittiDataset("/data/kitti_drive2", keys=["lidar", "labels"])
 
 combined = apairo.ConcatDataset([ds1, ds2])
-print(len(combined))        # sum of all frame counts
-sample = combined[0]        # first frame from the first root
+print(len(combined))  # sum of all frame counts
+sample = combined[0]  # first frame from the first root
 ```
 
 Indexing is O(log n) via binary search over cumulative lengths.
+
+### Fluent form — `ds.concat()`
+
+```python
+combined = ds1.concat(ds2, ds3)
+# equivalent to ConcatDataset([ds1, ds2, ds3])
+```
+
+### Axis summary
+
+| Operation | Axis | Result |
+|---|---|---|
+| `ds1.concat(ds2)` | frames | more samples, same channels |
+| `ds1.join(ds2)` | channels | same samples, more channels |
 
 ---
 
@@ -94,25 +108,30 @@ The split is positional (first 80% of sequences -> train, etc.) rather than rand
 
 ### Synchronous datasets
 
-`ConcatDataset` implements `__getitem__` and `__len__`, which is all PyTorch's `DataLoader` needs for map-style loading. No wrapper class required:
+Every apairo dataset implements `__getitem__` and `__len__`, which is all PyTorch's `DataLoader` needs for map-style loading. No wrapper required.
+
+`DataLoader` returns a list of `Sample` objects by default — provide a `collate_fn` to produce batched tensors:
 
 ```python
 from torch.utils.data import DataLoader
+import torch, numpy as np
+
+def collate(batch):
+    return {
+        "lidar":  torch.from_numpy(np.stack([s.data["lidar"]  for s in batch])),
+        "labels": torch.from_numpy(np.stack([s.data["labels"] for s in batch])),
+    }
 
 train_loader = DataLoader(
     apairo.ConcatDataset(train),
     batch_size=8,
     shuffle=True,
-    num_workers=4,
+    collate_fn=collate,
 )
-
-for batch in train_loader:
-    lidar  = batch["lidar"]    # (8, N, 4)
-    labels = batch["labels"]   # (8, N)
 ```
 
 !!! note "Batching point clouds"
-    Point clouds have variable numbers of points per frame. Use a custom `collate_fn` to handle variable-length tensors, or pre-process scans to a fixed size in your preprocessor.
+    Point clouds have variable numbers of points per frame. Use a custom `collate_fn` to handle variable-length tensors, or fix the point count in your preprocessor.
 
 ### Asynchronous datasets
 

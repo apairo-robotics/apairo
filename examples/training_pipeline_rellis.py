@@ -3,8 +3,11 @@
 The goal of this example is to show where apairo brings value:
   - Preprocessing  : define once, persist to disk, reload transparently next run
   - Splits         : train / val / test from the dataset's built-in LST files
-  - Transforms     : at-access filtering and aligned subsampling across channels
+  - Transforms     : deterministic ops cached, stochastic ops applied after
   - DataLoader     : ds_train / ds_val plug directly into PyTorch — no adapter needed
+
+The .cache() call is the explicit boundary between deterministic and stochastic:
+everything before it is frozen in RAM, everything after runs fresh every access.
 """
 
 from __future__ import annotations
@@ -72,11 +75,11 @@ class TraversabilityFromTrajectory(SequencePreprocessor):
 
 
 # ---------------------------------------------------------------------------
-# 2. At-access transforms — applied in memory, nothing written to disk
+# 2. Transforms
 # ---------------------------------------------------------------------------
 
 class RobotFilter:
-    """Remove points within *d* metres of the sensor (robot body)."""
+    """Remove points within *d* metres of the sensor (robot body). Deterministic."""
 
     def __init__(self, d: float = 1.0) -> None:
         self._d = d
@@ -88,8 +91,8 @@ class RobotFilter:
         return pc[self.compute_mask(pc)]
 
 
-def sync_subsample(n: int):
-    """Subsample lidar and trav_obs to the same *n* indices."""
+def random_subsample(n: int):
+    """Subsample lidar and trav_obs to the same *n* random indices. Stochastic."""
     def _fn(sample: Sample) -> Sample:
         pc  = sample.data["lidar"]
         idx = np.random.choice(len(pc), size=n, replace=len(pc) < n)
@@ -112,14 +115,22 @@ ds_pre.run_preprocess(TraversabilityFromTrajectory())
 
 # Splits — apairo reads RELLIS's built-in pt_train/val/test.lst files
 ds = Rellis3DDataset(root, keys=["lidar", "trav_obs"])
-ds_train = ds.split("train")
-ds_val   = ds.split("val")
-ds_test  = ds.split("test")
 
-# Transforms — consistent filtering and fixed-size subsampling, no disk writes
-for split in (ds_train, ds_val, ds_test):
-    split.transform("lidar", RobotFilter(d=1.0))
-    split.transform(sync_subsample(n=4096))
+# Deterministic transforms before .cache() — computed once, frozen in RAM.
+# Stochastic transforms after .cache()   — run fresh every access.
+ds_train_base = (
+    ds.split("train")
+    .transform("lidar", RobotFilter(d=1.0))   # deterministic
+    .cache()                                   # <-- boundary
+)
+ds_val_base = (
+    ds.split("val")
+    .transform("lidar", RobotFilter(d=1.0))   # deterministic
+    .cache()                                   # <-- boundary
+)
+
+ds_train = ds_train_base.transform(random_subsample(n=4096))  # stochastic
+ds_val   = ds_val_base.transform(random_subsample(n=4096))    # stochastic
 
 # Training — ds_train / ds_val are standard PyTorch datasets, plug in directly
 train_loader = DataLoader(ds_train, batch_size=4, shuffle=True)

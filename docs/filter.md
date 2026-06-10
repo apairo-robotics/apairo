@@ -90,6 +90,29 @@ view = ds.filter(np.load("cache/valid_indices.npy"))
 
 ---
 
+## Splitting a filtered dataset by sequence — `frame_sequence_ids`
+
+A common pattern in cross-validation is to filter once across all sequences, then split by sequence membership per fold — without sweeping the dataset again.
+
+`ProfiledDataset` exposes `frame_sequence_ids`: a `np.ndarray` of shape `(len(ds),)` mapping each global frame index to its sequence ID.  Combined with `view.indices`, this makes fold construction a pure numpy operation:
+
+```python
+ds_all      = Rellis3DDataset(root, keys=["lidar", "trav_gt"])
+ds_filtered = ds_all.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
+
+# One lookup — no extra disk sweep
+seq_ids = ds_all.frame_sequence_ids[ds_filtered.indices]
+
+# Per fold — pure numpy masking
+for train_seqs, val_seqs in folds:
+    ds_train = ds_filtered.filter(np.where(np.isin(seq_ids, train_seqs))[0])
+    ds_val   = ds_filtered.filter(np.where(np.isin(seq_ids, val_seqs))[0])
+```
+
+The disk is read once; fold construction costs only the numpy masking.
+
+---
+
 ## Behaviour summary
 
 | Property | Detail |
@@ -100,3 +123,4 @@ view = ds.filter(np.load("cache/valid_indices.npy"))
 | **Chaining** | `FilteredView` is a full `AbstractDataset` — `.transform()` and `.filter()` work on it. |
 | **`view.indices`** | `np.ndarray` of global indices — saveable and reloadable. |
 | **Per-channel sweep** | `filter(key, fn)` loads only the specified channel during the sweep, skipping all other I/O. |
+| **`frame_sequence_ids`** | `ProfiledDataset` property — maps each global frame index to its sequence ID, enabling sequence-aware splits after filtering. |
