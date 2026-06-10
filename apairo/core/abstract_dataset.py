@@ -213,6 +213,26 @@ class AbstractDataset(ABC):
         from apairo.dataset.concat import ConcatDataset
         return ConcatDataset([self, *others])
 
+    def repeat(self, n: int) -> "AbstractDataset":
+        """Repeat this dataset *n* times along the frame axis.
+
+        Sugar for ``ConcatDataset([self] * n)``.  With stochastic transforms
+        each copy produces independently-augmented samples, effectively giving
+        *n* times more gradient updates per epoch::
+
+            ds_aug = ds_train.transform(SparseAugment(...)).repeat(4)
+
+        Args:
+            n: Number of repetitions (must be >= 1).
+
+        Returns:
+            :class:`~apairo.dataset.concat.ConcatDataset`
+        """
+        from apairo.dataset.concat import ConcatDataset
+        if not isinstance(n, int) or n < 1:
+            raise ValueError(f"n must be a positive integer, got {n!r}")
+        return ConcatDataset([self] * n)
+
     def join(self, *others: "AbstractDataset", on_collision: str = "raise") -> "AbstractDataset":
         """Merge channels from this dataset and *others* into a single dataset.
 

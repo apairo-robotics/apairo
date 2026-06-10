@@ -71,4 +71,8 @@ nav:
   - Filtering: filter.md
   - Views & Caching: views.md
   - Combining Datasets: combining.md
+  - Examples:
+    - Multi-dataset training: examples/cross_dataset_concat.md
+    - Sequence k-fold CV: examples/sequence_kfold.md
+    - Cached prior + live augments: examples/join_cached_prior.md
   - API Reference: api/reference.md
