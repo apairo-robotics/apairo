@@ -22,6 +22,7 @@ PIL_Image = pytest.importorskip("PIL.Image", reason="Pillow not installed")
 
 from apairo.dataset.mnt.dataset import MNTDataset, _is_mission_dir
 from apairo.core.sample import Sample
+from apairo.core.preprocessor import SequencePreprocessor
 
 # ─────────────────────────────── constants ───────────────────────────────────
 
@@ -655,3 +656,52 @@ def test_public_api_export():
     import apairo
     assert hasattr(apairo, "MNTDataset")
     assert apairo.MNTDataset is MNTDataset
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SequencePreprocessor on a synchronous dataset (regressions from the
+# AMIAD pipeline pilot)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class _MeanZ(SequencePreprocessor):
+    """Stacks one (2,) vector per frame -> (N, 2) sequence output."""
+
+    output_key = "mean_z"
+    output_loader = "npy"
+    input_keys = ["points"]
+    sources = ["points"]
+    timestamps_from = None
+
+    def process(self, frames):
+        return np.stack(
+            [np.array([s.data["points"][:, 2].mean(), 1.0]) for s in frames]
+        )
+
+
+def test_sequence_preprocessor_on_sync_dataset(mission_dir):
+    """Sync dataset: no timestamps.txt written, output loadable per frame."""
+    MNTDataset.run_preprocess(_MeanZ(), mission_dir)
+
+    out_dir = mission_dir / "mean_z"
+    assert (out_dir / "mean_z.npy").exists()
+    assert not (out_dir / "timestamps.txt").exists()   # sync -> no timestamps
+
+    # Stacked sequence output is indexed by row, frame-aligned
+    ds = MNTDataset(mission_dir, keys=["points", "mean_z"])
+    assert len(ds) == N_FRAMES
+    assert ds[0].data["mean_z"].shape == (2,)
+    assert ds[N_FRAMES - 1].data["mean_z"][1] == 1.0
+
+
+def test_sequence_preprocessor_skip_and_overwrite(mission_dir):
+    """Existing sequence output raises without overwrite, recomputes with."""
+    MNTDataset.run_preprocess(_MeanZ(), mission_dir)
+    out = mission_dir / "mean_z" / "mean_z.npy"
+    mtime = out.stat().st_mtime_ns
+
+    with pytest.raises(FileExistsError):
+        MNTDataset.run_preprocess(_MeanZ(), mission_dir)
+    assert out.stat().st_mtime_ns == mtime
+
+    MNTDataset.run_preprocess(_MeanZ(), mission_dir, overwrite=True)
+    assert out.stat().st_mtime_ns != mtime
