@@ -211,6 +211,12 @@ See [documentation](https://apairo.readthedocs.io) for the full guide.
 
 ---
 
+## Contributing
+
+apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_rr](https://github.com/apairo-robotics/apairo_rr)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
 ## License
 
 MIT

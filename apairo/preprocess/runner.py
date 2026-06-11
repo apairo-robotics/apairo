@@ -59,7 +59,15 @@ def run(
 
     ext = _LOADER_TO_EXT[preprocessor.output_loader]
 
-    first_path = dataset.derived_path(0, preprocessor.output_key, ext)
+    if isinstance(preprocessor, SequencePreprocessor):
+        # Sequence output is a single stacked file, not per-frame files.
+        first_path = (
+            Path(dataset.root_dir)
+            / preprocessor.output_key
+            / f"{preprocessor.output_key}.{ext}"
+        )
+    else:
+        first_path = dataset.derived_path(0, preprocessor.output_key, ext)
     if first_path.exists() and not overwrite:
         raise FileExistsError(
             f"Derived key '{preprocessor.output_key}' already exists "
@@ -119,5 +127,8 @@ def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None
     )
     WRITERS[preprocessor.output_loader]().write(result, out)
 
-    ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
-    np.savetxt(out.parent / "timestamps.txt", dataset.timestamps[ts_key])
+    # Synchronous datasets have no timestamps -- nothing to propagate.
+    parent_ts = getattr(dataset, "timestamps", None)
+    if isinstance(parent_ts, dict):
+        ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
+        np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])

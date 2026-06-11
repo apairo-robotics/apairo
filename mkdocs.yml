@@ -61,6 +61,7 @@ nav:
   - Installation: installation.md
   - Quickstart: quickstart.md
   - Concepts: concepts.md
+  - Design & Philosophy: design.md
   - Datasets:
     - Overview: datasets/index.md
     - YAML Profiles: datasets/yaml-profiles.md

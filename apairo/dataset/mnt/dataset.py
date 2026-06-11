@@ -160,7 +160,14 @@ def _build_raw_loader(mission_dir: Path, key: str, n_frames: int):
 
 
 def _build_derived_loader(mission_dir: Path, key: str):
-    """Return an npy-per-frame loader for a preprocessed channel."""
+    """Return a loader for a preprocessed channel.
+
+    Two layouts, matching the two preprocessor kinds:
+
+    * per-frame files (``000000.npy``, ...) -- FramePreprocessor output;
+    * one stacked ``<key>.npy`` of shape ``(N, ...)`` -- SequencePreprocessor
+      output, indexed by row (memory-mapped).
+    """
     derived_dir = mission_dir / key
     if not derived_dir.is_dir():
         raise FileNotFoundError(
@@ -172,6 +179,20 @@ def _build_derived_loader(mission_dir: Path, key: str):
         raise FileNotFoundError(
             f"Derived key '{key}': no .npy files in '{derived_dir}'."
         )
+
+    stacked = derived_dir / f"{key}.npy"
+    if len(files) == 1 and files[0] == stacked:
+        class _NpyRowsLoader:
+            def __init__(self, path: Path) -> None:
+                self._data = np.load(path, mmap_mode="r")
+
+            def __len__(self) -> int:
+                return len(self._data)
+
+            def __getitem__(self, idx: int) -> np.ndarray:
+                return np.asarray(self._data[idx])
+
+        return _NpyRowsLoader(stacked)
 
     class _NpyPerFrameLoader:
         def __init__(self, paths: list[Path]) -> None:
