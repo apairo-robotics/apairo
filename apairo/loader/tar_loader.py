@@ -1,34 +1,42 @@
 from __future__ import annotations
-import os
-import re
 import tarfile
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 import numpy as np
 
 from apairo.core.abstract_loader import AbstractLoader
 
 
 class TarImageLoader(AbstractLoader):
-    """Loader for images packed in a tar archive, named by integer frame index.
+    """Loader for images packed in a tar archive.
 
-    The archive is expected to contain files like ``0.jpg``, ``1.jpg``, …
-    (zero-padded variants such as ``000000.jpg`` are also accepted).  The
-    member index is built lazily on the first access.
+    The loader only handles tar mechanics (listing, extraction, decoding);
+    it has no naming convention of its own.  The *dataset* imposes one by
+    passing ``name_to_index``, mapping each member name to a frame index
+    (return ``None`` to skip a member).  Reusable policies live in
+    :mod:`apairo.utils.naming`.
 
     Args:
-        tar_path: Path to the ``images.tar`` file.
+        tar_path: Path to the tar file (e.g. ``images.tar``).
         n_frames: Total number of frames (length of the dataset).
+        name_to_index: Member name -> frame index policy, imposed by the
+            dataset (e.g. :func:`apairo.utils.naming.integer_frame_index`).
 
     Note:
         The tar file is opened and closed for every ``__getitem__`` call.
         For high-throughput training, consider extracting images to disk first.
     """
 
-    def __init__(self, tar_path: str | Path, n_frames: int) -> None:
+    def __init__(
+        self,
+        tar_path: str | Path,
+        n_frames: int,
+        name_to_index: Callable[[str], Optional[int]],
+    ) -> None:
         self._tar_path = str(Path(tar_path))
         self._n_frames = n_frames
+        self._name_to_index = name_to_index
         self._index: Optional[dict[int, str]] = None
 
     def _ensure_index(self) -> dict[int, str]:
@@ -38,44 +46,36 @@ class TarImageLoader(AbstractLoader):
                 for m in tf.getmembers():
                     if not m.isfile():
                         continue
-                    base = os.path.basename(m.name)
-                    match = re.match(r"^0*([0-9]+)\.(jpe?g|png)$", base, re.IGNORECASE)
-                    if match:
-                        i = int(match.group(1))
-                        if i not in idx:
-                            idx[i] = m.name
+                    i = self._name_to_index(m.name)
+                    if i is not None and i not in idx:
+                        idx[i] = m.name
             self._index = idx
         return self._index
 
     def __len__(self) -> int:
         return self._n_frames
 
+    def member_name(self, idx: int) -> Optional[str]:
+        """Tar member name for frame *idx*, or ``None`` if absent.
+
+        Useful for byte-level copies (re-packing frames without a decode /
+        re-encode round trip).
+        """
+        return self._ensure_index().get(int(idx))
+
     def __getitem__(self, idx: int) -> np.ndarray:
-        index = self._ensure_index()
-        member_name = index.get(int(idx))
-        with tarfile.open(self._tar_path, mode="r") as tf:
-            if member_name is not None:
-                fobj = tf.extractfile(member_name)
-                if fobj is None:
-                    raise FileNotFoundError(
-                        f"Member '{member_name}' not found in {self._tar_path}"
-                    )
-                return self._decode(fobj.read())
-            for pat in (
-                f"{idx}.jpg",
-                f"{idx}.jpeg",
-                f"{idx:04d}.jpg",
-                f"{idx:06d}.jpg",
-            ):
-                try:
-                    fobj = tf.extractfile(pat)
-                    if fobj is not None:
-                        return self._decode(fobj.read())
-                except KeyError:
-                    pass
+        member_name = self._ensure_index().get(int(idx))
+        if member_name is None:
             raise FileNotFoundError(
                 f"Image index {idx} not found in {self._tar_path}"
             )
+        with tarfile.open(self._tar_path, mode="r") as tf:
+            fobj = tf.extractfile(member_name)
+            if fobj is None:
+                raise FileNotFoundError(
+                    f"Member '{member_name}' not found in {self._tar_path}"
+                )
+            return self._decode(fobj.read())
 
     @staticmethod
     def _decode(data: bytes) -> np.ndarray:

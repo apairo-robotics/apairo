@@ -24,6 +24,7 @@ from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
 from apairo.dataset.mnt import MNTDataset
 
+from apairo.core.layout import ChannelSpec, DatasetLayout
 from apairo.core.transform import Compose
 from apairo.core.config import register_channel, register_raw_channel, verify_config
 from apairo.writer import WRITERS
@@ -55,6 +56,8 @@ __all__ = [
     "Rellis3DDataset",
     "Goose3DDataset",
     "MNTDataset",
+    "ChannelSpec",
+    "DatasetLayout",
     "Compose",
     "register_channel",
     "register_raw_channel",

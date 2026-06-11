@@ -25,7 +25,11 @@ Expected mission layout::
     │   └── yaws.zarr/                        # key: "yaw_waypoints_time"   (W,) float32
     ├── traj_dist.zarr/
     │   ├── positions.zarr/                   # key: "waypoints_dist"       (W,2) float32
-    │   └── yaws.zarr/                        # key: "yaw_waypoints_dist"   (W,) float32
+    │   ├── yaws.zarr/                        # key: "yaw_waypoints_dist"   (W,) float32
+    │   ├── positions_past.zarr/              # key: "waypoints_dist_past"  (W_past,2) float32
+    │   └── yaws_past.zarr/                   # key: "yaw_waypoints_dist_past" (W_past,) float32
+    ├── width_curve_traj_static.zarr/         # key: "width_curve_traj_static" (M,2) float32
+    │   ...                                   # (6 variants: {traj,traj_time,traj_dist} × {static,dynamic})
     └── metadata.yaml
 
 Preprocessed channels (produced by :class:`~apairo.core.preprocessor.FramePreprocessor`)
@@ -68,40 +72,31 @@ if TYPE_CHECKING:
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.sample import Sample
+from apairo.dataset.mnt.layout import MNT_LAYOUT
 
-# Maps channel key -> sub-path components relative to mission dir.
-# Empty list signals a special-case loader (e.g. TarImageLoader for "image").
+# Back-compat view of the layout's channel table (legacy grouped layout).
 RAW_CHANNEL_PATHS: dict[str, list[str]] = {
-    # ── images / lidar ───────────────────────────────────────────────────────
-    "image":                 [],  # images.tar -- handled specially
-    "points":                ["points.zarr"],
-    # ── current odometry ─────────────────────────────────────────────────────
-    "position":              ["trajectory.zarr", "positions.zarr"],
-    "yaw":                   ["trajectory.zarr", "yaws.zarr"],
-    "timestamp":             ["trajectory.zarr", "timestamps.zarr"],
-    # ── past odometry window ─────────────────────────────────────────────────
-    "position_past":         ["trajectory.zarr", "positions_past.zarr"],
-    "yaw_past":              ["trajectory.zarr", "yaws_past.zarr"],
-    "timestamp_past":        ["trajectory.zarr", "timestamps_past.zarr"],
-    # ── future trajectory (temporal sampling) ────────────────────────────────
-    "waypoints_time":        ["traj_time.zarr", "positions.zarr"],
-    "yaw_waypoints_time":    ["traj_time.zarr", "yaws.zarr"],
-    # ── future trajectory (spatial sampling) ─────────────────────────────────
-    "waypoints_dist":        ["traj_dist.zarr", "positions.zarr"],
-    "yaw_waypoints_dist":    ["traj_dist.zarr", "yaws.zarr"],
+    key: list(spec.path) for key, spec in MNT_LAYOUT.channels.items()
 }
 
 _DEFAULT_KEYS = list(RAW_CHANNEL_PATHS.keys())
 
 
+def channel_path(key: str) -> list[str]:
+    """Sub-path components of a channel relative to the mission directory."""
+    return list(MNT_LAYOUT.spec(key).path)
+
+
 def _scan_mission_channels(mission_dir: Path) -> dict:
     """Return a channels config dict for all raw channels present in *mission_dir*."""
-    channels: dict = {}
-    for key in sorted(RAW_CHANNEL_PATHS.keys()):
-        if _channel_exists(mission_dir, key):
-            loader_tag = "img" if key == "image" else "zarr"
-            channels[key] = {"has_timestamps": False, "kind": "raw", "loader": loader_tag}
-    return channels
+    return {
+        key: {
+            "has_timestamps": False,
+            "kind": "raw",
+            "loader": "img" if key == "image" else "zarr",
+        }
+        for key in MNT_LAYOUT.scan(mission_dir)
+    }
 
 
 def _is_mission_dir(path: Path) -> bool:
@@ -114,26 +109,16 @@ def _is_mission_dir(path: Path) -> bool:
 
 
 def _channel_exists(mission_dir: Path, key: str) -> bool:
-    if key == "image":
-        return (mission_dir / "images.tar").is_file()
-    parts = RAW_CHANNEL_PATHS.get(key, [])
-    if not parts:
-        return False
-    return (mission_dir / Path(*parts)).is_dir()
+    return MNT_LAYOUT.exists(mission_dir, key)
 
 
 def _detect_n_frames(mission_dir: Path) -> int:
     """Return frame count from the first available zarr channel."""
-    from apairo.loader.zarr_loader import ZarrLoader
-
     for key in ("position", "yaw", "timestamp", "points", "waypoints_time", "waypoints_dist"):
-        parts = RAW_CHANNEL_PATHS.get(key, [])
-        if not parts:
-            continue
-        zarr_path = mission_dir / Path(*parts)
-        if zarr_path.is_dir():
+        loader = MNT_LAYOUT.loader(mission_dir, key, 0)
+        if loader is not None:
             try:
-                return len(ZarrLoader(zarr_path))
+                return len(loader)
             except Exception:
                 continue
     raise RuntimeError(
@@ -144,19 +129,7 @@ def _detect_n_frames(mission_dir: Path) -> int:
 
 def _build_raw_loader(mission_dir: Path, key: str, n_frames: int):
     """Return a loader for a raw channel, or ``None`` if the channel is absent."""
-    if key == "image":
-        tar_path = mission_dir / "images.tar"
-        if not tar_path.is_file():
-            return None
-        from apairo.loader.tar_loader import TarImageLoader
-        return TarImageLoader(tar_path, n_frames)
-
-    parts = RAW_CHANNEL_PATHS[key]
-    zarr_path = mission_dir / Path(*parts)
-    if not zarr_path.is_dir():
-        return None
-    from apairo.loader.zarr_loader import ZarrLoader
-    return ZarrLoader(zarr_path)
+    return MNT_LAYOUT.loader(mission_dir, key, n_frames)
 
 
 def _build_derived_loader(mission_dir: Path, key: str):
@@ -191,6 +164,10 @@ def _build_derived_loader(mission_dir: Path, key: str):
 
             def __getitem__(self, idx: int) -> np.ndarray:
                 return np.asarray(self._data[idx])
+
+            @property
+            def array(self) -> np.ndarray:
+                return self._data
 
         return _NpyRowsLoader(stacked)
 
@@ -240,16 +217,16 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
         self._root = mission_dir
         self._n_frames = _detect_n_frames(mission_dir)
 
-        # Default: all raw channels present on disk
+        # Default: all raw channels present on disk (table + flat convention)
         if keys is None:
-            keys = [k for k in _DEFAULT_KEYS if _channel_exists(mission_dir, k)]
+            keys = MNT_LAYOUT.scan(mission_dir)
 
         self._loaders: dict = {}
 
         for key in keys:
-            if key in RAW_CHANNEL_PATHS:
-                loader = _build_raw_loader(mission_dir, key, self._n_frames)
-            else:
+            loader = _build_raw_loader(mission_dir, key, self._n_frames)
+            if loader is None and key not in RAW_CHANNEL_PATHS:
+                # Not on disk as a raw channel -> preprocessed channel
                 loader = _build_derived_loader(mission_dir, key)
             if loader is not None:
                 self._loaders[key] = loader
@@ -345,6 +322,35 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
             return {}
         return self._loaders
 
+    def channel_array(self, key: str) -> np.ndarray:
+        """Full ``(N, ...)`` array for one channel of a single mission.
+
+        Zero-copy for array-backed channels (zarr, stacked npy); per-frame
+        channels (tar images, per-frame npy) are stacked on demand.
+
+        Raises:
+            RuntimeError: On a multi-mission (root-level) dataset.
+            KeyError: If *key* is not among the loaded channels.
+        """
+        if self._is_root:
+            raise RuntimeError(
+                "channel_array() is mission-level. Use .sequence(...) / "
+                "MNTDataset(mission_dir) for a single mission."
+            )
+        if key not in self._loaders:
+            loader = _build_raw_loader(self._mission_dir, key, self._n_frames)
+            if loader is None and key not in RAW_CHANNEL_PATHS:
+                loader = _build_derived_loader(self._mission_dir, key)
+            if loader is None:
+                raise KeyError(
+                    f"Channel '{key}' not found in '{self._mission_dir}'."
+                )
+            self._loaders[key] = loader
+        loader = self._loaders[key]
+        if hasattr(loader, "array"):
+            return loader.array
+        return np.stack([loader[i] for i in range(len(loader))])
+
     # ---------------------------------------------------------------- SynchronousDataset
 
     def __len__(self) -> int:
@@ -379,11 +385,21 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
     # ---------------------------------------------------------------- sequences / missions
 
     @property
+    def is_root(self) -> bool:
+        """True when this dataset spans several mission directories."""
+        return self._is_root
+
+    @property
+    def mission_dirs(self) -> list[Path]:
+        """Paths of all mission directories, in discovery order."""
+        if self._is_root:
+            return [m._mission_dir for m in self._missions]
+        return [self._mission_dir]
+
+    @property
     def mission_ids(self) -> list[str]:
         """Names of all mission directories, in discovery order."""
-        if self._is_root:
-            return [m._mission_dir.name for m in self._missions]
-        return [self._mission_dir.name]
+        return [d.name for d in self.mission_dirs]
 
     # Alias for consistency with other apairo datasets
     @property

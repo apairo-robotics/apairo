@@ -613,13 +613,15 @@ def test_zarr_loader_1d(tmp_path):
 
 def test_tar_image_loader_len(mission_dir):
     from apairo.loader.tar_loader import TarImageLoader
-    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES)
+    from apairo.utils.naming import integer_frame_index
+    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES, integer_frame_index)
     assert len(loader) == N_FRAMES
 
 
 def test_tar_image_loader_shape(mission_dir):
     from apairo.loader.tar_loader import TarImageLoader
-    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES)
+    from apairo.utils.naming import integer_frame_index
+    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES, integer_frame_index)
     img = loader[0]
     assert img.shape == (H, W, 3)
     assert img.dtype == np.uint8
@@ -627,14 +629,16 @@ def test_tar_image_loader_shape(mission_dir):
 
 def test_tar_image_loader_last_frame(mission_dir):
     from apairo.loader.tar_loader import TarImageLoader
-    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES)
+    from apairo.utils.naming import integer_frame_index
+    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES, integer_frame_index)
     img = loader[N_FRAMES - 1]
     assert img.shape == (H, W, 3)
 
 
 def test_tar_image_loader_index_caches(mission_dir):
     from apairo.loader.tar_loader import TarImageLoader
-    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES)
+    from apairo.utils.naming import integer_frame_index
+    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES, integer_frame_index)
     _ = loader[0]                 # builds index
     _ = loader[1]                 # uses cached index
     assert loader._index is not None
@@ -643,7 +647,8 @@ def test_tar_image_loader_index_caches(mission_dir):
 
 def test_tar_image_loader_missing_raises(mission_dir):
     from apairo.loader.tar_loader import TarImageLoader
-    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES + 1)
+    from apairo.utils.naming import integer_frame_index
+    loader = TarImageLoader(mission_dir / "images.tar", N_FRAMES + 1, integer_frame_index)
     with pytest.raises(FileNotFoundError):
         loader[N_FRAMES]          # index N_FRAMES was never written
 

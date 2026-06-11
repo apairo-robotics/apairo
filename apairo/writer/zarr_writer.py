@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+from typing import Optional, Tuple
 import numpy as np
 
 
@@ -8,7 +9,26 @@ class ZarrWriter:
 
     The full array is written in one call (sequence-level).  For per-frame
     incremental writes, accumulate frames first then call :meth:`write` once.
+
+    By default the array is saved with Zarr's standard settings.  Datasets
+    that care about on-disk layout can impose chunking and Blosc compression:
+
+    Args:
+        chunks: Chunk shape (dataset-imposed; Zarr default when omitted).
+        compression: Blosc codec name (e.g. ``"zstd"``, ``"lz4"``).
+            ``None`` (default) keeps Zarr's standard codec.
+        compression_level: Blosc compression level (used with *compression*).
     """
+
+    def __init__(
+        self,
+        chunks: Optional[Tuple[int, ...]] = None,
+        compression: Optional[str] = None,
+        compression_level: int = 5,
+    ) -> None:
+        self._chunks = chunks
+        self._compression = compression
+        self._compression_level = compression_level
 
     def write(self, data: np.ndarray, path: Path) -> None:
         """Save *data* as a Zarr array at *path*.
@@ -26,4 +46,27 @@ class ZarrWriter:
             )
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        zarr.save_array(str(path), data)
+
+        if self._chunks is None and self._compression is None:
+            zarr.save_array(str(path), data)
+            return
+
+        compressor = None
+        if self._compression is not None:
+            from numcodecs import Blosc
+            compressor = Blosc(
+                cname=self._compression,
+                clevel=self._compression_level,
+                shuffle=Blosc.SHUFFLE,
+            )
+
+        arr = zarr.create(
+            store=zarr.storage.LocalStore(str(path)),
+            shape=data.shape,
+            chunks=self._chunks or True,
+            dtype=data.dtype,
+            compressor=compressor,
+            overwrite=True,
+            zarr_format=2,
+        )
+        arr[:] = data

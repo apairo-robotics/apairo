@@ -1,54 +1,54 @@
+from __future__ import annotations
+
 import os
+from typing import List, Optional
+
 import numpy as np
 
-from apairo.utils import npy_analyser
 from apairo.core import AbstractLoader
 
 
 class NPYSLoader(AbstractLoader):
-    """A :class:`Loader` for `npy` files in a directory.
+    """Loader for an ordered list of per-frame ``.npy`` files in a directory.
 
-    In a directory, it is possible to have files of different nature.
+    The loader only handles npy mechanics (memory layout, lazy per-frame
+    loads); it has no naming convention of its own.  The *dataset* imposes
+    one by passing ``files``, the file names ordered by frame index.
+
+    When ``files`` is omitted, the legacy default applies — unsuffixed
+    ``<index>.npy`` members sorted lexicographically.  Suffixed variants
+    (``000000_intensity.npy``) are ignored by that default: a dataset
+    exposing them as separate channels resolves one file list per channel
+    (e.g. with :func:`apairo.utils.npy_analyser`) and builds one loader
+    per channel.
 
     Args:
         directory (str) :
             The directory that contains the `npy` files.
-
-    Example:
-        livox
-        |--- 000000.npy
-        |--- 000000_intensity.npy
-        |--- ...
+        files (list[str], optional) :
+            Frame-ordered file names resolved by the dataset.
     """
 
-    def __init__(self, directory):
+    def __init__(self, directory, files: Optional[List[str]] = None):
         self.directory = directory
-        self.npy_formats = npy_analyser(directory)
-        self.files = {npy_format: [] for npy_format in self.npy_formats}
-        self.key = ""
-        for file in filter(lambda f: f[-3:] == "npy", os.listdir(directory)):
-            if "_" in file:
-                file_ext = file.split("_")[-1].split(".")[0]
-                if file_ext not in self.npy_formats:
-                    raise ValueError(f"New format {file_ext} found in {directory}")
-            else:
-                file_ext = ""
-            self.files[file_ext].append(file)
-
-        for key in self.files.keys():
-            self.files[key].sort()
-
-        self._shape = np.load(os.path.join(self.directory, self.files[""][0])).shape
+        if files is not None:
+            self.files = list(files)
+        else:
+            self.files = sorted(
+                f
+                for f in os.listdir(directory)
+                if f.endswith(".npy") and "_" not in f
+            )
+        if not self.files:
+            raise FileNotFoundError(f"No .npy frames found in {directory}")
+        self._shape = np.load(os.path.join(self.directory, self.files[0])).shape
 
     @property
     def shape(self):
         return self._shape
 
     def __len__(self):
-        return len(self.files[""])
-
-    def set_format(self, key):
-        self.key = key
+        return len(self.files)
 
     def __getitem__(self, idx) -> np.ndarray:
-        return np.load(os.path.join(self.directory, self.files[self.key][idx]))
+        return np.load(os.path.join(self.directory, self.files[idx]))

@@ -41,3 +41,8 @@ class ZarrLoader(AbstractLoader):
         if self._array.ndim <= 1:
             return (1,)
         return tuple(self._array.shape[1:])
+
+    @property
+    def array(self):
+        """The underlying Zarr array (lazy, sliceable without a full load)."""
+        return self._array
