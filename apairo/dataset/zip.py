@@ -85,11 +85,19 @@ class ZipDataset(AbstractDataset):
     def __len__(self) -> int:
         return len(self._datasets[0])
 
+    @property
+    def is_synchronous(self) -> bool:
+        return all(ds.is_synchronous for ds in self._datasets)
+
     def _load(self, idx: int) -> Sample:
         merged: dict = {}
+        timestamp = None
         for ds in self._datasets:
-            merged.update(ds[idx].data)
-        return Sample(data=merged)
+            sample = ds[idx]
+            merged.update(sample.data)
+            if timestamp is None:
+                timestamp = sample.timestamp
+        return Sample(data=merged, timestamp=timestamp)
 
     def __repr__(self) -> str:
         names = ", ".join(ds.__class__.__name__ for ds in self._datasets)

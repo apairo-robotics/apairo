@@ -187,6 +187,21 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                 return SequenceView(seq, range(len(seq)), seq_id)
         raise KeyError(f"Sequence '{seq_id}' not found. Available: {self.sequence_ids}")
 
+    def synchronize(self, reference=None, method="latest", tolerance=None):
+        """Resample onto a single reference clock -- see :meth:`AbstractDataset.synchronize`.
+
+        On a root-level dataset each sequence is synchronized independently
+        (timestamps are not comparable across recordings) and the results are
+        concatenated along the frame axis.
+        """
+        if self._is_root:
+            from apairo.dataset.concat import ConcatDataset
+            return ConcatDataset([
+                seq.synchronize(reference=reference, method=method, tolerance=tolerance)
+                for seq in self._sequences
+            ])
+        return super().synchronize(reference=reference, method=method, tolerance=tolerance)
+
     # ---------------------------------------------------------------- preprocessing
 
     @property

@@ -240,30 +240,19 @@ class KittiDataset(AbstractDataset):
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
-        n_keys = len(self._keys)
-        current_idxs = np.zeros(n_keys, dtype=np.intp)
-        current_ts = np.array([self.timestamps[k][0] for k in self._keys])
-
-        tl_key_idxs: list[int] = []
-        tl_frame_idxs: list[int] = []
-
-        while True:
-            ki = int(np.argmin(current_ts))
-            if current_ts[ki] >= self.end_of_time:
-                break
-
-            tl_key_idxs.append(ki)
-            tl_frame_idxs.append(int(current_idxs[ki]))
-
-            current_idxs[ki] += 1
-            key = self._keys[ki]
-            if current_idxs[ki] >= len(self.timestamps[key]):
-                current_ts[ki] = self.end_of_time
-            else:
-                current_ts[ki] = self.timestamps[key][current_idxs[ki]]
-
-        self._tl_key_idxs: np.ndarray = np.array(tl_key_idxs, dtype=np.intp)
-        self._tl_frame_idxs: np.ndarray = np.array(tl_frame_idxs, dtype=np.intp)
+        lengths = [len(np.atleast_1d(self.timestamps[k])) for k in self._keys]
+        all_ts = np.concatenate(
+            [np.atleast_1d(self.timestamps[k]).astype(float) for k in self._keys]
+        )
+        key_idxs = np.repeat(np.arange(len(self._keys), dtype=np.intp), lengths)
+        frame_idxs = np.concatenate(
+            [np.arange(n, dtype=np.intp) for n in lengths]
+        )
+        # Stable sort: on equal timestamps, events keep key-declaration order,
+        # matching the previous event-by-event merge.
+        order = np.argsort(all_ts, kind="stable")
+        self._tl_key_idxs: np.ndarray = key_idxs[order]
+        self._tl_frame_idxs: np.ndarray = frame_idxs[order]
 
     # ------------------------------------------------------------ dunder
 

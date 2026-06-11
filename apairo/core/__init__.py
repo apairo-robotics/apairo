@@ -7,6 +7,7 @@ from .sequence_view import SequenceView
 from .filtered_view import FilteredView
 from .channel_view import ChannelView
 from .cached_dataset import CachedDataset
+from .synchronized_view import SynchronizedView
 from .transform import Compose
 
 from . import utils
@@ -21,6 +22,7 @@ __all__ = [
     "FilteredView",
     "ChannelView",
     "CachedDataset",
+    "SynchronizedView",
     "Compose",
     "utils",
 ]

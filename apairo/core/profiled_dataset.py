@@ -518,6 +518,11 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             ]
         return files
 
+    @property
+    def loaders(self) -> dict:
+        """Per-channel loaders, indexed by global frame index."""
+        return self._loaders
+
     def __len__(self) -> int:
         if not self._loaders:
             return 0

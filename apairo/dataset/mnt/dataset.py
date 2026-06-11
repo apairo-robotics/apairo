@@ -317,6 +317,13 @@ class MNTDataset(SynchronousDataset, ConfigurableDataset):
         """
         return self._mission_dir / key / f"{idx:06d}.{ext}"
 
+    @property
+    def loaders(self) -> dict:
+        """Per-channel loaders, indexed by global frame index (mission-level only)."""
+        if self._is_root:
+            return {}
+        return self._loaders
+
     # ---------------------------------------------------------------- SynchronousDataset
 
     def __len__(self) -> int:

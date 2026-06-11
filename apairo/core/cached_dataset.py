@@ -45,6 +45,11 @@ class CachedDataset(AbstractDataset):
         logger.info("Cache ready (%d samples).", n)
 
         self._keys = list(self._cache[0].data.keys()) if self._cache else []
+        self._synchronous = parent.is_synchronous
+
+    @property
+    def is_synchronous(self) -> bool:
+        return self._synchronous
 
     def __len__(self) -> int:
         return len(self._cache)

@@ -40,6 +40,10 @@ class FilteredView(AbstractDataset):
         return self._indices
 
     @property
+    def is_synchronous(self) -> bool:
+        return self._parent.is_synchronous
+
+    @property
     def frame_sequence_ids(self) -> np.ndarray:
         """Sequence ID for every frame in this view (delegated from parent)."""
         return self._parent.frame_sequence_ids[self._indices]

@@ -34,7 +34,6 @@ class SequenceView:
         self._parent = parent
         self._indices = list(indices)
         self._sequence_id = sequence_id
-        self._iter_pos = 0
 
     @property
     def sequence_id(self) -> str:
@@ -49,15 +48,8 @@ class SequenceView:
         return self._parent[self._indices[idx]]
 
     def __iter__(self):
-        self._iter_pos = 0
-        return self
-
-    def __next__(self) -> Sample:
-        if self._iter_pos >= len(self):
-            raise StopIteration
-        sample = self[self._iter_pos]
-        self._iter_pos += 1
-        return sample
+        for i in range(len(self)):
+            yield self[i]
 
     def __repr__(self) -> str:
         return f"SequenceView(id={self._sequence_id!r}, n_frames={len(self)})"

@@ -1,20 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import (
-    Any,
-    Callable,
-    ClassVar,
-    Dict,
-    FrozenSet,
-    List,
-    Optional,
-    Sequence,
-    Union,
-)
+from typing import Callable, ClassVar, Dict, FrozenSet, Optional
 import numpy as np
 from . import abstract_loader
 
 from .utils.typing import _Key
-from .utils.exceptions import KeysEmptyWarning, KeysDuplicateWarning
+from .utils.exceptions import KeysEmptyError, KeysDuplicateError
 from .sample import Sample
 
 
@@ -23,9 +13,9 @@ class AbstractDataset(ABC):
 
     Subclasses must implement ``__len__`` and ``_load``.
     ``_load(idx)`` must return a :class:`~apairo.core.sample.Sample` with raw data
-    (no transforms applied).  ``__getitem__``, ``__iter__``, and ``__next__`` are
-    provided by this base class: ``__getitem__`` applies registered transforms on
-    top of ``_load``; iteration uses index-based access over ``__len__``.
+    (no transforms applied).  ``__getitem__`` and ``__iter__`` are provided by
+    this base class: ``__getitem__`` applies registered transforms on top of
+    ``_load``; iteration uses index-based access over ``__len__``.
 
     Attributes:
         available_keys: Frozenset of channel names this dataset type can provide.
@@ -38,7 +28,6 @@ class AbstractDataset(ABC):
     available_keys: ClassVar[FrozenSet[str]] = frozenset()
     """Channels this dataset type can provide.  Override in each concrete class."""
 
-    keys: Union[List[_Key], Sequence[_Key]]
     timestamps: dict | None
     loaders: Dict[_Key, abstract_loader.AbstractLoader]
     synchronous: bool
@@ -46,9 +35,9 @@ class AbstractDataset(ABC):
 
     def _set_keys(self, keys: list[_Key]) -> None:
         if len(keys) == 0:
-            raise KeysEmptyWarning
+            raise KeysEmptyError
         if len(set(keys)) != len(keys):
-            raise KeysDuplicateWarning
+            raise KeysDuplicateError
         self._keys = keys
 
     @property
@@ -81,15 +70,8 @@ class AbstractDataset(ABC):
         return {}
 
     def __iter__(self):
-        self._iter_pos = 0
-        return self
-
-    def __next__(self):
-        if self._iter_pos >= len(self):
-            raise StopIteration
-        sample = self[self._iter_pos]
-        self._iter_pos += 1
-        return sample
+        for i in range(len(self)):
+            yield self[i]
 
     def transform(
         self,
@@ -132,6 +114,13 @@ class AbstractDataset(ABC):
             ds.transform(range_filter)
 
         Both forms compose in registration order and return ``self`` for chaining.
+
+        .. warning::
+            Transforms are registered **in place**: the return value is the
+            same object, so ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
+            leave ``v1 is v2 is ds`` with *both* transforms stacked.  To build
+            independent variants, branch first (e.g. ``ds.filter(...)`` or
+            ``ds.select(ds.keys)``) and register transforms on each branch.
         """
         if fn is None:
             step = key_or_fn
@@ -263,7 +252,6 @@ class AbstractDataset(ABC):
             ds_train = ds_filtered.filter_sequences(train_seqs)
             ds_val   = ds_filtered.filter_sequences([val_seq])
         """
-        import numpy as np
         ids = self.frame_sequence_ids
         return self.filter(np.where(np.isin(ids, seq_ids))[0])
 
@@ -294,16 +282,20 @@ class AbstractDataset(ABC):
 
         **Per-channel** -- ``filter(key, fn)``
 
-        ``fn`` receives ``sample.data[key]`` (raw, before transforms) and returns
-        ``True`` to keep the frame.  Only the specified channel is loaded during
-        the sweep::
+        ``fn`` receives the channel value and returns ``True`` to keep the
+        frame.  When the dataset exposes per-frame loaders, only the specified
+        channel is read during the sweep (raw, before transforms); views
+        without loaders fall back to loading the full sample::
 
             ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
+
+        Only available on synchronous datasets -- in an asynchronous timeline
+        each index holds a single channel, so a per-channel sweep is undefined.
+        Call :meth:`synchronize` first.
 
         Returns:
             :class:`~apairo.core.filtered_view.FilteredView`
         """
-        import numpy as np
         from apairo.core.filtered_view import FilteredView
 
         if isinstance(key_or_fn_or_indices, (np.ndarray, list)):
@@ -313,9 +305,54 @@ class AbstractDataset(ABC):
             indices = [i for i in range(len(self)) if key_or_fn_or_indices(self[i])]
         else:
             key = key_or_fn_or_indices
-            indices = [i for i in range(len(self)) if fn(self._load(i).data[key])]
+            if not self.is_synchronous:
+                raise ValueError(
+                    "Per-channel filter is undefined on an asynchronous dataset: "
+                    "each timeline index holds a single channel. Call "
+                    ".synchronize() first, or use the sample-level form "
+                    "filter(fn)."
+                )
+            loaders = getattr(self, "loaders", None)
+            if loaders and key in loaders:
+                indices = [i for i in range(len(self)) if fn(loaders[key][i])]
+            else:
+                indices = [i for i in range(len(self)) if fn(self._load(i).data[key])]
 
         return FilteredView(self, indices)
+
+    def synchronize(
+        self,
+        reference: str | None = None,
+        method: str = "latest",
+        tolerance: float | None = None,
+    ) -> "AbstractDataset":
+        """Resample this asynchronous dataset onto a single reference clock.
+
+        Returns a synchronous view where index ``i`` is the *i*-th frame of the
+        reference channel, with every other channel matched by timestamp.  The
+        result behaves like any synchronous dataset: complete samples, random
+        access, and the full chaining API (``filter``, ``select``, ``cache``,
+        ``join``, PyTorch ``DataLoader`` with shuffling)::
+
+            ds = TartanKittiDataset(seq, keys=["velodyne_0", "image_left"])
+            ds_sync = ds.synchronize(reference="velodyne_0", tolerance=0.05)
+            ds_sync[0].data   # {"velodyne_0": ..., "image_left": ...}
+
+        Args:
+            reference: Channel providing the clock.  ``None`` -> the channel
+                with the lowest frequency (so every frame sees fresh data).
+            method: ``"latest"`` -- last event with ``t <= t_ref`` (zero-order
+                hold, online-style); ``"nearest"`` -- event closest in time.
+            tolerance: Maximum ``|t - t_ref|`` in seconds.  Reference frames
+                where any channel has no match within tolerance are dropped.
+
+        Returns:
+            :class:`~apairo.core.synchronized_view.SynchronizedView`
+        """
+        from apairo.core.synchronized_view import SynchronizedView
+        return SynchronizedView(
+            self, reference=reference, method=method, tolerance=tolerance
+        )
 
     def load(self, key: str, idx: int):
         return self.loaders[key][idx]
@@ -326,4 +363,5 @@ class AbstractDataset(ABC):
     def __getitem__(self, idx: int) -> "Sample":
         return self._apply_transforms(self._load(idx))
 
+    @abstractmethod
     def __len__(self) -> int: ...

@@ -2,13 +2,19 @@ class FileExtensionError(Exception):
     pass
 
 
-class KeysEmptyWarning(KeyError):
+class KeysEmptyError(KeyError):
     pass
 
 
-class KeysDuplicateWarning(KeyError):
+class KeysDuplicateError(KeyError):
     pass
 
 
-class EmptyLoaderWarning(KeyError):
+class EmptyLoaderError(KeyError):
     pass
+
+
+# Deprecated aliases — these were raised as errors despite the Warning suffix.
+KeysEmptyWarning = KeysEmptyError
+KeysDuplicateWarning = KeysDuplicateError
+EmptyLoaderWarning = EmptyLoaderError

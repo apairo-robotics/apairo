@@ -37,6 +37,10 @@ class ChannelView(AbstractDataset):
         return len(self._parent)
 
     @property
+    def is_synchronous(self) -> bool:
+        return self._parent.is_synchronous
+
+    @property
     def frame_sequence_ids(self) -> "np.ndarray":
         return self._parent.frame_sequence_ids
 
