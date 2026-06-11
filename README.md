@@ -207,7 +207,7 @@ ds_val   = apairo.Rellis3DDataset(root, keys=["lidar", "labels"]).split("val")
 ## Extending apairo
 
 Add a new synchronous dataset with a YAML profile and a minimal subclass.
-See [documentation](https://apairo.readthedocs.io) for the full guide.
+See [documentation](https://apairo-robotics.github.io/apairo/) for the full guide.
 
 ---
 

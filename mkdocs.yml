@@ -1,8 +1,8 @@
 site_name: apairo
 site_description: Unified robotics dataset loader for time-series and annotated sensor data
-site_url: https://apairo.readthedocs.io
-repo_url: https://github.com/bresset/apairo
-repo_name: bresset/apairo
+site_url: https://apairo-robotics.github.io/apairo/
+repo_url: https://github.com/apairo-robotics/apairo
+repo_name: apairo-robotics/apairo
 
 theme:
   name: material

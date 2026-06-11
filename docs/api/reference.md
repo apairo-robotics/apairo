@@ -46,6 +46,12 @@
 
 ---
 
+### StreamDataset
+
+::: apairo.dataset.stream.StreamDataset
+
+---
+
 ### SynchronizedView
 
 ::: apairo.core.synchronized_view.SynchronizedView

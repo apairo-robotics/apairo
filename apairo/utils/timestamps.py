@@ -21,6 +21,23 @@ def get_reference_timestamps(timestamps: dict) -> str:
     return min(freq, key=freq.get)
 
 
+def merge_timeline(timestamps: dict, keys: list) -> tuple:
+    """Merge per-channel timestamps into one timestamp-ordered event timeline.
+
+    Returns ``(key_idxs, frame_idxs)``: for timeline position ``i``, the
+    event is frame ``frame_idxs[i]`` of channel ``keys[key_idxs[i]]``.
+    Stable sort -- events keep channel-declaration order on equal timestamps.
+    """
+    lengths = [len(np.atleast_1d(timestamps[k])) for k in keys]
+    all_ts = np.concatenate(
+        [np.atleast_1d(timestamps[k]).astype(float) for k in keys]
+    )
+    key_idxs = np.repeat(np.arange(len(keys), dtype=np.intp), lengths)
+    frame_idxs = np.concatenate([np.arange(n, dtype=np.intp) for n in lengths])
+    order = np.argsort(all_ts, kind="stable")
+    return key_idxs[order], frame_idxs[order]
+
+
 def clock_from_distance(
     timestamps: np.ndarray,
     positions: np.ndarray,

@@ -11,6 +11,7 @@ from apairo.dataset.kitti import KittiDataset
 from apairo.dataset.tartan_kitti import TartanKittiDataset
 from apairo.dataset.concat import ConcatDataset
 from apairo.dataset.zip import ZipDataset
+from apairo.dataset.stream import StreamDataset
 from apairo.dataset import split_sequences
 from apairo.core.sequence_view import SequenceView
 from apairo.core.filtered_view import FilteredView
@@ -42,6 +43,7 @@ __all__ = [
     "TartanKittiDataset",
     "ConcatDataset",
     "ZipDataset",
+    "StreamDataset",
     "split_sequences",
     "SequenceView",
     "FilteredView",

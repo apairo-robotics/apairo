@@ -208,6 +208,30 @@ the stored value untouched; with `tolerance`, *both* bracketing events must
 lie within tolerance. Custom interpolators subclass `apairo.Interpolator` —
 a single method `(t, t0, v0, t1, v1) -> value`.
 
+### In-memory streams — `StreamDataset`
+
+Data does not have to live on disk. `StreamDataset` builds an asynchronous
+dataset from timestamped items already in memory — decoded ROS messages, a
+live queue, arrays — and gives them the full apairo API, `synchronize()`
+included. Items pass through untouched (they can be any Python objects):
+
+```python
+from apairo import StreamDataset
+
+streams = StreamDataset({
+    "image": (img_timestamps, img_msgs),
+    "lidar": (lidar_timestamps, lidar_msgs),
+    "odom":  (odom_timestamps, odom_msgs),
+})
+
+frames = streams.synchronize(reference=clock, method="latest")
+frames[0].data   # {"image": msg, "lidar": msg, "odom": msg}
+```
+
+This is the bridge used to put apairo inside an existing extraction
+pipeline: decode the bag as before, wrap the messages, and the temporal
+matching logic disappears into `synchronize()`.
+
 ### Custom matching strategies
 
 `method` also accepts a callable `(channel_ts, ref_ts) -> indices` returning,

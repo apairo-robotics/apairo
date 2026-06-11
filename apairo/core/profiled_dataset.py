@@ -211,7 +211,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             Populated at class definition time from the YAML file.
 
     See Also:
-        `YAML Profiles <https://apairo.readthedocs.io/datasets/yaml-profiles/>`_
+        `YAML Profiles <https://apairo-robotics.github.io/apairo/datasets/yaml-profiles/>`_
         for the full profile specification.
     """
 

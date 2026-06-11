@@ -25,7 +25,7 @@ pip install apairo[dev]
 ## From source
 
 ```bash
-git clone https://github.com/bresset/apairo
+git clone https://github.com/apairo-robotics/apairo
 cd apairo
 pip install -e ".[dev]"
 ```

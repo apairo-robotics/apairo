@@ -240,19 +240,10 @@ class KittiDataset(AbstractDataset):
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
-        lengths = [len(np.atleast_1d(self.timestamps[k])) for k in self._keys]
-        all_ts = np.concatenate(
-            [np.atleast_1d(self.timestamps[k]).astype(float) for k in self._keys]
+        from apairo.utils.timestamps import merge_timeline
+        self._tl_key_idxs, self._tl_frame_idxs = merge_timeline(
+            self.timestamps, self._keys
         )
-        key_idxs = np.repeat(np.arange(len(self._keys), dtype=np.intp), lengths)
-        frame_idxs = np.concatenate(
-            [np.arange(n, dtype=np.intp) for n in lengths]
-        )
-        # Stable sort: on equal timestamps, events keep key-declaration order,
-        # matching the previous event-by-event merge.
-        order = np.argsort(all_ts, kind="stable")
-        self._tl_key_idxs: np.ndarray = key_idxs[order]
-        self._tl_frame_idxs: np.ndarray = frame_idxs[order]
 
     # ------------------------------------------------------------ dunder
 
