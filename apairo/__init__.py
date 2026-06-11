@@ -17,6 +17,7 @@ from apairo.core.filtered_view import FilteredView
 from apairo.core.channel_view import ChannelView
 from apairo.core.cached_dataset import CachedDataset
 from apairo.core.synchronized_view import SynchronizedView
+from apairo.core.interpolator import Interpolator
 from apairo.dataset.semantic_kitti import SemanticKittiDataset
 from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
@@ -47,6 +48,7 @@ __all__ = [
     "ChannelView",
     "CachedDataset",
     "SynchronizedView",
+    "Interpolator",
     "SemanticKittiDataset",
     "Rellis3DDataset",
     "Goose3DDataset",

@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Callable, ClassVar, Dict, FrozenSet, Optional
+from typing import TYPE_CHECKING, Callable, ClassVar, Dict, FrozenSet, Optional
 import numpy as np
+
+if TYPE_CHECKING:
+    from apairo.core.synchronized_view import ChannelStrategy
 from . import abstract_loader
 
 from .utils.typing import _Key
@@ -322,29 +325,57 @@ class AbstractDataset(ABC):
 
     def synchronize(
         self,
-        reference: str | None = None,
-        method: str = "latest",
+        reference: "str | np.ndarray | None" = None,
+        method: "ChannelStrategy | Dict[str, ChannelStrategy]" = "latest",
         tolerance: float | None = None,
     ) -> "AbstractDataset":
         """Resample this asynchronous dataset onto a single reference clock.
 
-        Returns a synchronous view where index ``i`` is the *i*-th frame of the
-        reference channel, with every other channel matched by timestamp.  The
-        result behaves like any synchronous dataset: complete samples, random
-        access, and the full chaining API (``filter``, ``select``, ``cache``,
+        Returns a synchronous view where index ``i`` is the *i*-th tick of the
+        reference clock, with every channel matched by timestamp.  The result
+        behaves like any synchronous dataset: complete samples, random access,
+        and the full chaining API (``filter``, ``select``, ``cache``,
         ``join``, PyTorch ``DataLoader`` with shuffling)::
 
             ds = TartanKittiDataset(seq, keys=["velodyne_0", "image_left"])
             ds_sync = ds.synchronize(reference="velodyne_0", tolerance=0.05)
             ds_sync[0].data   # {"velodyne_0": ..., "image_left": ...}
 
+        The clock can also be external -- fixed-rate or distance-based::
+
+            # one frame every 100 ms
+            ds_10hz = ds.synchronize(reference=np.arange(t0, t1, 0.1))
+
+            # one frame every 0.5 m travelled (from odometry)
+            from apairo.utils import clock_from_distance
+            clock = clock_from_distance(odom_ts, odom_xy, step=0.5)
+            ds_spatial = ds.synchronize(reference=clock)
+
+        Continuous signals (poses, IMU, commands) can be interpolated at the
+        reference instant instead of matched, with per-channel strategies::
+
+            from apairo_transform.interp import Se3Interp
+
+            ds_sync = ds.synchronize(
+                reference="velodyne_0",
+                method={"gicp_poses": Se3Interp()},   # others -> "latest"
+            )
+
         Args:
-            reference: Channel providing the clock.  ``None`` -> the channel
-                with the lowest frequency (so every frame sees fresh data).
-            method: ``"latest"`` -- last event with ``t <= t_ref`` (zero-order
-                hold, online-style); ``"nearest"`` -- event closest in time.
+            reference: Channel name providing the clock; ``None`` for the
+                lowest-frequency channel (so every frame sees fresh data); or
+                an ascending array of timestamps to use as an external clock.
+            method: Strategy for every channel, or a dict of per-channel
+                strategies (unlisted channels default to ``"latest"``).
+                ``"latest"`` -- last event with ``t <= t_ref`` (zero-order
+                hold, online-style); ``"nearest"`` -- event closest in time;
+                a callable ``(channel_ts, ref_ts) -> indices`` implementing a
+                custom matching strategy (negative index = no match); or an
+                :class:`~apairo.core.interpolator.Interpolator` synthesizing
+                the value at ``t_ref`` from the two bracketing events.
             tolerance: Maximum ``|t - t_ref|`` in seconds.  Reference frames
-                where any channel has no match within tolerance are dropped.
+                where any channel has no match within tolerance are dropped
+                (for interpolated channels, both bracketing events count).
 
         Returns:
             :class:`~apairo.core.synchronized_view.SynchronizedView`

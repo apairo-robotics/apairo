@@ -148,6 +148,10 @@ def test_synchronize_root(tmp_path):
     assert len(sync) == 20
     assert set(sync[0].data) == {"controls", "height_map"}
 
+    # An external clock cannot span sequences with different time bases
+    with pytest.raises(ValueError, match="external clock"):
+        ds.synchronize(reference=np.linspace(0.0, 10.0, 5))
+
 
 def test_iter_concrete():
     """Check if the iteration is correct for a concrete example"""

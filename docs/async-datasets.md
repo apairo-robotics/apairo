@@ -153,6 +153,79 @@ The matching is a pure index computation (one `searchsorted` per channel) --
 nothing is read from disk until access. Inspect the alignment with
 `ds_sync.frame_indices` and `ds_sync.time_offsets(key)`.
 
+### External clocks: fixed-rate and distance-based resampling
+
+The reference does not have to be a channel -- pass an **array of
+timestamps** to resample onto any clock. Because the view is cheap to build,
+changing the rate is a one-line edit, not a re-extraction:
+
+```python
+import numpy as np
+from apairo.utils import clock_from_distance
+
+t0, t1 = ds.timestamps["velodyne_0"][[0, -1]]
+
+# Fixed rate: one frame every 100 ms
+ds_10hz = ds.synchronize(reference=np.arange(t0, t1, 0.1))
+
+# Spatial: one frame every 0.5 m travelled, from the odometry stream
+odom = ds.loaders["odom"]
+clock = clock_from_distance(ds.timestamps["odom"], odom_xy, step=0.5)
+ds_spatial = ds.synchronize(reference=clock)
+```
+
+`clock_from_distance` ticks along the cumulative path length, so static
+periods (robot not moving) produce no frames at all -- no separate trimming
+step needed.
+
+### Interpolating continuous channels
+
+Matching picks an *existing* event; for continuous signals — poses, IMU,
+commands — you often want the value *at* the reference instant instead.
+Pass per-channel strategies as a dict; channels whose strategy is an
+`Interpolator` are synthesized from their two bracketing events
+(implementations live in
+[apairo_transform](https://github.com/apairo-robotics/apairo_transform)):
+
+```python
+from apairo_transform.interp import LinearInterp, Se3Interp
+
+ds_sync = ds.synchronize(
+    reference="velodyne_0",
+    method={
+        "gicp_poses": Se3Interp(),     # slerp rotation + lerp translation
+        "cmd":        LinearInterp(),  # linear blend
+    },                                  # unlisted channels -> "latest"
+    tolerance=0.5,
+)
+
+ds_sync[0].data["gicp_poses"]   # pose at exactly ds_sync[0].timestamp
+ds_sync.time_offsets("gicp_poses")   # zeros: synthesized at the tick
+```
+
+Rules: ticks not bracketed by two events are dropped; exact matches return
+the stored value untouched; with `tolerance`, *both* bracketing events must
+lie within tolerance. Custom interpolators subclass `apairo.Interpolator` —
+a single method `(t, t0, v0, t1, v1) -> value`.
+
+### Custom matching strategies
+
+`method` also accepts a callable `(channel_ts, ref_ts) -> indices` returning,
+for each reference tick, the event index to use (negative = no match, the
+frame is dropped):
+
+```python
+def latest_within_100ms(ts: np.ndarray, ref_ts: np.ndarray) -> np.ndarray:
+    idx = np.searchsorted(ts, ref_ts, side="right") - 1
+    idx[np.abs(ts[np.clip(idx, 0, None)] - ref_ts) > 0.1] = -1
+    return idx
+
+ds_sync = ds.synchronize(method=latest_within_100ms)
+```
+
+This is the extension point for exotic alignment strategies -- no subclassing
+required.
+
 On a root-level dataset, each sequence is synchronized on its own clock and
 the results are concatenated -- timestamps are never compared across
 recordings.

@@ -52,6 +52,12 @@
 
 ---
 
+### Interpolator
+
+::: apairo.core.interpolator.Interpolator
+
+---
+
 ## Dataset composition
 
 ### ConcatDataset

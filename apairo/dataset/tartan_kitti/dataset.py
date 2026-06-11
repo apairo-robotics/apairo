@@ -192,9 +192,17 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
 
         On a root-level dataset each sequence is synchronized independently
         (timestamps are not comparable across recordings) and the results are
-        concatenated along the frame axis.
+        concatenated along the frame axis.  For the same reason, an external
+        clock array is only valid on a single sequence.
         """
         if self._is_root:
+            if reference is not None and not isinstance(reference, str):
+                raise ValueError(
+                    "An external clock array cannot be applied to a root-level "
+                    "dataset: each sequence has its own time base. Synchronize "
+                    "sequences individually (ds.sequences[i].synchronize(...)) "
+                    "and concat the results."
+                )
             from apairo.dataset.concat import ConcatDataset
             return ConcatDataset([
                 seq.synchronize(reference=reference, method=method, tolerance=tolerance)
