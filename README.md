@@ -167,6 +167,26 @@ ds_v2 = base.join(ds_prior).transform(augment_v2)
 
 ---
 
+## Asynchronous datasets — `synchronize()`
+
+Asynchronous datasets (multi-rate sensor rigs) expose a timestamp-ordered event timeline: `ds[i]` is one event from one sensor. To get complete multi-channel frames, resample onto a reference clock:
+
+```python
+ds = apairo.TartanKittiDataset(seq_dir, keys=["velodyne_0", "image_left", "cmd"])
+
+ds_sync = ds.synchronize(
+    reference="velodyne_0",   # default: lowest-frequency channel
+    method="latest",          # "latest" (zero-order hold) or "nearest"
+    tolerance=0.05,           # drop frames with no match within ±50 ms
+)
+
+ds_sync[0].data   # {"velodyne_0": ..., "image_left": ..., "cmd": ...}
+```
+
+The result is a synchronous view — random access, shuffling, and the whole chaining API (`filter`, `select`, `cache`, `join`, `DataLoader`) work unchanged. Matching is a pure index computation; no data is read until access.
+
+---
+
 ## Combining datasets
 
 ```python

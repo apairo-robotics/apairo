@@ -46,6 +46,12 @@
 
 ---
 
+### SynchronizedView
+
+::: apairo.core.synchronized_view.SynchronizedView
+
+---
+
 ## Dataset composition
 
 ### ConcatDataset

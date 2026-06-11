@@ -46,7 +46,6 @@ docs = [
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
-addopts = "--ignore=test/sampler"
 
 [tool.setuptools.packages.find]
 where = ["."]

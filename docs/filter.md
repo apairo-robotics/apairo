@@ -122,5 +122,5 @@ The disk is read once; fold construction costs only the numpy masking.
 | **Parent transforms** | Transforms registered on the parent are applied before the view's own transforms. |
 | **Chaining** | `FilteredView` is a full `AbstractDataset` — `.transform()` and `.filter()` work on it. |
 | **`view.indices`** | `np.ndarray` of global indices — saveable and reloadable. |
-| **Per-channel sweep** | `filter(key, fn)` loads only the specified channel during the sweep, skipping all other I/O. |
+| **Per-channel sweep** | `filter(key, fn)` loads only the specified channel during the sweep, skipping all other I/O. Synchronous datasets only — on an async dataset, call `synchronize()` first. |
 | **`frame_sequence_ids`** | `ProfiledDataset` property — maps each global frame index to its sequence ID, enabling sequence-aware splits after filtering. |

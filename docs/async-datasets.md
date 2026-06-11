@@ -17,6 +17,8 @@ print(sample.data["velodyne_0"].shape)
 
 This is different from synchronous datasets where all requested modalities are always present. In async, iterate with `if "velodyne_0" in sample.data` to branch on sensor type.
 
+If you want complete multi-channel frames instead of raw events, resample the dataset onto a reference clock with [`synchronize()`](#synchronizing-async-sync) -- the result behaves exactly like a synchronous dataset.
+
 ---
 
 ## TartanKittiDataset
@@ -118,26 +120,66 @@ ds = TartanKittiDataset("/data/tartan/2024-01-01_forest", keys=["velodyne_0", "m
 
 ---
 
-## Using with PyTorch DataLoader
+## Synchronizing: async → sync
 
-`DataLoader` uses `isinstance(dataset, IterableDataset)` to decide whether to use map-style (random access) or iterable-style (sequential) loading. For async datasets, declare `IterableDataset` so `DataLoader` does not attempt random access:
+The event timeline is the honest representation of a recording, but training
+usually wants complete frames. `synchronize()` resamples the dataset onto a
+single reference clock and returns a **synchronous view**: index `i` is the
+*i*-th frame of the reference channel, with every other channel matched by
+timestamp.
 
 ```python
-from torch.utils.data import IterableDataset, DataLoader
+ds = TartanKittiDataset(seq_dir, keys=["velodyne_0", "image_left", "cmd"])
 
-class MyTartanDataset(TartanKittiDataset, IterableDataset):
-    pass
+ds_sync = ds.synchronize(
+    reference="velodyne_0",   # default: the lowest-frequency channel
+    method="latest",          # "latest" (zero-order hold) or "nearest"
+    tolerance=0.05,           # drop frames with no match within ±50 ms
+)
 
-ds = MyTartanDataset("/data/tartan/2024-01-01_forest", keys=["velodyne_0"])
-loader = DataLoader(ds, batch_size=1, num_workers=0)
-
-for batch in loader:
-    if "velodyne_0" in batch:
-        pts = batch["velodyne_0"]   # (1, N, 4)
+sample = ds_sync[0]
+sample.data.keys()    # all three channels, always
+sample.timestamp      # timestamp of the reference frame
 ```
 
-!!! note "Why num_workers=0?"
-    Iterable-style datasets with sequential state (timestamp-ordered iteration) don't parallelise trivially. For training, apply the temporal sampling you need before batching, or use a `LowFreqUniformSampler`.
+- **`method="latest"`** -- each channel contributes its last event with
+  `t <= t_ref` (what a live system would have seen at that instant).
+- **`method="nearest"`** -- each channel contributes the event closest in
+  time, past or future (best alignment for offline training).
+- **`tolerance`** -- reference frames where any channel has no event within
+  the window are dropped, so every sample is guaranteed fresh.
+
+The matching is a pure index computation (one `searchsorted` per channel) --
+nothing is read from disk until access. Inspect the alignment with
+`ds_sync.frame_indices` and `ds_sync.time_offsets(key)`.
+
+On a root-level dataset, each sequence is synchronized on its own clock and
+the results are concatenated -- timestamps are never compared across
+recordings.
+
+### The full API follows
+
+The view is synchronous, so everything that works on synchronous datasets
+works here -- including per-channel filtering and map-style `DataLoader` with
+shuffling:
+
+```python
+from torch.utils.data import DataLoader
+
+ds_train = (
+    ds.synchronize(reference="velodyne_0", tolerance=0.05)
+    .filter("velodyne_0", lambda pts: pts.shape[0] > 1000)
+    .transform("velodyne_0", RangeFilter(max=50.0))
+)
+
+loader = DataLoader(ds_train, batch_size=8, shuffle=True, num_workers=4,
+                    collate_fn=my_collate)
+```
+
+!!! note "Transforms and synchronize()"
+    `synchronize()` reads channel data directly from the loaders -- transforms
+    registered on the *async* parent are not applied. Register transforms on
+    the synchronized view instead, as above.
 
 ---
 

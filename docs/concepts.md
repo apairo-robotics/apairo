@@ -29,6 +29,10 @@ imu/          000000.pt    000001.pt    ...   timestamps.txt
 
 apairo merges all channels into a single timestamp-ordered timeline. `ds[i]` returns one event -- the scan or image or IMU reading at position `i` in the global timeline -- with its `timestamp` field set. Exactly one key is populated in `sample.data` per event.
 
+### Bridging the two: `synchronize()`
+
+An asynchronous dataset can be resampled onto a reference clock with `ds.synchronize()`. The result is a synchronous view -- complete multi-channel samples, random access, full chaining API -- making the two layouts interchangeable downstream. See [Async Datasets](async-datasets.md#synchronizing-async-sync).
+
 ---
 
 ## ProfiledDataset and YAML profiles

@@ -21,3 +21,6 @@ site
 dist
 
 Makefile
+
+# Committed real-data fixtures for smoke tests (kept tiny on purpose)
+!test/assets/**

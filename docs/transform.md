@@ -100,3 +100,11 @@ print(ds._pipeline[-1])  # Compose([RangeFilter, Normalize])
 | **Scope** | Per-instance. Transforms on `ds` do not affect another instance at the same path. |
 | **`output`** | Publishes result as a new channel; source channel unchanged. |
 | **`keep=False`** | Removes an `output` channel from the final sample after the full pipeline runs. |
+
+!!! warning "Transforms register in place"
+    `transform()` mutates the dataset and returns the **same object** for
+    chaining. `v1 = ds.transform(a)` then `v2 = ds.transform(b)` leaves
+    `v1 is v2 is ds` with *both* transforms stacked. To build independent
+    variants from one dataset, branch first — e.g. via `ds.filter(...)`,
+    `ds.select(ds.keys)`, or separate instances — and register transforms on
+    each branch.

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from test.utils.create_mock_dataset import create_mock_dataset
 from apairo.core import AbstractDataset, FilteredView
-from apairo.core.utils.exceptions import KeysEmptyWarning, KeysDuplicateWarning
+from apairo.core.utils.exceptions import KeysEmptyError, KeysDuplicateError
 from apairo.core.sample import Sample
 
 
@@ -15,10 +15,10 @@ def dataset():
 def test_keys_setter(dataset):
     assert dataset.keys == ["key"]
 
-    with pytest.raises(KeysEmptyWarning):  # Assuming Exception type from logic
+    with pytest.raises(KeysEmptyError):
         dataset.keys = []
 
-    with pytest.raises(KeysDuplicateWarning):  # Assuming Exception type
+    with pytest.raises(KeysDuplicateError):
         dataset.keys = ["key_a", "key_a"]
 
     dataset.keys = ["key_a", "key_b"]
@@ -40,9 +40,18 @@ def test_shape(dataset):
 
 
 def test_iter(dataset):
-    # Depending on implementation, iter might return a dict or tuple
-    # Original test expected {"key": ["value"]}
-    assert next(iter(dataset)) == {"key": ["value"]}
+    sample = next(iter(dataset))
+    assert isinstance(sample, Sample)
+    assert sample.data == {"key": "value"}
+
+
+def test_len_is_abstract():
+    class NoLen(AbstractDataset):
+        def _load(self, idx):
+            return Sample(data={})
+
+    with pytest.raises(TypeError):
+        NoLen()
 
 
 # ------------------------------------------------------------------ transforms
@@ -224,6 +233,46 @@ def test_filter_parent_transforms_applied(multi_ds):
     view = multi_ds.filter(lambda s: s.data["lidar"].shape[0] >= 3)
     sample = view[0]
     np.testing.assert_array_equal(sample.data["lidar"], np.ones((3, 3)) * 10)
+
+
+def test_nested_iteration_is_independent(multi_ds):
+    """Two simultaneous iterations over the same dataset must not interfere."""
+    pairs = [(0, 0) for _ in multi_ds for _ in multi_ds]
+    assert len(pairs) == len(multi_ds) ** 2
+
+
+def test_per_channel_filter_rejects_async():
+    class AsyncDS(AbstractDataset):
+        def __init__(self):
+            self.keys = ["a"]
+            self.timestamps = {"a": np.array([0.0, 1.0])}
+
+        def __len__(self):
+            return 2
+
+        def _load(self, idx):
+            return Sample(data={"a": np.zeros(1)}, timestamp=float(idx))
+
+    with pytest.raises(ValueError, match="synchronize"):
+        AsyncDS().filter("a", lambda x: True)
+
+
+def test_view_is_synchronous_delegates_to_parent():
+    class AsyncDS(AbstractDataset):
+        def __init__(self):
+            self.keys = ["a"]
+            self.timestamps = {"a": np.array([0.0, 1.0])}
+
+        def __len__(self):
+            return 2
+
+        def _load(self, idx):
+            return Sample(data={"a": np.zeros(1)}, timestamp=float(idx))
+
+    ds = AsyncDS()
+    assert not ds.filter(np.array([0])).is_synchronous
+    assert not ds.select(["a"]).is_synchronous
+    assert not ds.cache().is_synchronous
 
 
 def test_filter_indices_roundtrip(tmp_path, multi_ds):

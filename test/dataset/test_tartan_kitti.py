@@ -115,6 +115,40 @@ def test_iter_ending(dataset):
         assert list(sample.data.keys())[0] in ["controls", "image_left"]
 
 
+def test_synchronize_on_sequence(dataset):
+    """synchronize() turns the event timeline into complete frames."""
+    view = dataset.synchronize(reference="height_map", method="nearest")
+    assert view.is_synchronous
+    assert len(view) == 10  # height_map at 1 Hz over 10 s
+    sample = view[0]
+    assert set(sample.data) == {"controls", "height_map", "image_left"}
+    assert sample.timestamp is not None
+
+
+def test_synchronize_root(tmp_path):
+    """Root-level synchronize: each sequence on its own clock, concatenated."""
+    from apairo.dataset.tartan_kitti import TartanKittiDataset as RealTartan
+    from apairo.dataset.concat import ConcatDataset
+
+    for seq in ["seq_a", "seq_b"]:
+        for name, n in [("controls", 50), ("height_map", 10)]:
+            d = tmp_path / seq / name
+            d.mkdir(parents=True)
+            if name == "controls":
+                np.save(d / "controls.npy", np.random.rand(n, 2))
+            else:
+                for i in range(n):
+                    np.save(d / f"{i:06d}.npy", np.random.rand(5, 5))
+            np.savetxt(d / "timestamps.txt", np.linspace(0.0, 10.0, n))
+
+    ds = RealTartan(tmp_path, keys=["controls", "height_map"])
+    sync = ds.synchronize(reference="height_map", method="nearest")
+    assert isinstance(sync, ConcatDataset)
+    assert sync.is_synchronous
+    assert len(sync) == 20
+    assert set(sync[0].data) == {"controls", "height_map"}
+
+
 def test_iter_concrete():
     """Check if the iteration is correct for a concrete example"""
     dataset = TartanKittiDataset.__new__(TartanKittiDataset)  # Skip init
