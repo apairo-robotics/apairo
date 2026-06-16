@@ -111,6 +111,41 @@ def test_status_not_a_dataset(tmp_path):
     assert _run(["status", str(empty)]) == 1
 
 
+# ── ecosystem dispatch (apairo <tool>) ────────────────────────────────────────
+
+class _FakeEntryPoint:
+    def __init__(self, fn):
+        self._fn = fn
+
+    def load(self):
+        return self._fn
+
+
+def test_dispatches_to_ecosystem_plugin(monkeypatch):
+    import apairo.cli as cli
+
+    captured = {}
+    monkeypatch.setattr(
+        cli, "_discover_plugins",
+        lambda: {"extractor": _FakeEntryPoint(lambda argv: captured.setdefault("argv", argv) or 0)},
+    )
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["extractor", "-i", "bags", "-o", "out"])
+    assert captured["argv"] == ["-i", "bags", "-o", "out"]  # rest handed to the plugin
+    assert exc.value.code == 0
+
+
+def test_builtins_win_over_plugins(monkeypatch, raw_root):
+    import apairo.cli as cli
+
+    monkeypatch.setattr(
+        cli, "_discover_plugins",
+        lambda: {"extractor": _FakeEntryPoint(lambda argv: 1)},
+    )
+    # 'init' is a built-in -> handled by apairo, not dispatched as a plugin
+    assert _run(["init", str(raw_root)]) == 0
+
+
 def test_status_sequence_per_channel_json(raw_root, capsys):
     _run(["init", str(raw_root)])
     capsys.readouterr()

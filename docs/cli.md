@@ -24,6 +24,26 @@ Inspect and initialize apairo datasets.
 `PATH` defaults to the current directory, so you can `cd` into a dataset and run
 the commands with no arguments.
 
+### Ecosystem commands
+
+Beyond the built-ins (`init`, `status`), `apairo` is also a **dispatcher** for
+the wider ecosystem. Installed tools register a subcommand via the
+`apairo.cli_plugins` entry-point group, so they appear as `apairo <tool>`:
+
+```bash
+apairo extractor -i bags/ -o dataset/ -t /lidar /tf   # = apairo-extractor
+```
+
+This is plugin discovery, not a dependency: `apairo` never imports its tools, it
+just dispatches to whatever is installed (so there is no circular dependency
+between the packages). `apairo --help` lists the discovered commands. A package
+exposes one like this:
+
+```toml
+[project.entry-points."apairo.cli_plugins"]
+extractor = "apairo_extractor.cli:main"
+```
+
 ---
 
 ## `apairo init`

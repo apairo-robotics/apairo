@@ -295,9 +295,26 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                    default="RawDataset", help="interpret with this dataset class")
 
 
-def main(argv: Optional[list[str]] = None) -> None:
+def _discover_plugins() -> dict:
+    """Ecosystem subcommands registered under the ``apairo.cli_plugins`` entry
+    point group (e.g. ``apairo extractor`` from ``apairo_extractor``).
+
+    Discovery is by installed metadata only -- apairo never imports or depends
+    on its tools; it dispatches to whatever is installed.
+    """
+    from importlib.metadata import entry_points
+
+    return {ep.name: ep for ep in entry_points(group="apairo.cli_plugins")}
+
+
+def _build_parser(plugin_names) -> argparse.ArgumentParser:
+    epilog = None
+    if plugin_names:
+        epilog = ("ecosystem commands: " + ", ".join(sorted(plugin_names))
+                  + "   (run `apairo <command> --help`)")
     parser = argparse.ArgumentParser(
-        prog="apairo", description="Inspect and initialize apairo datasets."
+        prog="apairo", description="Inspect and initialize apairo datasets.",
+        epilog=epilog,
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -310,8 +327,21 @@ def main(argv: Optional[list[str]] = None) -> None:
     p_status = sub.add_parser("status", help="show what a dataset directory contains")
     _add_common(p_status)
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: Optional[list[str]] = None) -> None:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Ecosystem dispatch: `apairo <plugin> ...` hands the rest to the plugin,
+    # which parses its own arguments. Built-ins (init/status) fall through.
+    plugins = _discover_plugins()
+    if argv and argv[0] in plugins:
+        plugin_main = plugins[argv[0]].load()
+        result = plugin_main(argv[1:])
+        raise SystemExit(result if isinstance(result, int) else 0)
+
+    args = _build_parser(set(plugins)).parse_args(argv)
     handler = {"init": cmd_init, "status": cmd_status}[args.command]
     sys.exit(handler(args))
 
