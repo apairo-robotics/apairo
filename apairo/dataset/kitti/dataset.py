@@ -17,7 +17,15 @@ from apairo.core.config import (
 
 
 def _detect_loader(channel_dir: Path) -> str | None:
-    """Infer loader type from file extensions found in *channel_dir*."""
+    """Infer loader type from the contents of *channel_dir*.
+
+    A channel directory that is itself a Zarr array store (it holds a
+    ``.zarray`` / ``zarr.json`` metadata file, with ``timestamps.txt`` placed
+    beside the chunks) is detected as ``"zarr"``; otherwise the loader is
+    inferred from the data-file extensions.
+    """
+    if (channel_dir / ".zarray").exists() or (channel_dir / "zarr.json").exists():
+        return "zarr"
     data_files = [
         f for f in channel_dir.iterdir()
         if f.is_file() and f.name != "timestamps.txt"
@@ -36,12 +44,25 @@ def _detect_loader(channel_dir: Path) -> str | None:
     return None
 
 
-class KittiDataset(AbstractDataset):
-    r"""Generic dataset for KITTI-layout directories (one subdirectory per modality).
+class AsyncLayoutDataset(AbstractDataset):
+    r"""Abstract *asynchronous layout* loader (one subdirectory per channel).
 
-    Each modality subdirectory must contain a ``timestamps.txt`` file and data
-    files in a format known to the loader registry (``npys``, ``npy``, ``bin``,
-    ``img``).
+    This is the format primitive of the asynchronous dataset family -- it is
+    **not** the KITTI dataset (no real KITTI dataset uses it; see
+    :class:`~apairo.dataset.semantic_kitti.SemanticKittiDataset`, which is a
+    synchronous :class:`~apairo.core.profiled_dataset.ProfiledDataset`). The
+    name ``KittiDataset`` is kept as a backward-compatible alias.
+
+    It describes *how* channels are stored, never *which* channels exist: each
+    channel is a subdirectory with its own ``timestamps.txt`` and data files in
+    a format known to the loader registry (``npys``, ``npy``, ``bin``, ``img``,
+    ``zarr``). The set of channels is per-instance state, read from
+    ``.apairo/channels.yaml`` (or an explicit ``dataset_profile``). Datasets
+    with a *fixed* channel set layer a profile on top (e.g.
+    :class:`~apairo.dataset.tartan_kitti.TartanKittiDataset`); datasets with
+    *dynamic* channels (e.g. ``apairo-extractor`` output) use
+    :class:`~apairo.dataset.raw.RawDataset`, which reads the channel set from
+    ``.apairo`` with no profile.
 
     **Usage with an explicit profile (original API)**::
 
@@ -259,4 +280,8 @@ class KittiDataset(AbstractDataset):
             data={key: self.loaders[key][frame]},
             timestamp=float(self.timestamps[key][frame]),
         )
+
+
+# Backward-compatible alias: this class was historically named ``KittiDataset``.
+KittiDataset = AsyncLayoutDataset
 

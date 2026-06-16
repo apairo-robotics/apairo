@@ -18,6 +18,7 @@ str_to_loader = {
     "npy": NPYLoader,
     "npys_img": NPYSLoader,
     "bin": BINLoader,
+    "zarr": ZarrLoader,
 }
 
 

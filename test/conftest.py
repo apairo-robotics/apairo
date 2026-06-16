@@ -1,11 +1,9 @@
 import pytest
 import numpy as np
-import matplotlib.pyplot as plt
 
 from apairo.loader import (
     NPYLoader,
     NPYSLoader,
-    IMGLoader,
 )
 
 
@@ -43,17 +41,3 @@ def npys_loader(npy_file):
         return loader
 
     return _npys_loader
-
-
-@pytest.fixture
-def img_loader(tmp_path_factory):
-    def _img_loader(shape, directory):
-        dim = shape[0]
-        for i in range(dim):
-            data = np.random.rand(*shape[1:])
-            path = tmp_path_factory.mktemp(directory) / f"{i:06}.png"
-            plt.imsave(path, data)
-        loader = IMGLoader(path.parent)
-        return loader
-
-    return _img_loader

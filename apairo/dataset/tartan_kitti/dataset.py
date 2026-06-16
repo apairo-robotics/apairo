@@ -1,16 +1,14 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 import numpy as np
-
-if TYPE_CHECKING:
-    from apairo.core.sequence_view import SequenceView
 
 from apairo.loader import str_to_loader, loads_timestamps, load_profile
 from apairo.utils.files import get_files
 from apairo.utils.timestamps import get_end_of_time
-from apairo.dataset.kitti import KittiDataset
+from apairo.dataset.kitti import AsyncLayoutDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
+from apairo.core.root_sequence import RootSequenceMixin
 from apairo.core.config import read_config, config_exists
 
 _PROFILE_PATH = Path(__file__).parent / "profile.yaml"
@@ -21,8 +19,15 @@ def _is_sequence_dir(path: Path, raw_profile: dict) -> bool:
     return config_exists(path) or any((path / k).is_dir() for k in raw_profile)
 
 
-class TartanKittiDataset(KittiDataset, ConfigurableDataset):
-    r"""TartanDrive v2 dataset (KITTI layout).
+class TartanKittiDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
+    r"""TartanDrive v2 dataset (asynchronous layout, fixed channel profile).
+
+    A profiled member of the asynchronous layout family: the on-disk format is
+    handled by :class:`~apairo.dataset.kitti.AsyncLayoutDataset`, the
+    multi-sequence root behaviour by
+    :class:`~apairo.core.root_sequence.RootSequenceMixin`, and this class pins
+    the *fixed* TartanDrive channel set via ``profile.yaml``.  (Datasets with a
+    *dynamic* channel set use :class:`~apairo.dataset.raw.RawDataset` instead.)
 
     Accepts either a single sequence directory or a root directory that contains
     multiple sequences -- the structure is auto-detected.
@@ -64,7 +69,6 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
             self._is_root = False
             self._init_sequence(path, keys, raw_profile)
         else:
-            self._is_root = True
             self._init_root(path, keys, raw_profile)
 
     # ---------------------------------------------------------------- sequence
@@ -119,7 +123,6 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
     # ---------------------------------------------------------------- root
 
     def _init_root(self, root_dir: Path, keys, raw_profile: dict) -> None:
-        self._root_dir = root_dir
         seq_dirs = sorted(
             d
             for d in root_dir.iterdir()
@@ -132,154 +135,50 @@ class TartanKittiDataset(KittiDataset, ConfigurableDataset):
                 f"No TartanDrive sequences found in '{root_dir}'. "
                 f"Expected subdirectories that are valid sequence directories."
             )
-        self._sequences: list[TartanKittiDataset] = [
-            TartanKittiDataset(d, keys=keys) for d in seq_dirs
-        ]
-        if keys is not None:
-            self._build_flat_index()
+        super()._init_root(
+            root_dir,
+            seq_dirs,
+            lambda d: TartanKittiDataset(d, keys=keys),
+            build_index=keys is not None,
+        )
 
-    def _build_flat_index(self) -> None:
-        lengths = [len(s) for s in self._sequences]
-        self._cumulative_lengths = np.array([0, *np.cumsum(lengths)], dtype=np.intp)
+    # ---------------------------------------------------------------- hooks
 
-    # ---------------------------------------------------------------- public API
-
-    @property
-    def available(self) -> frozenset:
-        """Channels available -- intersection across all sequences for root datasets."""
-        if self._is_root:
-            if not self._sequences:
-                return frozenset()
-            common = frozenset(self._sequences[0]._available_channels)
-            for seq in self._sequences[1:]:
-                common &= frozenset(seq._available_channels)
-            return common
+    def _single_available(self) -> frozenset:
         return frozenset(self._available_channels)
 
-    @property
-    def sequences(self) -> list[TartanKittiDataset]:
-        """Per-sequence datasets (root-level datasets only)."""
-        if not self._is_root:
-            raise AttributeError(
-                "'sequences' is only available on root-level datasets."
+    def _set_single_keys(self, keys) -> None:
+        if keys == "all":
+            keys = sorted(self._available_channels.keys())
+        unknown = set(keys) - set(self._available_channels)
+        if unknown:
+            raise KeyError(
+                f"Keys {unknown} are not declared in .apairo. "
+                f"Register preprocessed channels with "
+                f"{type(self).__name__}.register_channel()."
             )
-        return self._sequences
-
-    @property
-    def sequence_ids(self) -> list[str]:
-        """Sequence directory names, in discovery order."""
-        if not self._is_root:
-            raise AttributeError(
-                "'sequence_ids' is only available on root-level datasets."
+        missing_dirs = [k for k in keys if not (self._sequence_dir / k).is_dir()]
+        if missing_dirs:
+            raise FileNotFoundError(
+                f"Channel directories missing on disk: {missing_dirs}"
             )
-        return [seq._sequence_dir.name for seq in self._sequences]
-
-    def sequence(self, seq_id: str) -> "SequenceView":
-        """Return a :class:`~apairo.core.sequence_view.SequenceView` for *seq_id*."""
-        if not self._is_root:
-            raise AttributeError(
-                "'sequence()' is only available on root-level datasets."
-            )
-        from apairo.core.sequence_view import SequenceView
-
-        for seq in self._sequences:
-            if seq._sequence_dir.name == seq_id:
-                return SequenceView(seq, range(len(seq)), seq_id)
-        raise KeyError(f"Sequence '{seq_id}' not found. Available: {self.sequence_ids}")
-
-    def synchronize(self, reference=None, method="latest", tolerance=None):
-        """Resample onto a single reference clock -- see :meth:`AbstractDataset.synchronize`.
-
-        On a root-level dataset each sequence is synchronized independently
-        (timestamps are not comparable across recordings) and the results are
-        concatenated along the frame axis.  For the same reason, an external
-        clock array is only valid on a single sequence.
-        """
-        if self._is_root:
-            if reference is not None and not isinstance(reference, str):
-                raise ValueError(
-                    "An external clock array cannot be applied to a root-level "
-                    "dataset: each sequence has its own time base. Synchronize "
-                    "sequences individually (ds.sequences[i].synchronize(...)) "
-                    "and concat the results."
-                )
-            from apairo.dataset.concat import ConcatDataset
-            return ConcatDataset([
-                seq.synchronize(reference=reference, method=method, tolerance=tolerance)
-                for seq in self._sequences
-            ])
-        return super().synchronize(reference=reference, method=method, tolerance=tolerance)
+        self._set_keys(list(keys))
+        self._init()
 
     # ---------------------------------------------------------------- preprocessing
-
-    @property
-    def root_dir(self) -> Path:
-        return self._root_dir if self._is_root else self._sequence_dir
 
     def derived_path(self, idx: int, key: str, ext: str) -> Path:
         return self._sequence_dir / key / f"{idx:06d}.{ext}"
 
-    # ---------------------------------------------------------------- keys
-
-    @property
-    def keys(self) -> List[str]:
-        if self._is_root:
-            return self._sequences[0].keys if self._sequences else []
-        return self._keys
-
-    @keys.setter
-    def keys(self, keys) -> None:
-        if self._is_root:
-            if keys == "all":
-                keys = sorted(self.available)
-            for seq in self._sequences:
-                seq.keys = list(keys)
-            self._build_flat_index()
-        else:
-            if keys == "all":
-                keys = sorted(self._available_channels.keys())
-            unknown = set(keys) - set(self._available_channels)
-            if unknown:
-                raise KeyError(
-                    f"Keys {unknown} are not declared in .apairo. "
-                    f"Register preprocessed channels with "
-                    f"{type(self).__name__}.register_channel()."
-                )
-            missing_dirs = [k for k in keys if not (self._sequence_dir / k).is_dir()]
-            if missing_dirs:
-                raise FileNotFoundError(
-                    f"Channel directories missing on disk: {missing_dirs}"
-                )
-            self._set_keys(list(keys))
-            self._init()
-
     # ---------------------------------------------------------------- dunder
 
     def __len__(self) -> int:
-        if self._is_root:
-            if not hasattr(self, "_cumulative_lengths"):
-                raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
-            return int(self._cumulative_lengths[-1])
-        if not self._keys:
+        if not self._is_root and not self._keys:
             raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
         return super().__len__()
 
     def _load(self, idx):
-        if isinstance(idx, tuple):
-            seq_id, local_idx = idx
-            view = self.sequence(seq_id)
-            return self._load(view._indices[local_idx])
-        if self._is_root:
-            if not hasattr(self, "_cumulative_lengths"):
-                raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
-            if not 0 <= idx < len(self):
-                raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-            seq_idx = int(
-                np.searchsorted(self._cumulative_lengths[1:], idx, side="right")
-            )
-            local_idx = idx - int(self._cumulative_lengths[seq_idx])
-            return self._sequences[seq_idx]._load(local_idx)
-        if not self._keys:
+        if not self._is_root and not isinstance(idx, tuple) and not self._keys:
             raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
         return super()._load(idx)
 
