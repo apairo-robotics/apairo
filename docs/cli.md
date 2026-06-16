@@ -88,6 +88,8 @@ It distinguishes **tracked** channels (declared in `.apairo`) from **untracked**
 ones (channel directories present on disk but not yet registered), and surfaces
 any consistency issues found by `verify_config`.
 
+### On a dataset root — summary
+
 ```bash
 apairo status /data/my_dataset
 ```
@@ -103,22 +105,55 @@ events      14
 issues      none
 ```
 
-`--json` emits the same information as a machine-readable object, suitable for
-scripts and CI:
+### On a single sequence — per-channel detail
+
+Point `status` at a sequence to get a per-channel table. Every column is cheap:
+`frames`, `rate` and `span` come from each channel's `timestamps.txt`, and
+`shape`/`dtype` are read from the `.npy` header via `mmap` (no data is loaded).
 
 ```bash
-apairo status /data/my_dataset --json
+apairo status /data/my_dataset/seq_a
+```
+
+```
+RawDataset — seq_a   (sequence)
+──────────────────────────────────────────────────────────────────────
+channel       kind        loader  frames  rate     span         shape
+imu           raw         npy     200     20.0 Hz  0.00–9.95s   (6) float64
+lidar         raw         npys    100     10.0 Hz  0.00–9.90s   (4, 3) float32
+trav_gt       preprocess  npys    100     10.0 Hz  0.00–9.90s   (1,) uint8   ← from lidar
+segmentation  untracked   npys     98      —          —         (2, 2) uint8 ← run `apairo add`
+events      400
+issues      none
+```
+
+(Rate and span are not comparable across recordings, so the root view stays a
+summary and the per-channel detail lives at the sequence level.)
+
+`--json` emits the same information as a machine-readable object, suitable for
+scripts and CI. On a root it carries the summary; on a sequence it carries the
+full per-channel detail:
+
+```bash
+apairo status /data/my_dataset/seq_a --json
 ```
 
 ```json
 {
-  "name": "my_dataset",
-  "kind": "root",
-  "sequences": ["seq_a", "seq_b"],
-  "raw": {"imu": "npy", "lidar": "npys"},
-  "preprocess": {"trav_gt": "npys"},
-  "untracked": ["seq_a/segmentation"],
-  "events": 14,
+  "name": "seq_a",
+  "kind": "sequence",
+  "channels": {
+    "lidar": {
+      "kind": "raw", "loader": "npys", "frames": 100,
+      "rate_hz": 10.0, "span": [0.0, 9.9], "shape": [4, 3], "dtype": "float32"
+    },
+    "imu": {
+      "kind": "raw", "loader": "npy", "frames": 200,
+      "rate_hz": 20.0, "span": [0.0, 9.95], "shape": [6], "dtype": "float64"
+    }
+  },
+  "untracked": {},
+  "events": 400,
   "issues": []
 }
 ```

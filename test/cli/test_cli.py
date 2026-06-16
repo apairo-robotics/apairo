@@ -109,3 +109,45 @@ def test_status_not_a_dataset(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     assert _run(["status", str(empty)]) == 1
+
+
+def test_status_sequence_per_channel_json(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    ch = json.loads(capsys.readouterr().out)["channels"]
+    assert ch["lidar"]["frames"] == 3
+    assert ch["lidar"]["loader"] == "npys"
+    assert ch["lidar"]["shape"] == [4, 3]          # per-frame shape (mmap header)
+    assert ch["lidar"]["dtype"].startswith("float")
+    assert ch["lidar"]["rate_hz"] == pytest.approx(2.0)   # (3-1)/(1-0)
+    assert ch["imu"]["frames"] == 5
+    assert ch["imu"]["loader"] == "npy"
+    assert ch["imu"]["shape"] == [6]               # stacked (5, 6) -> per-frame (6,)
+    assert ch["imu"]["rate_hz"] == pytest.approx(4.0)
+
+
+def test_status_sequence_table_text(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a")])
+    out = capsys.readouterr().out
+    assert "rate" in out and "shape" in out
+    assert "2.0 Hz" in out       # lidar rate
+    assert "(4, 3)" in out       # lidar shape
+
+
+def test_status_untracked_channel_detail(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    # drop a new channel on disk without registering it
+    seg = raw_root / "seq_a" / "segmentation"
+    seg.mkdir()
+    for i in range(3):
+        np.save(seg / f"{i:06d}.npy", np.zeros((2, 2), dtype="uint8"))
+    np.savetxt(seg / "timestamps.txt", np.linspace(0, 1, 3))
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert "segmentation" in data["untracked"]
+    assert data["untracked"]["segmentation"]["kind"] == "untracked"
+    assert data["untracked"]["segmentation"]["frames"] == 3

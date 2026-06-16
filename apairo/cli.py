@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 from apairo.core.config import config_exists, read_config, verify_config
 from apairo.dataset.kitti.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
@@ -33,12 +35,67 @@ _BAR = "─" * 52
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 
-def _count_frames(seq_dir: Path, channel: str) -> int:
-    ts = seq_dir / channel / "timestamps.txt"
-    if not ts.exists():
-        return 0
-    with open(ts) as f:
-        return sum(1 for line in f if line.strip())
+def _read_timestamps(channel_dir: Path):
+    ts_path = channel_dir / "timestamps.txt"
+    if not ts_path.exists():
+        return None
+    try:
+        return np.atleast_1d(np.loadtxt(ts_path))
+    except Exception:
+        return None
+
+
+def _rate_span(ts):
+    """Average rate (Hz) and (first, last) timestamps from a timestamp array."""
+    if ts is None or len(ts) == 0:
+        return None, None
+    t0, t1 = float(ts[0]), float(ts[-1])
+    rate = (len(ts) - 1) / (t1 - t0) if len(ts) >= 2 and t1 > t0 else None
+    return rate, (t0, t1)
+
+
+def _channel_shape(channel_dir: Path, loader: Optional[str]):
+    """Per-frame shape + dtype from a ``.npy`` header (mmap -- no data read)."""
+    npys = sorted(channel_dir.glob("*.npy"))
+    if not npys:
+        return None, None
+    try:
+        arr = np.load(npys[0], mmap_mode="r")
+    except Exception:
+        return None, None
+    # A stacked ``npy`` file is (N, *frame); a per-frame ``npys`` file is one frame.
+    shape = arr.shape[1:] if loader == "npy" else arr.shape
+    return list(shape), str(arr.dtype)
+
+
+def _count_files(channel_dir: Path) -> int:
+    return sum(
+        1 for p in channel_dir.iterdir() if p.is_file() and p.name != "timestamps.txt"
+    )
+
+
+def _channel_detail(seq_dir: Path, channel: str, meta: Optional[dict]) -> dict:
+    """Per-channel facts, all cheap: timestamps give frames/rate/span, the .npy
+    header gives shape/dtype (mmap). ``meta=None`` marks an untracked channel."""
+    cdir = seq_dir / channel
+    ts = _read_timestamps(cdir)
+    rate, span = _rate_span(ts)
+    loader = meta.get("loader") if meta else _detect_loader(cdir)
+    shape, dtype = _channel_shape(cdir, loader)
+    detail = {
+        "kind": meta.get("kind", "raw") if meta else "untracked",
+        "loader": loader,
+        "frames": len(ts) if ts is not None else _count_files(cdir),
+        "rate_hz": rate,
+        "span": list(span) if span else None,
+        "shape": shape,
+        "dtype": dtype,
+    }
+    if meta and meta.get("timestamps_from"):
+        detail["timestamps_from"] = meta["timestamps_from"]
+    if meta and meta.get("sources"):
+        detail["sources"] = list(meta["sources"])
+    return detail
 
 
 def _untracked_channels(seq_dir: Path) -> list[str]:
@@ -56,11 +113,12 @@ def _untracked_channels(seq_dir: Path) -> list[str]:
 
 def _seq_info(seq_dir: Path) -> dict:
     cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
+    channels = {k: _channel_detail(seq_dir, k, v) for k, v in sorted(cfg.items())}
+    untracked = {u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)}
     return {
-        "raw": {k: v.get("loader") for k, v in cfg.items() if v.get("kind", "raw") == "raw"},
-        "preprocess": {k: v.get("loader") for k, v in cfg.items() if v.get("kind") == "preprocess"},
-        "untracked": _untracked_channels(seq_dir),
-        "events": sum(_count_frames(seq_dir, ch) for ch in cfg),
+        "channels": channels,
+        "untracked": untracked,
+        "events": sum(c["frames"] for c in channels.values()),
         "issues": verify_config(seq_dir) if config_exists(seq_dir)
         else ["not initialized — run `apairo init`"],
     }
@@ -97,8 +155,8 @@ def _build_status(path: Path) -> Optional[dict]:
     issues: list[str] = []
     events = 0
     for name, info in per.items():
-        raw.update(info["raw"])
-        preprocess.update(info["preprocess"])
+        for ch, d in info["channels"].items():
+            (raw if d["kind"] == "raw" else preprocess)[ch] = d["loader"]
         untracked.update(f"{name}/{u}" for u in info["untracked"])
         issues += [f"{name}: {i}" for i in info["issues"]]
         events += info["events"]
@@ -115,19 +173,52 @@ def _build_status(path: Path) -> Optional[dict]:
     }
 
 
+def _fmt_shape(detail: dict) -> str:
+    if detail["shape"] is None:
+        return "?"
+    s = f"({', '.join(map(str, detail['shape']))})"
+    return f"{s} {detail['dtype']}" if detail.get("dtype") else s
+
+
+def _print_channel_table(channels: dict, untracked: dict) -> None:
+    headers = ["channel", "kind", "loader", "frames", "rate", "span", "shape", ""]
+    rows = []
+    for name, c in list(channels.items()) + list(untracked.items()):
+        rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "—"
+        span = f"{c['span'][0]:.2f}–{c['span'][1]:.2f}s" if c["span"] else "—"
+        if c["kind"] == "untracked":
+            note = "← run `apairo add`"
+        elif c.get("timestamps_from"):
+            note = f"← from {c['timestamps_from']}"
+        else:
+            note = ""
+        rows.append([
+            name, c["kind"], c["loader"] or "?", str(c["frames"]),
+            rate, span, _fmt_shape(c), note,
+        ])
+    widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
+    line = lambda cols: "  ".join(c.ljust(widths[i]) for i, c in enumerate(cols)).rstrip()
+    print(line(headers))
+    for r in rows:
+        print(line(r))
+
+
 def _print_status(s: dict) -> None:
     if s["kind"] == "root":
-        head = f"({s['kind']} · {len(s['sequences'])} sequences)"
-    else:
-        head = f"({s['kind']})"
-    print(f"RawDataset — {s['name']}   {head}")
-    print(_BAR)
-    if s["kind"] == "root":
+        print(f"RawDataset — {s['name']}   (root · {len(s['sequences'])} sequences)")
+        print(_BAR)
         print(f"sequences   {', '.join(s['sequences'])}")
-    print(f"raw         {_fmt_channels(s['raw'])}")
-    print(f"preprocess  {_fmt_channels(s['preprocess'])}")
-    if s["untracked"]:
-        print(f"untracked   {', '.join(s['untracked'])}   ← run `apairo add`")
+        print(f"raw         {_fmt_channels(s['raw'])}")
+        print(f"preprocess  {_fmt_channels(s['preprocess'])}")
+        if s["untracked"]:
+            print(f"untracked   {', '.join(s['untracked'])}   ← run `apairo add`")
+    else:
+        print(f"RawDataset — {s['name']}   (sequence)")
+        print(_BAR)
+        if s["channels"] or s["untracked"]:
+            _print_channel_table(s["channels"], s["untracked"])
+        else:
+            print("(no channels)")
     print(f"events      {s['events']}")
     print(f"issues      {'none' if not s['issues'] else ''}")
     for issue in s["issues"]:
