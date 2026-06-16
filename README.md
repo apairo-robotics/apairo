@@ -56,6 +56,25 @@ code change.
 
 ---
 
+## Command line
+
+Installing apairo provides the `apairo` command to inspect and initialize
+datasets from the terminal:
+
+```bash
+# Write/repair the .apairo sidecars by scanning a directory (root-aware, idempotent)
+apairo init /data/my_dataset
+
+# Show sequences, channels (tracked + untracked), event count and any issues
+apairo status /data/my_dataset           # add --json for machine output
+```
+
+`apairo init` reconstructs the `.apairo` files for data laid out before they
+existed (e.g. an older extraction) — no re-extraction needed — and the result
+loads directly with `RawDataset`. See [Command Line](https://apairo-robotics.github.io/apairo/cli/) for the full reference.
+
+---
+
 ## Pipeline
 
 apairo provides a composable set of operations that chain together — each returns a full dataset:

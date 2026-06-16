@@ -60,6 +60,7 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Quickstart: quickstart.md
+  - Command Line: cli.md
   - Concepts: concepts.md
   - Design & Philosophy: design.md
   - Datasets:
