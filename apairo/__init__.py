@@ -33,7 +33,7 @@ from apairo.loader import DERIVED_LOADERS
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Sample",
