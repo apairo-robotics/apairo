@@ -162,6 +162,24 @@ def test_status_span_is_relative_to_earliest(tmp_path, capsys):
     assert data["channels"]["a"]["span"] == [base, base + 2.0]
 
 
+def test_status_shows_channel_frame(raw_root, capsys):
+    from apairo.core.config import register_raw_channel
+
+    _run(["init", str(raw_root)])
+    register_raw_channel(raw_root / "seq_a", "lidar", "npys", frame="lidar_link")
+    capsys.readouterr()
+
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["channels"]["lidar"]["frame"] == "lidar_link"
+    assert data["channels"]["imu"]["frame"] is None  # not declared
+
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a")])
+    out = capsys.readouterr().out
+    assert "frame" in out and "lidar_link" in out  # column appears only when declared
+
+
 def test_status_untracked_channel_detail(raw_root, capsys):
     _run(["init", str(raw_root)])
     # drop a new channel on disk without registering it

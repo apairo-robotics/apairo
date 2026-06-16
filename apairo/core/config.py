@@ -44,6 +44,7 @@ def register_channel(
     *,
     timestamps_from: Optional[str] = None,
     sources: Optional[list[str]] = None,
+    frame: Optional[str] = None,
 ) -> None:
     """Register a preprocessed channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -61,6 +62,8 @@ def register_channel(
         timestamps_from: Source channel whose timestamps this channel shares
             (provenance only -- the channel always has its own ``timestamps.txt``).
         sources: Provenance -- raw channels this channel was derived from.
+        frame: Coordinate frame the channel's data is expressed in (descriptive
+            metadata only; apairo does not apply transforms).
     """
     root_dir = Path(root_dir)
     # Read existing config to preserve all other channels (raw + preprocessed).
@@ -76,6 +79,8 @@ def register_channel(
         entry["timestamps_from"] = timestamps_from
     if sources:
         entry["sources"] = list(sources)
+    if frame is not None:
+        entry["frame"] = frame
 
     config["channels"][key] = entry
     write_config(root_dir, config)
@@ -87,6 +92,7 @@ def register_raw_channel(
     loader: str,
     *,
     has_timestamps: Optional[bool] = None,
+    frame: Optional[str] = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -103,6 +109,8 @@ def register_raw_channel(
         loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, or ``"img"``.
         has_timestamps: Whether the channel directory contains a
             ``timestamps.txt``.  Auto-detected from disk when ``None``.
+        frame: Coordinate frame the channel's data is expressed in (descriptive
+            metadata only; apairo does not apply transforms).
     """
     root_dir = Path(root_dir)
     config = (
@@ -115,6 +123,8 @@ def register_raw_channel(
         has_timestamps = (root_dir / key / "timestamps.txt").exists()
 
     entry: dict = {"has_timestamps": has_timestamps, "kind": "raw", "loader": loader}
+    if frame is not None:
+        entry["frame"] = frame
     config["channels"][key] = entry
     write_config(root_dir, config)
 

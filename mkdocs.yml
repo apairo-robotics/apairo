@@ -68,6 +68,7 @@ nav:
     - YAML Profiles: datasets/yaml-profiles.md
     - Adding a Dataset: datasets/adding-a-dataset.md
   - Async Datasets: async-datasets.md
+  - Frames & Transforms: frames.md
   - Preprocessing: preprocessing.md
   - Transforms: transform.md
   - Filtering: filter.md

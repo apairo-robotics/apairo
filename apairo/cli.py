@@ -84,6 +84,7 @@ def _channel_detail(seq_dir: Path, channel: str, meta: Optional[dict]) -> dict:
     shape, dtype = _channel_shape(cdir, loader)
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
+        "frame": meta.get("frame") if meta else None,
         "loader": loader,
         "frames": len(ts) if ts is not None else _count_files(cdir),
         "rate_hz": rate,
@@ -183,10 +184,13 @@ def _fmt_shape(detail: dict) -> str:
 
 
 def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float]) -> None:
-    headers = ["channel", "kind", "loader", "frames", "rate", "span", "shape", ""]
     ref = t0_ref or 0.0
+    all_ch = list(channels.items()) + list(untracked.items())
+    show_frame = any(c.get("frame") for _, c in all_ch)  # only when declared
+    headers = ["channel", "kind"] + (["frame"] if show_frame else []) + \
+        ["loader", "frames", "rate", "span", "shape", ""]
     rows = []
-    for name, c in list(channels.items()) + list(untracked.items()):
+    for name, c in all_ch:
         rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "—"
         span = f"{c['span'][0] - ref:.2f}–{c['span'][1] - ref:.2f}s" if c["span"] else "—"
         if c["kind"] == "untracked":
@@ -195,10 +199,10 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
             note = f"← from {c['timestamps_from']}"
         else:
             note = ""
-        rows.append([
-            name, c["kind"], c["loader"] or "?", str(c["frames"]),
-            rate, span, _fmt_shape(c), note,
-        ])
+        row = [name, c["kind"]] + ([c.get("frame") or "—"] if show_frame else []) + [
+            c["loader"] or "?", str(c["frames"]), rate, span, _fmt_shape(c), note,
+        ]
+        rows.append(row)
     widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
     line = lambda cols: "  ".join(c.ljust(widths[i]) for i, c in enumerate(cols)).rstrip()
     print(line(headers))
