@@ -205,6 +205,34 @@ def test_status_shows_transform_edge(raw_root, capsys):
     assert "odom→base_link" in capsys.readouterr().out
 
 
+def test_calibration_roundtrip_and_status(raw_root, capsys):
+    from apairo.core.config import read_calibration, register_static_transform
+    from apairo.dataset.raw import RawDataset
+
+    _run(["init", str(raw_root)])
+    M = np.eye(4)
+    M[0, 3], M[2, 3] = 1.0, 0.5
+    register_static_transform(raw_root / "seq_a", "base_link", "lidar", M)
+
+    # read_calibration returns the 4x4
+    calib = read_calibration(raw_root / "seq_a")
+    np.testing.assert_allclose(calib["base_link_to_lidar"], M)
+
+    # RawDataset.calibration property (sequence + root merge)
+    assert "base_link_to_lidar" in RawDataset(raw_root / "seq_a").calibration
+    np.testing.assert_allclose(
+        RawDataset(raw_root).calibration["base_link_to_lidar"], M
+    )
+
+    # status surfaces it
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    assert json.loads(capsys.readouterr().out)["calibration"] == ["base_link_to_lidar"]
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a")])
+    assert "calibration" in capsys.readouterr().out
+
+
 def test_status_untracked_channel_detail(raw_root, capsys):
     _run(["init", str(raw_root)])
     # drop a new channel on disk without registering it

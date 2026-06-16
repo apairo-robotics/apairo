@@ -44,13 +44,20 @@ any channel declares one (and carries it in `--json`).
 
 ### Static transforms — extrinsics
 
-Fixed sensor mounting (e.g. `base_link → lidar`) is **calibration**. Datasets
+Fixed sensor mounting (e.g. `base_link → lidar`) is **calibration** — it does
+not vary with time, so it does *not* belong in a per-frame channel. Datasets
 expose it through the `calibration` property, keyed `"<from>_to_<to>"` with 4×4
 homogeneous matrices:
 
 ```python
 ds.calibration   # {"base_link_to_lidar": np.ndarray(4, 4), ...}
 ```
+
+On disk it is a single `.apairo/calibration.yaml` (one entry per edge), written
+with `register_static_transform(root, parent, child, matrix)`. `apairo-extractor`
+populates it from `/tf_static`: every static edge becomes one calibration entry
+rather than its own channel — so a tree with dozens of fixed mounts stays one
+small file, not dozens of directories.
 
 ### Dynamic transforms — pose channels
 
@@ -61,16 +68,21 @@ Such a channel declares the edge it provides in `.apairo/channels.yaml`:
 
 ```yaml
 channels:
-  odom__base_link:
+  tf__odom__base_link:
     loader: npy
     kind: raw
     has_timestamps: true
-    transform: {parent: odom, child: base_link, format: t_xyz_q_xyzw}
+    transform: {parent: odom, child: base_link, source: /tf, format: t_xyz_q_xyzw}
 ```
 
-`apairo-extractor` populates this automatically when it extracts a `/tf` topic
-(one channel per parent→child edge; `/tf_static` edges carry `static: true`).
-Set it manually with `register_raw_channel(..., transform={"parent": ..., "child": ...})`.
+`apairo-extractor` populates this automatically when it extracts a `/tf` topic:
+it demultiplexes the message into one pose channel per edge, named
+`<source>__<parent>__<child>`. Naming by source is deliberate — it is a faithful
+dump, so the *same* edge coming from different sources (e.g. two odometry
+stacks) is preserved as **distinct channels** you can compare, never merged or
+dropped. (Static transforms go to `calibration`, above — only time-varying
+edges become channels.) Set it manually with
+`register_raw_channel(..., transform={"parent": ..., "child": ...})`;
 `apairo status` shows the edge (`← tf odom→base_link`).
 
 **Looking it up** at an arbitrary time — composing the tree, interpolating with

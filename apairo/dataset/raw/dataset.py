@@ -42,7 +42,13 @@ from typing import List, Optional
 
 import yaml
 
-from apairo.core.config import CHANNELS_FILE, CONFIG_DIR, config_exists, read_config
+from apairo.core.config import (
+    CHANNELS_FILE,
+    CONFIG_DIR,
+    config_exists,
+    read_calibration,
+    read_config,
+)
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
 from apairo.dataset.kitti import AsyncLayoutDataset
@@ -244,6 +250,17 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     def name(self) -> str:
         """Dataset name (manifest ``name``, else the directory name)."""
         return self._name
+
+    @property
+    def calibration(self) -> dict:
+        """Static extrinsics from ``.apairo/calibration.yaml`` (e.g. written from
+        ``/tf_static``). On a root, sequences' tables are merged."""
+        if not self._is_root:
+            return read_calibration(self._sequence_dir)
+        merged: dict = {}
+        for seq in self._sequences:
+            merged.update(read_calibration(seq._sequence_dir))
+        return merged
 
     # ------------------------------------------------------------------ helpers
 

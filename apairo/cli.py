@@ -22,7 +22,7 @@ from typing import Optional
 
 import numpy as np
 
-from apairo.core.config import config_exists, read_config, verify_config
+from apairo.core.config import config_exists, read_calibration, read_config, verify_config
 from apairo.dataset.kitti.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.raw.dataset import _read_manifest
@@ -147,7 +147,11 @@ def _fmt_channels(d: dict) -> str:
 
 def _build_status(path: Path) -> Optional[dict]:
     if _is_sequence(path):
-        return {"name": path.name, "kind": "sequence", **_seq_info(path)}
+        return {
+            "name": path.name, "kind": "sequence",
+            "calibration": sorted(read_calibration(path)),
+            **_seq_info(path),
+        }
 
     seq_dirs = _sequence_dirs(path)
     if not seq_dirs:
@@ -157,6 +161,7 @@ def _build_status(path: Path) -> Optional[dict]:
     preprocess: dict = {}
     untracked: set[str] = set()
     issues: list[str] = []
+    calibration: set[str] = set()
     events = 0
     for name, info in per.items():
         for ch, d in info["channels"].items():
@@ -164,6 +169,8 @@ def _build_status(path: Path) -> Optional[dict]:
         untracked.update(f"{name}/{u}" for u in info["untracked"])
         issues += [f"{name}: {i}" for i in info["issues"]]
         events += info["events"]
+    for d in seq_dirs:
+        calibration.update(read_calibration(d))
     manifest = _read_manifest(path)
     return {
         "name": manifest.get("name", path.name),
@@ -172,6 +179,7 @@ def _build_status(path: Path) -> Optional[dict]:
         "raw": raw,
         "preprocess": preprocess,
         "untracked": sorted(untracked),
+        "calibration": sorted(calibration),
         "events": events,
         "issues": issues,
     }
@@ -234,6 +242,8 @@ def _print_status(s: dict) -> None:
             _print_channel_table(s["channels"], s["untracked"], s.get("start"))
         else:
             print("(no channels)")
+    if s.get("calibration"):
+        print(f"calibration {', '.join(s['calibration'])}   (static, in .apairo/calibration.yaml)")
     print(f"events      {s['events']}")
     print(f"issues      {'none' if not s['issues'] else ''}")
     for issue in s["issues"]:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional
+import numpy as np
 import yaml
 
 CONFIG_DIR = ".apairo"
 CHANNELS_FILE = "channels.yaml"
+CALIBRATION_FILE = "calibration.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
@@ -134,6 +136,56 @@ def register_raw_channel(
         entry["transform"] = transform
     config["channels"][key] = entry
     write_config(root_dir, config)
+
+
+def read_calibration(root_dir: str | Path) -> dict[str, np.ndarray]:
+    """Static extrinsics from ``root_dir/.apairo/calibration.yaml``.
+
+    Returns ``{"<parent>_to_<child>": 4x4 float64 ndarray}`` (empty if absent).
+    apairo only *exposes* these transforms; it never applies them.
+    """
+    path = Path(root_dir) / CONFIG_DIR / CALIBRATION_FILE
+    if not path.exists():
+        return {}
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    out: dict[str, np.ndarray] = {}
+    for key, entry in (data.get("transforms") or {}).items():
+        matrix = entry["matrix"] if isinstance(entry, dict) else entry
+        out[key] = np.asarray(matrix, dtype=np.float64)
+    return out
+
+
+def register_static_transform(
+    root_dir: str | Path, parent: str, child: str, matrix,
+) -> None:
+    """Record a static transform (extrinsic) in ``.apairo/calibration.yaml``.
+
+    A static transform is time-independent, so it belongs in calibration -- not
+    in a per-frame channel. Existing entries are preserved.
+
+    Args:
+        root_dir: Dataset root (or sequence) directory.
+        parent: Parent frame.
+        child: Child frame.
+        matrix: 4x4 homogeneous transform (array-like).
+    """
+    root_dir = Path(root_dir)
+    path = root_dir / CONFIG_DIR / CALIBRATION_FILE
+    data: dict = {}
+    if path.exists():
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    transforms = data.get("transforms") or {}
+    transforms[f"{parent}_to_{child}"] = {
+        "parent": parent,
+        "child": child,
+        "matrix": np.asarray(matrix, dtype=float).tolist(),
+    }
+    (root_dir / CONFIG_DIR).mkdir(exist_ok=True)
+    with open(path, "w") as f:
+        yaml.dump({"version": 1, "transforms": transforms}, f,
+                  default_flow_style=False, sort_keys=True)
 
 
 def verify_config(root_dir: str | Path) -> list[str]:
