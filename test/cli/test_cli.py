@@ -1,0 +1,111 @@
+"""Tests for the ``apairo`` CLI (init + status)."""
+import json
+
+import numpy as np
+import pytest
+
+from apairo.cli import main
+from apairo.core.config import config_exists, read_config
+
+
+def _make_seq(seq_dir, n_lidar):
+    """A sequence with a per-frame ``lidar`` (npys) and a buffered ``imu`` (npy)."""
+    (seq_dir / "lidar").mkdir(parents=True)
+    for i in range(n_lidar):
+        np.save(seq_dir / "lidar" / f"{i:06d}.npy", np.random.rand(4, 3))
+    np.savetxt(seq_dir / "lidar" / "timestamps.txt", np.linspace(0, 1, n_lidar))
+    (seq_dir / "imu").mkdir()
+    np.save(seq_dir / "imu" / "imu.npy", np.random.rand(n_lidar + 2, 6))
+    np.savetxt(seq_dir / "imu" / "timestamps.txt", np.linspace(0, 1, n_lidar + 2))
+
+
+@pytest.fixture
+def raw_root(tmp_path):
+    root = tmp_path / "my_root"
+    _make_seq(root / "seq_a", 3)  # 3 lidar + 5 imu = 8 events
+    _make_seq(root / "seq_b", 2)  # 2 lidar + 4 imu = 6 events
+    return root
+
+
+def _run(argv) -> int:
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    return exc.value.code
+
+
+# ── init ─────────────────────────────────────────────────────────────────────
+
+def test_init_root_writes_sidecars(raw_root):
+    assert _run(["init", str(raw_root), "--name", "ds"]) == 0
+    assert (raw_root / ".apairo" / "dataset.yaml").is_file()
+    for s in ("seq_a", "seq_b"):
+        assert config_exists(raw_root / s)
+        ch = read_config(raw_root / s)["channels"]
+        assert ch["lidar"]["loader"] == "npys"
+        assert ch["imu"]["loader"] == "npy"
+
+
+def test_init_single_sequence(tmp_path):
+    seq = tmp_path / "seq"
+    _make_seq(seq, 3)
+    assert _run(["init", str(seq)]) == 0
+    assert config_exists(seq)
+    assert not (seq / ".apairo" / "dataset.yaml").exists()  # sequence, not root
+
+
+def test_init_is_idempotent(raw_root):
+    assert _run(["init", str(raw_root)]) == 0
+    assert _run(["init", str(raw_root)]) == 0  # second run must not error
+
+
+def test_init_default_merge_picks_up_new_channel(raw_root):
+    _run(["init", str(raw_root)])
+    extra = raw_root / "seq_a" / "extra"
+    extra.mkdir()
+    np.save(extra / "extra.npy", np.random.rand(3, 2))
+    np.savetxt(extra / "timestamps.txt", np.linspace(0, 1, 3))
+    _run(["init", str(raw_root)])  # default = merge
+    assert "extra" in read_config(raw_root / "seq_a")["channels"]
+
+
+def test_init_not_a_directory(tmp_path):
+    assert _run(["init", str(tmp_path / "missing")]) == 2
+
+
+# ── status ───────────────────────────────────────────────────────────────────
+
+def test_status_before_init_lists_untracked(raw_root, capsys):
+    code = _run(["status", str(raw_root)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "untracked" in out
+    assert "seq_a/lidar" in out
+
+
+def test_status_after_init_json(raw_root, capsys):
+    _run(["init", str(raw_root), "--name", "ds"])
+    capsys.readouterr()  # discard init output
+    _run(["status", str(raw_root), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["name"] == "ds"
+    assert data["kind"] == "root"
+    assert data["sequences"] == ["seq_a", "seq_b"]
+    assert data["raw"] == {"lidar": "npys", "imu": "npy"}
+    assert data["events"] == 14  # (3+5) + (2+4)
+    assert data["untracked"] == []
+    assert data["issues"] == []
+
+
+def test_status_single_sequence_json(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["kind"] == "sequence"
+    assert data["events"] == 8
+
+
+def test_status_not_a_dataset(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _run(["status", str(empty)]) == 1

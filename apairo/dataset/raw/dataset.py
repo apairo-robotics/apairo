@@ -42,7 +42,7 @@ from typing import List, Optional
 
 import yaml
 
-from apairo.core.config import CONFIG_DIR, config_exists
+from apairo.core.config import CHANNELS_FILE, CONFIG_DIR, config_exists, read_config
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
 from apairo.dataset.kitti import AsyncLayoutDataset
@@ -109,6 +109,99 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
                 f"dataset root (no {CONFIG_DIR}/{_MANIFEST_FILE} and no sequence "
                 f"subdirectories). Initialize a sequence with RawDataset.init(<seq>)."
             )
+
+    # ------------------------------------------------------------------ init
+
+    @classmethod
+    def init(
+        cls,
+        directory: str | Path,
+        *,
+        merge: bool = False,
+        overwrite: bool = False,
+        name: Optional[str] = None,
+    ) -> Path:
+        """Write the ``.apairo`` sidecar(s) by scanning *directory*. Root-aware.
+
+        A **sequence** directory (its sub-directories hold data files) gets a
+        ``.apairo/channels.yaml`` with loaders inferred per channel. A **root**
+        directory (its sub-directories are sequences) gets each sequence
+        initialised, then a ``.apairo/dataset.yaml`` manifest (name + sequence
+        order + channel union).
+
+        Args:
+            directory: Sequence or dataset-root directory (auto-detected).
+            merge: Add newly detected channels without touching existing ones.
+            overwrite: Discard existing ``.apairo`` and rebuild from scratch.
+            name: Dataset name for the root manifest (default: directory name).
+
+        Returns:
+            Path of the file written -- ``channels.yaml`` for a sequence, or
+            ``dataset.yaml`` for a root.
+        """
+        path = Path(directory)
+
+        if cls._is_sequence_layout(path):
+            AsyncLayoutDataset.init(path, overwrite=overwrite, merge=merge)
+            return path / CONFIG_DIR / CHANNELS_FILE
+
+        seq_dirs: list[Path] = []
+        for d in sorted(path.iterdir()):
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            if cls._is_sequence_layout(d):
+                try:
+                    AsyncLayoutDataset.init(d, overwrite=overwrite, merge=merge)
+                except (FileExistsError, ValueError):
+                    # Already initialised (no overwrite/merge), or merge found
+                    # nothing new -- either way the sequence is ready. Idempotent.
+                    pass
+                seq_dirs.append(d)
+            elif config_exists(d):
+                seq_dirs.append(d)
+
+        if not seq_dirs:
+            raise FileNotFoundError(
+                f"'{path}' has no channels and no sequence sub-directories to "
+                f"initialise. Point init at a sequence or a dataset root."
+            )
+        return cls._write_manifest(path, name=name)
+
+    @staticmethod
+    def _is_sequence_layout(path: Path) -> bool:
+        """True when *path*'s own sub-directories include a recognizable channel."""
+        return any(
+            _detect_loader(d) is not None
+            for d in path.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        )
+
+    @classmethod
+    def _write_manifest(cls, root: str | Path, *, name: Optional[str] = None) -> Path:
+        """(Re)write ``<root>/.apairo/dataset.yaml`` from the sequences on disk."""
+        root = Path(root)
+        sequences = sorted(
+            d.name
+            for d in root.iterdir()
+            if d.is_dir() and not d.name.startswith(".") and config_exists(d)
+        )
+        channels: dict = {}
+        for seq in sequences:
+            for key, meta in read_config(root / seq).get("channels", {}).items():
+                channels.setdefault(key, {"kind": meta.get("kind", "raw")})
+
+        manifest = {
+            "version": 1,
+            "name": name or root.name,
+            "sequences": sequences,
+            "channels": channels,
+        }
+        apairo_dir = root / CONFIG_DIR
+        apairo_dir.mkdir(exist_ok=True)
+        path = apairo_dir / _MANIFEST_FILE
+        with open(path, "w") as f:
+            yaml.dump(manifest, f, default_flow_style=False, sort_keys=True)
+        return path
 
     # ------------------------------------------------------------------ root
 

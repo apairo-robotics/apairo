@@ -28,6 +28,9 @@ dependencies = [
     "PyYAML",
 ]
 
+[project.scripts]
+apairo = "apairo.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/apairo-robotics/apairo"
 Repository = "https://github.com/apairo-robotics/apairo"
