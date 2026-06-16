@@ -35,8 +35,9 @@ transparently. Nothing else writes to disk.
   Asynchronous data: one event, one channel, `timestamp` set.
 - **Synchronous datasets** (`ProfiledDataset` + YAML profiles) — index =
   frame. Random access, `DataLoader`-ready.
-- **Asynchronous datasets** (`KittiDataset` layouts) — index = position
-  in the merged, timestamp-ordered event timeline.
+- **Asynchronous datasets** (`AsyncLayoutDataset` layouts; `RawDataset`,
+  `TartanKittiDataset`) — index = position in the merged, timestamp-ordered
+  event timeline.
 - **`synchronize()`** bridges the two: it resamples an asynchronous
   dataset onto a reference clock (a channel, a fixed rate, or distance
   ticks) and returns a view that *is* synchronous — so the entire

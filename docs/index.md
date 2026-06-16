@@ -37,8 +37,9 @@ sample = ds[0]
 | `Rellis3DDataset` | synchronous | lidar, labels |
 | `Goose3DDataset` | synchronous | lidar, labels |
 | `TartanDataset` | synchronous | any (`.pt` format) |
+| `RawDataset` | asynchronous | any channels (from `.apairo/channels.yaml`) |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
-| `KittiDataset` | asynchronous | any KITTI-layout channel |
+| `AsyncLayoutDataset` | asynchronous | layout base class (alias: `KittiDataset`) |
 
 ---
 

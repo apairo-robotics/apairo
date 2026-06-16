@@ -75,6 +75,80 @@ Preprocessed channels
 
 ---
 
+## RawDataset
+
+`RawDataset` is the **profile-free** member of the family. Where
+`TartanKittiDataset` pins a fixed channel set (the TartanDrive profile),
+`RawDataset` takes its channels — and each channel's storage format — entirely
+from `.apairo/channels.yaml`. There is no code to write per dataset: whatever
+the sidecar declares is what loads. This makes it the loader for
+[apairo_extractor](https://github.com/apairo-robotics/apairo_extractor) output,
+which writes that sidecar at extraction time.
+
+```python
+from apairo import RawDataset
+
+# A single sequence (has .apairo/channels.yaml)
+ds = RawDataset("/data/my_dataset/seq_a", keys=["lidar", "imu"])
+
+# A whole dataset root (has .apairo/dataset.yaml, or sequence subdirectories)
+ds = RawDataset("/data/my_dataset")
+print(ds.name)            # from the manifest, else the directory name
+print(ds.sequence_ids)    # ["seq_a", "seq_b", ...]
+print(len(ds.sequences))  # per-sequence RawDataset instances
+print(len(ds))            # flat event count across all sequences
+```
+
+The single-sequence vs. root distinction is auto-detected, exactly like
+`TartanKittiDataset`. `keys=None` loads every channel declared in the sidecar.
+
+### Format-agnostic
+
+The on-disk layout (one directory per channel, each with its own
+`timestamps.txt`) is fixed; the *format* of each channel is not. The loader named
+in `channels.yaml` decides — `npy`, `npys`, `bin`, `img`, or `zarr` — and they
+can be mixed freely within one dataset:
+
+```yaml
+# seq_a/.apairo/channels.yaml
+version: 1
+channels:
+  lidar: { loader: npys, kind: raw, has_timestamps: true }   # one .npy per frame
+  imu:   { loader: npy,  kind: raw, has_timestamps: true }   # one stacked .npy
+  gps:   { loader: zarr, kind: raw, has_timestamps: true }   # a zarr store
+```
+
+A `zarr` channel directory *is* the zarr array store, with `timestamps.txt`
+placed beside the chunks.
+
+### Dataset root manifest
+
+A root may carry an optional `.apairo/dataset.yaml` recording the dataset name
+and the sequence order. When absent, sequences are discovered and sorted by name.
+
+```yaml
+# <root>/.apairo/dataset.yaml
+version: 1
+name: my_dataset
+sequences: [seq_a, seq_b, seq_c]   # load order
+```
+
+### Initializing an existing directory
+
+For a directory that does not yet have a sidecar, `RawDataset.init` scans it and
+writes one (loaders inferred from file extensions / a detected zarr store):
+
+```python
+RawDataset.init("/data/my_dataset/seq_a")   # writes .apairo/channels.yaml
+ds = RawDataset("/data/my_dataset/seq_a")
+```
+
+`RawDataset` is asynchronous, so the [`synchronize()`](#synchronizing-async-sync)
+section below applies unchanged; on a root, each sequence is synchronized on its
+own clock and the results concatenated.
+
+---
+
 ## Auto-discovery and .apairo
 
 On the first load of a new sequence, `TartanKittiDataset` scans the directory for known channel subdirectories and writes a `.apairo` sidecar:
@@ -280,14 +354,33 @@ loader = DataLoader(ds_train, batch_size=8, shuffle=True, num_workers=4,
 
 ---
 
-## KittiDataset
+## AsyncLayoutDataset (the base class)
 
-`KittiDataset` is the base class for any KITTI-layout dataset -- one subdirectory per channel, each with a `timestamps.txt` and data files in a format declared by a loader profile YAML.
+`AsyncLayoutDataset` is the abstract base of the asynchronous family — the
+on-disk *layout* primitive: one subdirectory per channel, each with a
+`timestamps.txt` and data files in a format known to the loader registry
+(`npys`, `npy`, `bin`, `img`, `zarr`). It describes *how* channels are stored,
+never *which* channels exist; the channel set is per-instance state, read from
+`.apairo/channels.yaml` or an explicit profile.
+
+!!! note "Renamed from `KittiDataset`"
+    This class was historically called `KittiDataset` — a misleading name, since
+    no real KITTI dataset uses it (SemanticKITTI is a synchronous
+    `ProfiledDataset`). `KittiDataset` is kept as a backward-compatible alias:
+    `apairo.KittiDataset is apairo.AsyncLayoutDataset`.
+
+You rarely use it directly. Pick the member that matches your channel set:
+
+- **Dynamic channels** (whatever a recording happens to contain, e.g.
+  `apairo-extractor` output) → [`RawDataset`](#rawdataset), which reads the
+  channel set from `.apairo` with no profile.
+- **Fixed channels** (a known dataset family) → subclass it with a profile, as
+  `TartanKittiDataset` does.
 
 ```python
-from apairo import KittiDataset
+from apairo import AsyncLayoutDataset   # KittiDataset is an alias
 
-ds = KittiDataset(
+ds = AsyncLayoutDataset(
     directory="/data/my_recording",
     keys=["lidar", "imu"],
     dataset_profile="/path/to/my_profile.yaml",
@@ -301,21 +394,24 @@ ds = KittiDataset(
 lidar: npys
 imu: npy
 camera: img
+gps: zarr
 ```
 
-**Extending KittiDataset:**
+**Extending it for a fixed-channel dataset:**
 
-To create a reusable class for your dataset, subclass `KittiDataset` and `ConfigurableDataset`, and hardcode the profile path:
+Subclass `AsyncLayoutDataset` and `ConfigurableDataset` and hardcode the profile
+path (for multi-sequence root support, also mix in
+`apairo.core.root_sequence.RootSequenceMixin`, as `TartanKittiDataset` does):
 
 ```python
 from pathlib import Path
-from apairo.dataset.kitti import KittiDataset
+from apairo.dataset.kitti import AsyncLayoutDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
 
 _PROFILE = Path(__file__).parent / "my_profile.yaml"
 
 
-class MyDataset(KittiDataset, ConfigurableDataset):
+class MyDataset(AsyncLayoutDataset, ConfigurableDataset):
     def __init__(self, directory, keys=None):
         super().__init__(directory=directory, keys=keys or [], dataset_profile=_PROFILE)
 
@@ -328,6 +424,8 @@ class MyDataset(KittiDataset, ConfigurableDataset):
             },
         }
 ```
+
+If your channels are not fixed, prefer `RawDataset` — no subclass needed.
 
 ---
 

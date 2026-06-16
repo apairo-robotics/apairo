@@ -7,8 +7,9 @@
 | `SemanticKittiDataset` | synchronous | `lidar`, `labels` | Labels masked to lower 16 bits (strips instance IDs) |
 | `Rellis3DDataset` | synchronous | `lidar`, `labels` | Fixed `Rellis-3D/` prefix in directory tree |
 | `Goose3DDataset` | synchronous | `lidar`, `labels` | Split directory appears at two levels |
-| `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel | Auto-discovers channels via `.apairo` |
-| `KittiDataset` | asynchronous | any KITTI-layout channel | Base class for custom KITTI-format datasets |
+| `RawDataset` | asynchronous | any channel | Profile-free; channels & loaders from `.apairo/channels.yaml`. Loads `apairo-extractor` output |
+| `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel | Fixed channel profile; auto-discovers channels via `.apairo` |
+| `AsyncLayoutDataset` | asynchronous | any channel | Abstract per-channel layout base (alias: `KittiDataset`); `RawDataset`/`TartanKittiDataset` build on it |
 
 ---
 

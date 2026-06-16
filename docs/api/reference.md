@@ -34,15 +34,24 @@
 
 ## Asynchronous datasets
 
+### RawDataset
+
+::: apairo.dataset.raw.RawDataset
+
+---
+
 ### TartanKittiDataset
 
 ::: apairo.dataset.tartan_kitti.TartanKittiDataset
 
 ---
 
-### KittiDataset
+### AsyncLayoutDataset
 
-::: apairo.dataset.kitti.KittiDataset
+Abstract per-channel layout base for the asynchronous family.
+`KittiDataset` is a backward-compatible alias for this class.
+
+::: apairo.dataset.kitti.AsyncLayoutDataset
 
 ---
 
@@ -83,6 +92,16 @@
 ### ConfigurableDataset
 
 ::: apairo.core.configurable_dataset.ConfigurableDataset
+
+---
+
+### RootSequenceMixin
+
+Shared single-sequence vs. dataset-root handling for the asynchronous family
+(flat indexing, per-sequence access, per-sequence `synchronize` + concat).
+Reused by `RawDataset` and `TartanKittiDataset`.
+
+::: apairo.core.root_sequence.RootSequenceMixin
 
 ---
 

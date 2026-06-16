@@ -44,8 +44,15 @@ sample = ds[0]
 | `Rellis3DDataset` | synchronous | lidar, labels, poses |
 | `Goose3DDataset` | synchronous | lidar, labels |
 | `MNTDataset` | synchronous | lidar, labels, poses |
+| `RawDataset` | asynchronous | any channels — declared in `.apairo/channels.yaml` |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
-| `KittiDataset` | asynchronous | any KITTI-layout channel |
+| `AsyncLayoutDataset` | asynchronous | per-channel layout base class (alias: `KittiDataset`) |
+
+`RawDataset` is the profile-free loader for the asynchronous layout: it takes its
+channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`) — entirely from
+`.apairo/channels.yaml`, so it loads any such dataset, including the output of
+[apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), with no
+code change.
 
 ---
 
