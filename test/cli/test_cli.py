@@ -137,6 +137,31 @@ def test_status_sequence_table_text(raw_root, capsys):
     assert "(4, 3)" in out       # lidar shape
 
 
+def test_status_span_is_relative_to_earliest(tmp_path, capsys):
+    seq = tmp_path / "seq"
+    base = 1_779_893_201.0  # epoch-style absolute timestamps
+    (seq / "a").mkdir(parents=True)
+    np.save(seq / "a" / "a.npy", np.zeros((3, 2)))
+    np.savetxt(seq / "a" / "timestamps.txt", base + np.array([0.0, 1.0, 2.0]))
+    (seq / "b").mkdir()
+    np.save(seq / "b" / "b.npy", np.zeros((3, 2)))
+    np.savetxt(seq / "b" / "timestamps.txt", base + np.array([0.5, 1.5, 2.5]))
+    _run(["init", str(seq)])
+    capsys.readouterr()
+
+    _run(["status", str(seq)])
+    out = capsys.readouterr().out
+    assert f"start       {base:.2f}s" in out   # absolute reference shown once
+    assert "0.00–2.00s" in out                 # channel a, relative
+    assert "0.50–2.50s" in out                 # channel b, relative offset preserved
+
+    _run(["status", str(seq), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["start"] == base
+    # JSON keeps absolute spans (ground truth) -- relative is for display only.
+    assert data["channels"]["a"]["span"] == [base, base + 2.0]
+
+
 def test_status_untracked_channel_detail(raw_root, capsys):
     _run(["init", str(raw_root)])
     # drop a new channel on disk without registering it

@@ -111,6 +111,10 @@ Point `status` at a sequence to get a per-channel table. Every column is cheap:
 `frames`, `rate` and `span` come from each channel's `timestamps.txt`, and
 `shape`/`dtype` are read from the `.npy` header via `mmap` (no data is loaded).
 
+`span` is shown **relative to the earliest timestamp** of the sequence (printed
+once on the `start` line), so absolute epoch timestamps stay readable and
+per-channel start offsets are easy to compare.
+
 ```bash
 apairo status /data/my_dataset/seq_a
 ```
@@ -118,10 +122,11 @@ apairo status /data/my_dataset/seq_a
 ```
 RawDataset — seq_a   (sequence)
 ──────────────────────────────────────────────────────────────────────
+start       1779893201.02s   (span shown relative to this)
 channel       kind        loader  frames  rate     span         shape
 imu           raw         npy     200     20.0 Hz  0.00–9.95s   (6) float64
-lidar         raw         npys    100     10.0 Hz  0.00–9.90s   (4, 3) float32
-trav_gt       preprocess  npys    100     10.0 Hz  0.00–9.90s   (1,) uint8   ← from lidar
+lidar         raw         npys    100     10.0 Hz  0.03–9.93s   (4, 3) float32
+trav_gt       preprocess  npys    100     10.0 Hz  0.03–9.93s   (1,) uint8   ← from lidar
 segmentation  untracked   npys     98      —          —         (2, 2) uint8 ← run `apairo add`
 events      400
 issues      none
@@ -138,18 +143,24 @@ full per-channel detail:
 apairo status /data/my_dataset/seq_a --json
 ```
 
+JSON carries the **absolute** spans (ground truth) plus the `start` reference, so
+consumers can reconstruct the relative view shown in the table:
+
 ```json
 {
   "name": "seq_a",
   "kind": "sequence",
+  "start": 1779893201.02,
   "channels": {
     "lidar": {
       "kind": "raw", "loader": "npys", "frames": 100,
-      "rate_hz": 10.0, "span": [0.0, 9.9], "shape": [4, 3], "dtype": "float32"
+      "rate_hz": 10.0, "span": [1779893201.05, 1779893210.95],
+      "shape": [4, 3], "dtype": "float32"
     },
     "imu": {
       "kind": "raw", "loader": "npy", "frames": 200,
-      "rate_hz": 20.0, "span": [0.0, 9.95], "shape": [6], "dtype": "float64"
+      "rate_hz": 20.0, "span": [1779893201.02, 1779893210.97],
+      "shape": [6], "dtype": "float64"
     }
   },
   "untracked": {},

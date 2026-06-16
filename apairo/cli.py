@@ -115,9 +115,11 @@ def _seq_info(seq_dir: Path) -> dict:
     cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
     channels = {k: _channel_detail(seq_dir, k, v) for k, v in sorted(cfg.items())}
     untracked = {u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)}
+    starts = [c["span"][0] for c in {**channels, **untracked}.values() if c["span"]]
     return {
         "channels": channels,
         "untracked": untracked,
+        "start": min(starts) if starts else None,
         "events": sum(c["frames"] for c in channels.values()),
         "issues": verify_config(seq_dir) if config_exists(seq_dir)
         else ["not initialized — run `apairo init`"],
@@ -180,12 +182,13 @@ def _fmt_shape(detail: dict) -> str:
     return f"{s} {detail['dtype']}" if detail.get("dtype") else s
 
 
-def _print_channel_table(channels: dict, untracked: dict) -> None:
+def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float]) -> None:
     headers = ["channel", "kind", "loader", "frames", "rate", "span", "shape", ""]
+    ref = t0_ref or 0.0
     rows = []
     for name, c in list(channels.items()) + list(untracked.items()):
         rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "—"
-        span = f"{c['span'][0]:.2f}–{c['span'][1]:.2f}s" if c["span"] else "—"
+        span = f"{c['span'][0] - ref:.2f}–{c['span'][1] - ref:.2f}s" if c["span"] else "—"
         if c["kind"] == "untracked":
             note = "← run `apairo add`"
         elif c.get("timestamps_from"):
@@ -215,8 +218,10 @@ def _print_status(s: dict) -> None:
     else:
         print(f"RawDataset — {s['name']}   (sequence)")
         print(_BAR)
+        if s.get("start") is not None:
+            print(f"start       {s['start']:.2f}s   (span shown relative to this)")
         if s["channels"] or s["untracked"]:
-            _print_channel_table(s["channels"], s["untracked"])
+            _print_channel_table(s["channels"], s["untracked"], s.get("start"))
         else:
             print("(no channels)")
     print(f"events      {s['events']}")
