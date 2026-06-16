@@ -85,6 +85,7 @@ def _channel_detail(seq_dir: Path, channel: str, meta: Optional[dict]) -> dict:
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,
+        "transform": meta.get("transform") if meta else None,
         "loader": loader,
         "frames": len(ts) if ts is not None else _count_files(cdir),
         "rate_hz": rate,
@@ -195,6 +196,11 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         span = f"{c['span'][0] - ref:.2f}–{c['span'][1] - ref:.2f}s" if c["span"] else "—"
         if c["kind"] == "untracked":
             note = "← run `apairo add`"
+        elif c.get("transform"):
+            tf = c["transform"]
+            note = f"← tf {tf.get('parent')}→{tf.get('child')}"
+            if tf.get("static"):
+                note += " (static)"
         elif c.get("timestamps_from"):
             note = f"← from {c['timestamps_from']}"
         else:

@@ -93,6 +93,7 @@ def register_raw_channel(
     *,
     has_timestamps: Optional[bool] = None,
     frame: Optional[str] = None,
+    transform: Optional[dict] = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -111,6 +112,10 @@ def register_raw_channel(
             ``timestamps.txt``.  Auto-detected from disk when ``None``.
         frame: Coordinate frame the channel's data is expressed in (descriptive
             metadata only; apairo does not apply transforms).
+        transform: For a channel that *is* a coordinate transform (a pose
+            stream), the edge it provides, e.g.
+            ``{"parent": "odom", "child": "base_link"}`` (optionally
+            ``"static": True``, ``"format": "t_xyz_q_xyzw"``). Descriptive only.
     """
     root_dir = Path(root_dir)
     config = (
@@ -125,6 +130,8 @@ def register_raw_channel(
     entry: dict = {"has_timestamps": has_timestamps, "kind": "raw", "loader": loader}
     if frame is not None:
         entry["frame"] = frame
+    if transform is not None:
+        entry["transform"] = transform
     config["channels"][key] = entry
     write_config(root_dir, config)
 

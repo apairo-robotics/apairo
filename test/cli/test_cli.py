@@ -180,6 +180,31 @@ def test_status_shows_channel_frame(raw_root, capsys):
     assert "frame" in out and "lidar_link" in out  # column appears only when declared
 
 
+def test_status_shows_transform_edge(raw_root, capsys):
+    from apairo.core.config import register_raw_channel
+
+    _run(["init", str(raw_root)])
+    edge = raw_root / "seq_a" / "odom__base_link"
+    edge.mkdir()
+    np.save(edge / "odom__base_link.npy", np.zeros((4, 7)))
+    np.savetxt(edge / "timestamps.txt", np.linspace(0, 1, 4))
+    register_raw_channel(
+        raw_root / "seq_a", "odom__base_link", "npy",
+        transform={"parent": "odom", "child": "base_link"},
+    )
+    capsys.readouterr()
+
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["channels"]["odom__base_link"]["transform"] == {
+        "parent": "odom", "child": "base_link",
+    }
+
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a")])
+    assert "odom→base_link" in capsys.readouterr().out
+
+
 def test_status_untracked_channel_detail(raw_root, capsys):
     _run(["init", str(raw_root)])
     # drop a new channel on disk without registering it
