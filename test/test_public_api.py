@@ -5,7 +5,7 @@ def test_public_names():
     expected = [
         "Sample",
         "SynchronousDataset",
-        "KittiDataset",
+        "RawDataset",
         "ConcatDataset",
         "split_sequences",
         "SemanticKittiDataset",

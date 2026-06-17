@@ -1,3 +1,3 @@
-from .dataset import AsyncLayoutDataset, KittiDataset
+from .dataset import AsyncLayoutDataset
 
-__all__ = ["AsyncLayoutDataset", "KittiDataset"]
+__all__ = ["AsyncLayoutDataset"]

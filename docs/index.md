@@ -39,7 +39,6 @@ sample = ds[0]
 | `TartanDataset` | synchronous | any (`.pt` format) |
 | `RawDataset` | asynchronous | any channels (from `.apairo/channels.yaml`) |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
-| `AsyncLayoutDataset` | asynchronous | layout base class (alias: `KittiDataset`) |
 
 ---
 

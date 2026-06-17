@@ -46,7 +46,6 @@ sample = ds[0]
 | `MNTDataset` | synchronous | lidar, labels, poses |
 | `RawDataset` | asynchronous | any channels — declared in `.apairo/channels.yaml` |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
-| `AsyncLayoutDataset` | asynchronous | per-channel layout base class (alias: `KittiDataset`) |
 
 `RawDataset` is the profile-free loader for the asynchronous layout: it takes its
 channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`) — entirely from

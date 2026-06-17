@@ -9,7 +9,6 @@
 | `Goose3DDataset` | synchronous | `lidar`, `labels` | Split directory appears at two levels |
 | `RawDataset` | asynchronous | any channel | Profile-free; channels & loaders from `.apairo/channels.yaml`. Loads `apairo-extractor` output |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel | Fixed channel profile; auto-discovers channels via `.apairo` |
-| `AsyncLayoutDataset` | asynchronous | any channel | Abstract per-channel layout base (alias: `KittiDataset`); `RawDataset`/`TartanKittiDataset` build on it |
 
 ---
 

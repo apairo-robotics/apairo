@@ -7,12 +7,19 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+- **`KittiDataset` alias** — removed (it was a transitional alias for
+  `AsyncLayoutDataset` introduced in 0.2.0). `AsyncLayoutDataset` is also no
+  longer a top-level `apairo` export: it is now an internal base class, reached
+  only by subclassing (`from apairo.dataset.kitti import AsyncLayoutDataset`).
+  The public asynchronous loaders are `RawDataset` and `TartanKittiDataset`.
+
 ### Toward 1.0
 
 1.0 is the commitment to a stable public API and `.apairo` format. Remaining:
 
-- [ ] **Freeze the public API** — settle the `KittiDataset` alias (keep, or
-  deprecate → remove); no pending renames.
+- [x] **Freeze the public API** — `KittiDataset` alias removed and
+  `AsyncLayoutDataset` demoted to an internal base class; no pending renames.
 - [ ] **Freeze & document the `.apairo` schema** (`channels.yaml`,
   `dataset.yaml`, `calibration.yaml`) as a stable `version: 1` contract.
 - [ ] **Settle the CLI** — ship or explicitly defer `apairo add` / `apairo check`;

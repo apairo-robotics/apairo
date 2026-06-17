@@ -7,7 +7,6 @@ from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.preprocess import FramePreprocessor, SequencePreprocessor
 
-from apairo.dataset.kitti import AsyncLayoutDataset, KittiDataset
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.tartan_kitti import TartanKittiDataset
 from apairo.dataset.concat import ConcatDataset
@@ -41,8 +40,6 @@ __all__ = [
     "ConfigurableDataset",
     "FramePreprocessor",
     "SequencePreprocessor",
-    "AsyncLayoutDataset",
-    "KittiDataset",
     "RawDataset",
     "TartanKittiDataset",
     "ConcatDataset",

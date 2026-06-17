@@ -4,7 +4,7 @@ import pytest
 import os
 import numpy as np
 from pathlib import Path
-from apairo.dataset.kitti import KittiDataset as TartanKittiDataset
+from apairo.dataset.kitti import AsyncLayoutDataset as TartanKittiDataset
 from apairo.loader import NPYLoader
 from apairo.core.sample import Sample
 

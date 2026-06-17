@@ -50,8 +50,7 @@ class AsyncLayoutDataset(AbstractDataset):
     This is the format primitive of the asynchronous dataset family -- it is
     **not** the KITTI dataset (no real KITTI dataset uses it; see
     :class:`~apairo.dataset.semantic_kitti.SemanticKittiDataset`, which is a
-    synchronous :class:`~apairo.core.profiled_dataset.ProfiledDataset`). The
-    name ``KittiDataset`` is kept as a backward-compatible alias.
+    synchronous :class:`~apairo.core.profiled_dataset.ProfiledDataset`).
 
     It describes *how* channels are stored, never *which* channels exist: each
     channel is a subdirectory with its own ``timestamps.txt`` and data files in
@@ -66,13 +65,13 @@ class AsyncLayoutDataset(AbstractDataset):
 
     **Usage with an explicit profile (original API)**::
 
-        ds = KittiDataset(seq_dir, keys=["lidar", "cam"], dataset_profile="my.yaml")
+        ds = AsyncLayoutDataset(seq_dir, keys=["lidar", "cam"], dataset_profile="my.yaml")
 
     **Usage with** ``.apairo`` **(after** :meth:`init` **has been called)**::
 
-        KittiDataset.init(seq_dir)          # once, auto-detects channels
-        ds = KittiDataset(seq_dir)          # keys and loaders come from .apairo
-        ds = KittiDataset(seq_dir, keys=["lidar"])  # restrict to a subset
+        AsyncLayoutDataset.init(seq_dir)          # once, auto-detects channels
+        ds = AsyncLayoutDataset(seq_dir)          # keys and loaders come from .apairo
+        ds = AsyncLayoutDataset(seq_dir, keys=["lidar"])  # restrict to a subset
 
     Args:
         directory: Path to the dataset root / sequence directory.
@@ -280,8 +279,4 @@ class AsyncLayoutDataset(AbstractDataset):
             data={key: self.loaders[key][frame]},
             timestamp=float(self.timestamps[key][frame]),
         )
-
-
-# Backward-compatible alias: this class was historically named ``KittiDataset``.
-KittiDataset = AsyncLayoutDataset
 

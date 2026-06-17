@@ -3,8 +3,9 @@
 import numpy as np
 import pytest
 
-from apairo import Interpolator, KittiDataset, SynchronizedView
+from apairo import Interpolator, SynchronizedView
 from apairo.core import AbstractDataset, FilteredView, Sample
+from apairo.dataset.kitti import AsyncLayoutDataset
 
 
 class LerpInterp(Interpolator):
@@ -23,7 +24,7 @@ class NeverCalled(Interpolator):
 
 
 def _make_async_dataset(tmp_path, lidar_ts, imu_ts):
-    """Build a two-channel KittiDataset; frame i of channel c holds np.full(2, i)."""
+    """Build a two-channel AsyncLayoutDataset; frame i of channel c holds np.full(2, i)."""
     for name, ts in [("lidar", lidar_ts), ("imu", imu_ts)]:
         d = tmp_path / name
         d.mkdir()
@@ -32,7 +33,7 @@ def _make_async_dataset(tmp_path, lidar_ts, imu_ts):
         np.savetxt(d / "timestamps.txt", np.asarray(ts, dtype=float))
     profile = tmp_path / "profile.yaml"
     profile.write_text("lidar: npys\nimu: npys\n")
-    return KittiDataset(tmp_path, keys=["lidar", "imu"], dataset_profile=profile)
+    return AsyncLayoutDataset(tmp_path, keys=["lidar", "imu"], dataset_profile=profile)
 
 
 @pytest.fixture

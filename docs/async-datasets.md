@@ -363,13 +363,8 @@ on-disk *layout* primitive: one subdirectory per channel, each with a
 never *which* channels exist; the channel set is per-instance state, read from
 `.apairo/channels.yaml` or an explicit profile.
 
-!!! note "Renamed from `KittiDataset`"
-    This class was historically called `KittiDataset` — a misleading name, since
-    no real KITTI dataset uses it (SemanticKITTI is a synchronous
-    `ProfiledDataset`). `KittiDataset` is kept as a backward-compatible alias:
-    `apairo.KittiDataset is apairo.AsyncLayoutDataset`.
-
-You rarely use it directly. Pick the member that matches your channel set:
+It is an internal base class — you rarely use it directly. Pick the member that
+matches your channel set:
 
 - **Dynamic channels** (whatever a recording happens to contain, e.g.
   `apairo-extractor` output) → [`RawDataset`](#rawdataset), which reads the
@@ -378,7 +373,7 @@ You rarely use it directly. Pick the member that matches your channel set:
   `TartanKittiDataset` does.
 
 ```python
-from apairo import AsyncLayoutDataset   # KittiDataset is an alias
+from apairo.dataset.kitti import AsyncLayoutDataset
 
 ds = AsyncLayoutDataset(
     directory="/data/my_recording",
