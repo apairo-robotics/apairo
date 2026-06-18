@@ -34,7 +34,6 @@ channels:
   lidar:
     loader: npys
     kind: raw
-    has_timestamps: true
     frame: lidar          # the data in this channel lives in the `lidar` frame
 ```
 
@@ -71,7 +70,6 @@ channels:
   tf__odom__base_link:
     loader: npy
     kind: raw
-    has_timestamps: true
     transform: {parent: odom, child: base_link, source: /tf, format: t_xyz_q_xyzw}
 ```
 

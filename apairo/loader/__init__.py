@@ -16,7 +16,6 @@ str_to_loader = {
     "img": IMGLoader,
     "npys": NPYSLoader,
     "npy": NPYLoader,
-    "npys_img": NPYSLoader,
     "bin": BINLoader,
     "zarr": ZarrLoader,
 }

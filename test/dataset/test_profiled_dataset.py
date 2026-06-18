@@ -268,7 +268,7 @@ def _write_apairo(directory: Path, key: str, loader: str) -> None:
     config = {
         "version": 1,
         "channels": {
-            key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}
+            key: {"kind": "preprocess", "loader": loader}
         },
     }
     d = directory / ".apairo"
@@ -398,13 +398,11 @@ def goose_root_chained(goose_root):
             "elevation_map": {
                 "kind": "preprocess",
                 "loader": "npys",
-                "has_timestamps": False,
                 "sources": ["lidar"],
             },
             "traversability": {
                 "kind": "preprocess",
                 "loader": "npys",
-                "has_timestamps": False,
                 "sources": ["elevation_map"],
             },
         },

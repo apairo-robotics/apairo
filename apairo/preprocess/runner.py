@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 _LOADER_TO_EXT = {
     "npys": "npy",
-    "npys_img": "npy",
     "npy": "npy",
     "bin": "bin",
 }

@@ -97,7 +97,7 @@ class ConfigurableDataset:
             {
                 "version": 1,
                 "channels": {
-                    "channel_name": {"loader": "npys", "has_timestamps": True},
+                    "channel_name": {"loader": "npys", "kind": "raw"},
                     ...
                 },
             }
@@ -197,8 +197,6 @@ class ConfigurableDataset:
         sequence_dir: str | Path,
         key: str,
         loader: str,
-        *,
-        has_timestamps: Optional[bool] = None,
     ) -> None:
         """Declare a raw channel in ``sequence_dir/.apairo``.
 
@@ -208,11 +206,10 @@ class ConfigurableDataset:
         Args:
             sequence_dir: Dataset sequence directory.
             key: Channel name -- must match its subdirectory name.
-            loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, or ``"img"``.
-            has_timestamps: Whether the channel has ``timestamps.txt``.
-                Auto-detected when ``None``.
+            loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, ``"img"``, or
+                ``"zarr"``.
         """
-        _register_raw_channel(sequence_dir, key, loader, has_timestamps=has_timestamps)
+        _register_raw_channel(sequence_dir, key, loader)
 
     @classmethod
     def verify(cls, sequence_dir: str | Path) -> bool:

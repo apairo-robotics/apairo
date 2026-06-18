@@ -107,7 +107,6 @@ channels:
   trav_label:
     kind: preprocess
     loader: npys
-    has_timestamps: false
     sources: [labels]
 ```
 

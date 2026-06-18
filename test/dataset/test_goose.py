@@ -106,7 +106,7 @@ def _write_apairo(root: Path, key: str, loader: str) -> None:
     config = {
         "version": 1,
         "channels": {
-            key: {"kind": "preprocess", "loader": loader, "has_timestamps": False}
+            key: {"kind": "preprocess", "loader": loader}
         },
     }
     d = root / ".apairo"

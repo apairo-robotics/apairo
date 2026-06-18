@@ -91,7 +91,6 @@ def _scan_mission_channels(mission_dir: Path) -> dict:
     """Return a channels config dict for all raw channels present in *mission_dir*."""
     return {
         key: {
-            "has_timestamps": False,
             "kind": "raw",
             "loader": "img" if key == "image" else "zarr",
         }

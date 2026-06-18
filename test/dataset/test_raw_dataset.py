@@ -46,7 +46,7 @@ def _write_channels(seq_dir, channels):
         {
             "version": 1,
             "channels": {
-                k: {"loader": ldr, "kind": "raw", "has_timestamps": True}
+                k: {"loader": ldr, "kind": "raw"}
                 for k, ldr in channels.items()
             },
         },

@@ -351,7 +351,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         for key in derived_keys:
             loader = channels[key]["loader"]
-            ext = "npy" if loader in ("npys", "npys_img", "npy") else loader
+            ext = "npy" if loader in ("npys", "npy") else loader
             paths = self._discover_derived(key, ext)
             spec = ModalitySpec(ext=f".{ext}", loader=ext)
             self._loaders[key] = _PerFrameLoader(paths, spec)
@@ -425,7 +425,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             if self._is_present(root_dir, key):
                 spec = self._modalities[key]
                 loader = spec.loader or _EXT_TO_LOADER.get(spec.ext, "bin")
-                channels[key] = {"loader": loader, "has_timestamps": False}
+                channels[key] = {"loader": loader}
         return {"version": 1, "channels": channels}
 
     def _mapped_name(self, key: str) -> str:

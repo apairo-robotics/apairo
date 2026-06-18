@@ -274,6 +274,5 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             loader = _detect_loader(Path(sequence_dir) / key)
             if loader is None:
                 continue
-            has_ts = (Path(sequence_dir) / key / "timestamps.txt").exists()
-            channels[key] = {"loader": loader, "kind": "raw", "has_timestamps": has_ts}
+            channels[key] = {"loader": loader, "kind": "raw"}
         return {"version": 1, "channels": channels}

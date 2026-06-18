@@ -11,7 +11,7 @@ CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path /
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
 KNOWN_LOADERS: frozenset[str] = frozenset(
-    {"npy", "npys", "npys_img", "bin", "img", "zarr"}
+    {"npy", "npys", "bin", "img", "zarr"}
 )
 
 
@@ -75,8 +75,7 @@ def register_channel(
         else {"version": 1, "channels": {}}
     )
 
-    has_ts = (root_dir / key / "timestamps.txt").exists()
-    entry: dict = {"has_timestamps": has_ts, "kind": "preprocess", "loader": loader}
+    entry: dict = {"kind": "preprocess", "loader": loader}
     if timestamps_from is not None:
         entry["timestamps_from"] = timestamps_from
     if sources:
@@ -93,7 +92,6 @@ def register_raw_channel(
     key: str,
     loader: str,
     *,
-    has_timestamps: Optional[bool] = None,
     frame: Optional[str] = None,
     transform: Optional[dict] = None,
 ) -> None:
@@ -109,9 +107,8 @@ def register_raw_channel(
     Args:
         root_dir: Dataset root directory (or sequence directory).
         key: Channel name -- must match its subdirectory name.
-        loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, or ``"img"``.
-        has_timestamps: Whether the channel directory contains a
-            ``timestamps.txt``.  Auto-detected from disk when ``None``.
+        loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, ``"img"``, or
+            ``"zarr"``.
         frame: Coordinate frame the channel's data is expressed in (descriptive
             metadata only; apairo does not apply transforms).
         transform: For a channel that *is* a coordinate transform (a pose
@@ -126,10 +123,7 @@ def register_raw_channel(
         else {"version": 1, "channels": {}}
     )
 
-    if has_timestamps is None:
-        has_timestamps = (root_dir / key / "timestamps.txt").exists()
-
-    entry: dict = {"has_timestamps": has_timestamps, "kind": "raw", "loader": loader}
+    entry: dict = {"kind": "raw", "loader": loader}
     if frame is not None:
         entry["frame"] = frame
     if transform is not None:

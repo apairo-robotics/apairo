@@ -13,6 +13,15 @@ All notable changes to apairo are documented here. The format is based on
   longer a top-level `apairo` export: it is now an internal base class, reached
   only by subclassing (`from apairo.dataset.kitti import AsyncLayoutDataset`).
   The public asynchronous loaders are `RawDataset` and `TartanKittiDataset`.
+- **`npys_img` loader** — removed (schema cleanup toward the frozen `version: 1`).
+  It was a no-op alias of `npys` (same `NPYSLoader`, same `.npy` extension); the
+  `img` in the name triggered no image decoding. The one user (TartanDrive's
+  `depth_left`) now declares `npys`.
+- **`has_timestamps` channel field** — removed from the `.apairo` schema. It was
+  written but never read (the loader checks the channel directory on disk), and
+  carried no information independent of `kind` / sync-vs-async. The
+  `has_timestamps` parameter is gone from `register_raw_channel` (top-level and
+  `ConfigurableDataset`).
 
 ### Toward 1.0
 

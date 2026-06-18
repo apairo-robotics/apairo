@@ -191,8 +191,7 @@ class TartanKittiDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableData
         for key in sorted(available):
             if key not in raw_profile:
                 continue
-            has_ts = (sequence_dir / key / "timestamps.txt").exists()
-            channels[key] = {"loader": raw_profile[key], "has_timestamps": has_ts}
+            channels[key] = {"loader": raw_profile[key]}
         return {"version": 1, "channels": channels}
 
     # ---------------------------------------------------------------- loaders

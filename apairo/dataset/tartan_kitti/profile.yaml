@@ -2,7 +2,7 @@
 cmd: npy
 controls: npy
 current_position: npy
-depth_left: npys_img
+depth_left: npys
 full_cloud: npys
 gps_odom: npy
 height_map: npys

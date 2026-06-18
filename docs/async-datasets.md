@@ -113,9 +113,9 @@ can be mixed freely within one dataset:
 # seq_a/.apairo/channels.yaml
 version: 1
 channels:
-  lidar: { loader: npys, kind: raw, has_timestamps: true }   # one .npy per frame
-  imu:   { loader: npy,  kind: raw, has_timestamps: true }   # one stacked .npy
-  gps:   { loader: zarr, kind: raw, has_timestamps: true }   # a zarr store
+  lidar: { loader: npys, kind: raw }   # one .npy per frame
+  imu:   { loader: npy,  kind: raw }   # one stacked .npy
+  gps:   { loader: zarr, kind: raw }   # a zarr store
 ```
 
 A `zarr` channel directory *is* the zarr array store, with `timestamps.txt`
@@ -157,10 +157,8 @@ On the first load of a new sequence, `TartanKittiDataset` scans the directory fo
 version: 1
 channels:
   cmd:
-    has_timestamps: true
     loader: npy
   velodyne_0:
-    has_timestamps: true
     loader: npys
 ```
 
@@ -415,7 +413,7 @@ class MyDataset(AsyncLayoutDataset, ConfigurableDataset):
         return {
             "version": 1,
             "channels": {
-                "lidar": {"loader": "npys", "has_timestamps": True},
+                "lidar": {"loader": "npys", "kind": "raw"},
             },
         }
 ```

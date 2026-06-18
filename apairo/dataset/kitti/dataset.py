@@ -206,7 +206,6 @@ class AsyncLayoutDataset(AbstractDataset):
             if loader is None:
                 continue
             channels[channel_dir.name] = {
-                "has_timestamps": (channel_dir / "timestamps.txt").exists(),
                 "kind": "raw",
                 "loader": loader,
             }
