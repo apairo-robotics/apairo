@@ -12,6 +12,13 @@ import numpy as np
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.sample import Sample
+from apairo.core.config import (
+    CHANNELS_FILE,
+    CONFIG_DIR,
+    config_exists,
+    read_config,
+    write_config,
+)
 from apairo.loader import DERIVED_LOADERS, TXTLoader
 
 _NUMPY_DTYPE: dict[str, type] = {
@@ -228,13 +235,10 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                     raw = yaml.safe_load(f)
                 cls.available_keys = frozenset(raw.get("modalities", {}).keys())
 
-    def __init__(
-        self,
-        root_dir: str | Path,
-        keys: list[str] | None = None,
-        split: str | None = None,
-        sequence_ids: list[str] | None = None,
-    ) -> None:
+    def _load_profile(self, root_dir: str | Path) -> dict:
+        """Parse the ``_profile`` YAML into modality/layer geometry and set
+        ``_root``.  Shared by :meth:`__init__` and :meth:`init` -- the latter
+        needs the profile geometry without discovering files."""
         profile_path = (
             Path(self._profile)
             if Path(self._profile).is_absolute()
@@ -258,6 +262,94 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         self._seq_depth: int = len(self._layers) - seq_idx
 
         self._root = Path(root_dir)
+        return raw
+
+    @classmethod
+    def init(
+        cls,
+        directory: str | Path,
+        *,
+        merge: bool = False,
+        overwrite: bool = False,
+        name: Optional[str] = None,
+    ) -> Path:
+        """Write ``.apairo/channels.yaml`` from the dataset profile.
+
+        Maps the profile's canonical channel names onto the raw directories
+        present on disk (e.g. ``os1_cloud_node_kitti_bin`` -> ``lidar``).  One
+        config at *directory* covers every sequence the profile spans.
+
+        Preprocessed channels are *not* auto-registered: after init, inspect
+        :meth:`unregistered_channels` (the CLI prints them) and declare the ones
+        you want with :meth:`register_channel`.
+
+        Args:
+            directory: Dataset root directory.
+            merge: Add profile channels to an existing config, leaving channels
+                already declared untouched.
+            overwrite: Discard any existing ``.apairo`` and rebuild from scratch.
+            name: Ignored -- profiles write no root manifest; accepted so the CLI
+                can call every dataset's ``init`` with the same arguments.
+
+        Returns:
+            Path of the written ``channels.yaml``.
+        """
+        if overwrite and merge:
+            raise ValueError("overwrite and merge are mutually exclusive.")
+
+        self = cls.__new__(cls)
+        self._load_profile(directory)
+        root = Path(directory)
+
+        config = self._bootstrap_config(root)
+        if not config["channels"]:
+            raise FileNotFoundError(
+                f"No {cls.__name__} profile channels found under '{root}'."
+            )
+
+        if config_exists(root) and not overwrite:
+            if not merge:
+                raise FileExistsError(
+                    f"{root / CONFIG_DIR} already exists -- pass overwrite to "
+                    f"rebuild or merge to add profile channels."
+                )
+            existing = read_config(root)
+            channels = dict(existing.get("channels", {}))
+            for key, meta in config["channels"].items():
+                channels.setdefault(key, meta)
+            config = {
+                **existing,
+                "version": existing.get("version", 1),
+                "channels": channels,
+            }
+
+        write_config(root, config)
+        return root / CONFIG_DIR / CHANNELS_FILE
+
+    @classmethod
+    def unregistered_channels(cls, directory: str | Path) -> dict[str, str]:
+        """Directories that look like channels but are in neither the profile nor
+        the current config -- candidate preprocessed channels.
+
+        Best-effort and report-only: returns ``{name: loader}`` for sub-directories
+        at the profile's modality depth that hold loadable files.  Nothing is
+        registered; declare the ones you want with :meth:`register_channel`.
+        """
+        self = cls.__new__(cls)
+        self._load_profile(directory)
+        root = Path(directory)
+        config = read_config(root) if config_exists(root) else {"channels": {}}
+        return self._preprocessed_candidates(root, config)
+
+    def __init__(
+        self,
+        root_dir: str | Path,
+        keys: list[str] | None = None,
+        split: str | None = None,
+        sequence_ids: list[str] | None = None,
+    ) -> None:
+        raw = self._load_profile(root_dir)
+
         self._split_filter = split
         self._sequence_ids_filter: frozenset[str] | None = (
             frozenset(sequence_ids) if sequence_ids is not None else None
@@ -427,6 +519,31 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 loader = spec.loader or _EXT_TO_LOADER.get(spec.ext, "bin")
                 channels[key] = {"loader": loader}
         return {"version": 1, "channels": channels}
+
+    def _preprocessed_candidates(self, root_dir: Path, config: dict) -> dict[str, str]:
+        """Modality-depth directories on disk that are neither a mapped raw
+        channel nor already declared -- i.e. likely preprocessed channels apairo
+        has not been told about.  Report-only helper for :meth:`unregistered_channels`."""
+        from apairo.dataset.kitti.dataset import _detect_loader  # local: avoid import cycle
+
+        declared = set(config.get("channels", {}))
+        raw_dirs = {self._mapped_name(k) for k in self.available_keys}
+        prefix = [
+            layer.value if layer.type == "fixed" else "*"
+            for layer in self._layers[: self._modality_layer_idx]
+        ]
+        pattern = str(Path(*prefix) / "*") if prefix else "*"
+
+        found: dict[str, str] = {}
+        for d in sorted(root_dir.glob(pattern)):
+            if not d.is_dir() or d.name.startswith(".") or d.name in found:
+                continue
+            if d.name in raw_dirs or d.name in declared:
+                continue
+            loader = _detect_loader(d)
+            if loader is not None:
+                found[d.name] = loader
+        return found
 
     def _mapped_name(self, key: str) -> str:
         layer = self._layers[self._modality_layer_idx]

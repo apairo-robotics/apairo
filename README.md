@@ -4,7 +4,7 @@ Unified Python loader for robotics sensor datasets — one API across synchronou
 
 All data is returned as `numpy.ndarray`. Convert to the framework of your choice.
 
-📖 **Documentation: [apairo-robotics.github.io/apairo](https://apairo-robotics.github.io/apairo/)**
+**Documentation: [apairo-robotics.github.io/apairo](https://apairo-robotics.github.io/apairo/)**
 
 ---
 

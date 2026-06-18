@@ -26,10 +26,20 @@ from apairo.core.config import config_exists, read_calibration, read_config, ver
 from apairo.dataset.kitti.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.raw.dataset import _read_manifest
+from apairo.dataset.rellis import Rellis3DDataset
+from apairo.dataset.goose import Goose3DDataset
+from apairo.dataset.semantic_kitti import SemanticKittiDataset
+from apairo.core.profiled_dataset import ProfiledDataset
 
-# Datasets selectable with ``--as``. Generic (profile-free) for now; profiled
-# datasets (Tartan, Semantic, ...) will register here as the CLI grows.
-DATASETS = {"RawDataset": RawDataset}
+# Datasets selectable with ``--as``: the profile-free generic loader plus the
+# profiled datasets, whose ``init`` maps canonical channel names from a profile.
+# (TartanKittiDataset, multi-sequence, will register here later.)
+DATASETS = {
+    "RawDataset": RawDataset,
+    "SemanticKittiDataset": SemanticKittiDataset,
+    "Rellis3DDataset": Rellis3DDataset,
+    "Goose3DDataset": Goose3DDataset,
+}
 _BAR = "─" * 52
 
 
@@ -69,6 +79,8 @@ def _channel_shape(channel_dir: Path, loader: Optional[str]):
 
 
 def _count_files(channel_dir: Path) -> int:
+    if not channel_dir.is_dir():
+        return 0
     return sum(
         1 for p in channel_dir.iterdir() if p.is_file() and p.name != "timestamps.txt"
     )
@@ -269,21 +281,58 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 # ── init ────────────────────────────────────────────────────────────────────
 
+def _hint_unregistered(cls, path: Path) -> None:
+    """After init, surface directories that look like preprocessed channels but
+    were not registered, so the user can declare the ones they want. Report-only."""
+    detect = getattr(cls, "unregistered_channels", None)
+    if detect is None:
+        return
+    try:
+        candidates = detect(path)
+    except Exception:
+        return
+    if not candidates:
+        return
+    print("\nLooks like preprocessed channels, not registered:")
+    for name, loader in sorted(candidates.items()):
+        print(f"  - {name} ({loader})")
+    print(
+        f"Declare the ones you want with {cls.__name__}.register_channel("
+        f"root, '<name>', '<loader>', timestamps_from=..., sources=[...])."
+    )
+
+
+def _print_registered(path: Path) -> None:
+    """List the channels a profiled init just wrote. The generic status is
+    profile-unaware (it would look for canonical names as root-level dirs), so we
+    report what was registered rather than re-interpreting the config."""
+    channels = read_config(path).get("channels", {}) if config_exists(path) else {}
+    listing = ", ".join(
+        f"{k} ({v.get('loader', '?')})" for k, v in sorted(channels.items())
+    )
+    print(f"registered: {listing or '—'}")
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     path = Path(args.path).expanduser()
     if not path.is_dir():
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
+    cls = DATASETS[args.as_]
     try:
-        written = RawDataset.init(
+        written = cls.init(
             path, merge=not args.force, overwrite=args.force, name=args.name
         )
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, FileExistsError) as exc:
         print(f"init failed: {exc}", file=sys.stderr)
         return 1
     rel = written.relative_to(path) if written.is_relative_to(path) else written
-    print(f"✓ wrote {rel}")
-    _print_status(_build_status(path))
+    print(f"✓ wrote {rel}  (as {cls.__name__})")
+    if issubclass(cls, ProfiledDataset):
+        _print_registered(path)
+        _hint_unregistered(cls, path)
+    else:
+        _print_status(_build_status(path))
     return 0
 
 
@@ -291,8 +340,6 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("path", nargs="?", default=".", help="dataset directory (default: .)")
-    p.add_argument("--as", dest="as_", metavar="CLASS", choices=list(DATASETS),
-                   default="RawDataset", help="interpret with this dataset class")
 
 
 def _discover_plugins() -> dict:
@@ -320,6 +367,9 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
 
     p_init = sub.add_parser("init", help="write .apairo sidecars by scanning a directory")
     _add_common(p_init)
+    p_init.add_argument("--as", dest="as_", metavar="CLASS", choices=list(DATASETS),
+                        default="RawDataset",
+                        help="initialize with this dataset class (default: RawDataset)")
     p_init.add_argument("--name", help="dataset name for the root manifest")
     p_init.add_argument("--force", action="store_true",
                         help="rebuild from scratch (default: merge, non-destructive)")
