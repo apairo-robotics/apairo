@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apairo"
-version = "0.2.0"
+version = "0.2.1"
 description = "Extensible framework to load robotics datasets"
 readme = "README.md"
 authors = [
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Robotics",
+    "Topic :: Scientific/Engineering :: Information Analysis",
     "Intended Audience :: Science/Research",
 ]
 
@@ -37,7 +37,6 @@ Repository = "https://github.com/apairo-robotics/apairo"
 Issues = "https://github.com/apairo-robotics/apairo/issues"
 
 [project.optional-dependencies]
-torch = ["torch"]
 vision = ["Pillow"]
 mnt = ["zarr>=3.0", "Pillow"]
 dev = ["pytest", "Pillow", "zarr>=3.0"]

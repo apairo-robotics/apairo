@@ -4,6 +4,8 @@ Unified Python loader for robotics sensor datasets — one API across synchronou
 
 All data is returned as `numpy.ndarray`. Convert to the framework of your choice.
 
+📖 **Documentation: [apairo-robotics.github.io/apairo](https://apairo-robotics.github.io/apairo/)**
+
 ---
 
 ## Installation
@@ -15,7 +17,6 @@ pip install apairo
 Optional extras:
 
 ```bash
-pip install apairo[torch]    # PyTorch support (.pt files)
 pip install apairo[vision]   # Image loading (Pillow)
 ```
 
