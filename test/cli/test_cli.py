@@ -235,8 +235,16 @@ def test_status_shows_transform_edge(raw_root, capsys):
         "parent": "odom", "child": "base_link",
     }
 
+    # tf is hidden by default -- the transform channel and its edge are not shown
     capsys.readouterr()
     _run(["status", str(raw_root / "seq_a")])
+    out = capsys.readouterr().out
+    assert "odom→base_link" not in out
+    assert "--show-tf" in out
+
+    # --show-tf reveals the transform edge
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--show-tf"])
     assert "odom→base_link" in capsys.readouterr().out
 
 
@@ -263,8 +271,12 @@ def test_calibration_roundtrip_and_status(raw_root, capsys):
     capsys.readouterr()
     _run(["status", str(raw_root / "seq_a"), "--json"])
     assert json.loads(capsys.readouterr().out)["calibration"] == ["base_link_to_lidar"]
+    # calibration (static tf) is hidden by default, shown with --show-tf
     capsys.readouterr()
     _run(["status", str(raw_root / "seq_a")])
+    assert "calibration" not in capsys.readouterr().out
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--show-tf"])
     assert "calibration" in capsys.readouterr().out
 
 

@@ -171,13 +171,17 @@ def _build_status(path: Path) -> Optional[dict]:
     per = {d.name: _seq_info(d) for d in seq_dirs}
     raw: dict = {}
     preprocess: dict = {}
+    tf: dict = {}
     untracked: set[str] = set()
     issues: list[str] = []
     calibration: set[str] = set()
     events = 0
     for name, info in per.items():
         for ch, d in info["channels"].items():
-            (raw if d["kind"] == "raw" else preprocess)[ch] = d["loader"]
+            if d.get("transform"):
+                tf[ch] = d["loader"]
+            else:
+                (raw if d["kind"] == "raw" else preprocess)[ch] = d["loader"]
         untracked.update(f"{name}/{u}" for u in info["untracked"])
         issues += [f"{name}: {i}" for i in info["issues"]]
         events += info["events"]
@@ -190,6 +194,7 @@ def _build_status(path: Path) -> Optional[dict]:
         "sequences": list(per),
         "raw": raw,
         "preprocess": preprocess,
+        "tf": tf,
         "untracked": sorted(untracked),
         "calibration": sorted(calibration),
         "events": events,
@@ -236,7 +241,7 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         print(line(r))
 
 
-def _print_status(s: dict) -> None:
+def _print_status(s: dict, show_tf: bool = False) -> None:
     if s["kind"] == "root":
         print(f"RawDataset — {s['name']}   (root · {len(s['sequences'])} sequences)")
         print(_BAR)
@@ -245,17 +250,33 @@ def _print_status(s: dict) -> None:
         print(f"preprocess  {_fmt_channels(s['preprocess'])}")
         if s["untracked"]:
             print(f"untracked   {', '.join(s['untracked'])}   ← run `apairo add`")
+        n_tf = len(s.get("tf", {}))
+        if show_tf and s.get("tf"):
+            print(f"tf          {_fmt_channels(s['tf'])}")
     else:
         print(f"RawDataset — {s['name']}   (sequence)")
         print(_BAR)
         if s.get("start") is not None:
             print(f"start       {s['start']:.2f}s   (span shown relative to this)")
-        if s["channels"] or s["untracked"]:
-            _print_channel_table(s["channels"], s["untracked"], s.get("start"))
+        channels = s["channels"] if show_tf else {
+            k: v for k, v in s["channels"].items() if not v.get("transform")
+        }
+        n_tf = sum(1 for v in s["channels"].values() if v.get("transform"))
+        if channels or s["untracked"]:
+            _print_channel_table(channels, s["untracked"], s.get("start"))
         else:
             print("(no channels)")
-    if s.get("calibration"):
-        print(f"calibration {', '.join(s['calibration'])}   (static, in .apairo/calibration.yaml)")
+    n_cal = len(s.get("calibration") or [])
+    if show_tf:
+        if s.get("calibration"):
+            print(f"calibration {', '.join(s['calibration'])}   (static, in .apairo/calibration.yaml)")
+    elif n_tf or n_cal:
+        bits = []
+        if n_tf:
+            bits.append(f"{n_tf} channel{'s' if n_tf > 1 else ''}")
+        if n_cal:
+            bits.append(f"{n_cal} static")
+        print(f"tf          hidden ({', '.join(bits)}) — pass --show-tf to show")
     print(f"events      {s['events']}")
     print(f"issues      {'none' if not s['issues'] else ''}")
     for issue in s["issues"]:
@@ -275,7 +296,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(status, indent=2, sort_keys=True))
     else:
-        _print_status(status)
+        _print_status(status, show_tf=args.show_tf)
     return 0
 
 
@@ -377,6 +398,9 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="show what a dataset directory contains")
     _add_common(p_status)
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
+    p_status.add_argument("--show-tf", dest="show_tf", action="store_true",
+                          help="include the transform layer: static calibration and "
+                               "dynamic tf channels (hidden by default)")
     return parser
 
 
