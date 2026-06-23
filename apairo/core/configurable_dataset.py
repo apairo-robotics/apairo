@@ -11,7 +11,6 @@ from apairo.core.config import (
     write_config,
     config_exists,
 )
-from apairo.core.preprocessor import Preprocessor
 
 
 class _RunPreprocessDescriptor:

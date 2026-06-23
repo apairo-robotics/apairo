@@ -3,7 +3,6 @@ from abc import abstractmethod
 from pathlib import Path
 
 from apairo.core.abstract_dataset import AbstractDataset
-from apairo.core.sample import Sample
 
 
 class SynchronousDataset(AbstractDataset):

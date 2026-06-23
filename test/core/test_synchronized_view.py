@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from apairo import Interpolator, SynchronizedView
+from apairo import Interpolator
 from apairo.core import AbstractDataset, FilteredView, Sample
 from apairo.dataset.kitti import AsyncLayoutDataset
 

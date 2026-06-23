@@ -383,7 +383,10 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         ]
         rows.append(row)
     widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
-    line = lambda cols: "  ".join(c.ljust(widths[i]) for i, c in enumerate(cols)).rstrip()
+
+    def line(cols):
+        return "  ".join(c.ljust(widths[i]) for i, c in enumerate(cols)).rstrip()
+
     print(line(headers))
     for r in rows:
         print(line(r))

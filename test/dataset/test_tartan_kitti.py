@@ -1,20 +1,16 @@
-
-
-import pytest
-import os
 import numpy as np
+import pytest
 from pathlib import Path
+
 from apairo.dataset.kitti import AsyncLayoutDataset as TartanKittiDataset
 from apairo.loader import NPYLoader
 from apairo.core.sample import Sample
-
-_PROFILE = Path(__file__).parent.parent.parent / "apairo/dataset/tartan_kitti/profile.yaml"
-
-# Assuming these utilities are available or will be refactored into fixtures
 from test.utils import (
     create_random_images, create_random_npy_files,
     create_random_npy_file, create_timestamps_file
 )
+
+_PROFILE = Path(__file__).parent.parent.parent / "apairo/dataset/tartan_kitti/profile.yaml"
 
 
 @pytest.fixture

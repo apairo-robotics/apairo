@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Optional
 import yaml
 
 if TYPE_CHECKING:
+    from apairo.core.abstract_dataset import AbstractDataset
     from apairo.core.sequence_view import SequenceView
 
 import numpy as np
@@ -394,7 +395,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         split: str | None = None,
         sequence_ids: list[str] | None = None,
     ) -> None:
-        raw = self._load_profile(root_dir)
+        self._load_profile(root_dir)
 
         self._split_filter = split
         self._sequence_ids_filter: frozenset[str] | None = (

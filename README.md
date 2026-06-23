@@ -90,12 +90,12 @@ class TravLabel(FramePreprocessor):
     input_keys = ["labels"]; timestamps_from = "lidar"; sources = ["labels"]
     def process(self, sample): return (sample.data["labels"] < 10).astype(np.uint8)
 
-ds = Rellis3DDataset(root, keys=["lidar", "labels", "ground_height_csf"])
+ds = Rellis3DDataset(root, keys=["lidar", "labels"])
 ds.run_preprocess(TravLabel())
 
 # 2. Cache an expensive derived channel — computed once, served from RAM
-ds.transform("ground_height_csf", expensive_smooth)
-ds_prior = ds.select(["ground_height_csf"]).cache()
+ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+ds_prior = ds.select(["ground_prior"]).cache()
 
 # 3. Build train split — filter, join cached prior, apply augmentation
 valid = np.load("cache/valid_indices.npy")
@@ -181,12 +181,14 @@ view = ds.filter(np.load("cache/valid.npy"))
 `select(keys)` narrows a dataset to a subset of channels. `cache()` materialises it in RAM. Together they let you cache only the channels worth caching:
 
 ```python
-ds.transform("ground_height_csf", expensive_smooth)
+ds = Rellis3DDataset(root, keys=["lidar"])
+ds.transform("lidar", expensive_ground_prior, output="ground_prior")
 
 # Compute once, store in RAM
-ds_prior = ds.select(["ground_height_csf"]).cache()
+ds_prior = ds.select(["ground_prior"]).cache()
 
 # Reuse across training runs — prior served from RAM, base channels from disk
+base = Rellis3DDataset(root, keys=["lidar", "labels"])
 ds_v1 = base.join(ds_prior).transform(augment_v1)
 ds_v2 = base.join(ds_prior).transform(augment_v2)
 ```

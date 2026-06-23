@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import TYPE_CHECKING
 
 from apairo.core.abstract_dataset import AbstractDataset
 from apairo.core.sample import Sample
@@ -30,8 +29,8 @@ class CachedDataset(AbstractDataset):
     Example::
 
         # Cache only the expensive channel — transforms applied before storing
-        ds.transform("ground_height_csf", expensive_smooth)
-        ds_prior = ds.select(["ground_height_csf"]).cache()
+        ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+        ds_prior = ds.select(["ground_prior"]).cache()
 
         # Reuse across different training runs — no re-read, no re-compute
         ds_v1 = base.join(ds_prior).transform(augment_v1)

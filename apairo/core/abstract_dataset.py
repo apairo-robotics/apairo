@@ -159,8 +159,8 @@ class AbstractDataset(ABC):
         Calls ``self[idx]`` (transforms applied) then projects to the requested
         channels.  The primary use case is narrowing scope before caching::
 
-            ds.transform("ground_height_csf", expensive_smooth)
-            ds_prior = ds.select(["ground_height_csf"]).cache()
+            ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+            ds_prior = ds.select(["ground_prior"]).cache()
 
         Returns:
             :class:`~apairo.core.channel_view.ChannelView`
@@ -175,7 +175,7 @@ class AbstractDataset(ABC):
         are served from memory with no I/O.  Use after ``.filter()`` or
         ``.select()`` to keep the memory footprint manageable::
 
-            ds_prior = ds.select(["ground_height_csf"]).cache()
+            ds_prior = ds.select(["ground_prior"]).cache()
 
         .. warning::
             All samples are loaded into RAM.  Ensure the dataset fits in memory

@@ -8,7 +8,7 @@ help:
 	@echo "  make env      : Create virtual environment"
 	@echo "  make install  : Install dependencies in editable mode"
 	@echo "  make test     : Run tests with pytest"
-	@echo "  make lint     : Run linting with flake8"
+	@echo "  make lint     : Run linting with ruff"
 	@echo "  make clean    : Remove build artifacts and cache"
 
 env:
@@ -23,7 +23,7 @@ test:
 	python3 -m pytest
 
 lint:
-	flake8 src test
+	ruff check apairo test
 
 clean:
 	rm -rf build dist *.egg-info

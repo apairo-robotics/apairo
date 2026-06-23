@@ -6,11 +6,15 @@
 
 ```python
 ds_base  = Rellis3DDataset(root, keys=["lidar", "trav_gt"])
-ds_prior = Rellis3DDataset(root, keys=["ground_height_csf"])
+ds_prior = (
+    Rellis3DDataset(root, keys=["lidar"])
+    .transform("lidar", expensive_ground_prior, output="ground_prior")
+    .select(["ground_prior"])
+)
 
 combined = apairo.ZipDataset(ds_base, ds_prior)
 sample = combined[0]
-# sample.data == {"lidar": ..., "trav_gt": ..., "ground_height_csf": ...}
+# sample.data == {"lidar": ..., "trav_gt": ..., "ground_prior": ...}
 ```
 
 Transforms registered on each parent are applied before merging. The result is a full apairo dataset — `.transform()`, `.filter()`, `.cache()` all chain naturally.

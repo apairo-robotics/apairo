@@ -1,6 +1,7 @@
 """Apairo -- unified robotics dataset loader."""
 
 import logging
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 from apairo.core.sample import Sample
 from apairo.core.synchronous_dataset import SynchronousDataset
@@ -32,7 +33,10 @@ from apairo.loader import DERIVED_LOADERS
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-__version__ = "0.2.0"
+try:
+    __version__ = _pkg_version("apairo")
+except PackageNotFoundError:  # running from a source tree with no installed dist
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "Sample",

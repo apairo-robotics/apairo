@@ -20,9 +20,9 @@ from pathlib import Path
 zarr = pytest.importorskip("zarr", reason="zarr not installed")
 PIL_Image = pytest.importorskip("PIL.Image", reason="Pillow not installed")
 
-from apairo.dataset.mnt.dataset import MNTDataset, _is_mission_dir
-from apairo.core.sample import Sample
-from apairo.core.preprocessor import SequencePreprocessor
+from apairo.dataset.mnt.dataset import MNTDataset, _is_mission_dir  # noqa: E402
+from apairo.core.sample import Sample  # noqa: E402
+from apairo.core.preprocessor import SequencePreprocessor  # noqa: E402
 
 # ─────────────────────────────── constants ───────────────────────────────────
 
@@ -349,7 +349,7 @@ def test_is_synchronous(mission_dir):
 
 def test_available_keys_complete(mission_dir):
     ds = MNTDataset(mission_dir)
-    assert MNTDataset.available_keys >= {"image", "points", "position", "yaw",
+    assert ds.available_keys >= {"image", "points", "position", "yaw",
                                           "timestamp", "waypoints_time", "waypoints_dist"}
 
 

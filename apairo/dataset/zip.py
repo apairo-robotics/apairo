@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import Literal
 
 from apairo.core import AbstractDataset
 from apairo.core.sample import Sample

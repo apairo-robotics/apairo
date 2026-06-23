@@ -20,8 +20,8 @@ class ChannelView(AbstractDataset):
 
     The primary use case is targeting what goes into a cache::
 
-        ds.transform("ground_height_csf", expensive_smooth)
-        ds_prior = ds.select(["ground_height_csf"]).cache()
+        ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+        ds_prior = ds.select(["ground_prior"]).cache()
 
     Args:
         parent: The underlying dataset.
