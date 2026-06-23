@@ -384,6 +384,23 @@ def test_describe_no_crash_without_apairo(kitti_root):
     assert "preprocess" in result
 
 
+def test_describe_structure(rellis_root):
+    info = _RellisDS(rellis_root, keys=["lidar"]).describe()
+    assert info["class"] == "_RellisDS"  # the actual class name
+    assert info["sequences"] == ["00000", "00001"]
+    # canonical channel name resolves to its real on-disk subdir (profile mapping)
+    assert info["raw"]["channels"]["lidar"]["dir"] == "os1_cloud_node_kitti_bin"
+    assert info["raw"]["channels"]["lidar"]["present"] is True
+    assert info["layout"]["fixed"] == ["Rellis-3D"]
+
+
+def test_inventory_matches_describe_without_instance(rellis_root):
+    # inventory() is the path-based form: no constructor, no file discovery.
+    inv = _RellisDS.inventory(rellis_root)
+    ds_info = _RellisDS(rellis_root, keys=["lidar"]).describe()
+    assert inv == ds_info
+
+
 # ---------------------------------------------------------------------------
 # Derived-from-derived
 # ---------------------------------------------------------------------------

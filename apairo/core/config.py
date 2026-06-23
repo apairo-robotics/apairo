@@ -7,6 +7,7 @@ import yaml
 CONFIG_DIR = ".apairo"
 CHANNELS_FILE = "channels.yaml"
 CALIBRATION_FILE = "calibration.yaml"
+DATASET_FILE = "dataset.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
@@ -37,6 +38,30 @@ def write_config(root_dir: Path, config: dict) -> None:
     d.mkdir(exist_ok=True)
     with open(d / CHANNELS_FILE, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=True)
+
+
+def read_manifest(root_dir: str | Path) -> dict:
+    """Read ``<root>/.apairo/dataset.yaml`` (the root manifest) if present, else ``{}``.
+
+    The manifest records dataset-root identity -- which dataset ``class`` produced
+    the layout, an optional ``name``, and (for the generic root) sequence order --
+    as opposed to ``channels.yaml`` which is the per-directory channel registry.
+    """
+    path = _apairo_dir(Path(root_dir)) / DATASET_FILE
+    if path.exists():
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def write_manifest(root_dir: str | Path, manifest: dict) -> Path:
+    """Write ``<root>/.apairo/dataset.yaml`` (the root manifest). Returns its path."""
+    d = _apairo_dir(Path(root_dir))
+    d.mkdir(exist_ok=True)
+    path = d / DATASET_FILE
+    with open(path, "w") as f:
+        yaml.dump(manifest, f, default_flow_style=False, sort_keys=True)
+    return path
 
 
 def register_channel(

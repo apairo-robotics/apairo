@@ -16,8 +16,11 @@ from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
     config_exists,
+    read_calibration,
     read_config,
+    read_manifest,
     write_config,
+    write_manifest,
 )
 from apairo.loader import DERIVED_LOADERS, TXTLoader
 
@@ -260,6 +263,12 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             else len(self._layers) - 1
         )
         self._seq_depth: int = len(self._layers) - seq_idx
+        self._seq_layer_idx: int = seq_idx
+        self._has_sequence_layer: bool = "sequence" in layer_types
+        # Split spec is structural (lives in the profile) -- resolve it here so
+        # the profile geometry is fully described without file discovery (used by
+        # init/inventory, not only __init__).
+        self._splits_spec: SplitSpec | None = _parse_splits_spec(raw.get("splits", {}))
 
         self._root = Path(root_dir)
         return raw
@@ -288,11 +297,12 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             merge: Add profile channels to an existing config, leaving channels
                 already declared untouched.
             overwrite: Discard any existing ``.apairo`` and rebuild from scratch.
-            name: Ignored -- profiles write no root manifest; accepted so the CLI
-                can call every dataset's ``init`` with the same arguments.
+            name: Dataset name recorded in the root manifest
+                (``.apairo/dataset.yaml``); defaults to the directory name.
 
         Returns:
-            Path of the written ``channels.yaml``.
+            Path of the written ``channels.yaml`` (the manifest
+            ``dataset.yaml``, recording the dataset class, is written alongside).
         """
         if overwrite and merge:
             raise ValueError("overwrite and merge are mutually exclusive.")
@@ -324,6 +334,15 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             }
 
         write_config(root, config)
+        # Record the dataset identity in the root manifest so tooling (e.g.
+        # `apairo status`) can dispatch through this profile instead of falling
+        # back to the profile-unaware generic reading of channels.yaml.
+        manifest = read_manifest(root)
+        manifest["class"] = cls.__name__
+        if name is not None:
+            manifest["name"] = name
+        manifest.setdefault("name", root.name)
+        write_manifest(root, manifest)
         return root / CONFIG_DIR / CHANNELS_FILE
 
     @classmethod
@@ -341,6 +360,20 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         config = read_config(root) if config_exists(root) else {"channels": {}}
         return self._preprocessed_candidates(root, config)
 
+    @classmethod
+    def inventory(cls, directory: str | Path) -> dict:
+        """Structural self-description from a root path, without loading data.
+
+        The path-based form of :meth:`describe`: builds the profile geometry
+        (no file discovery, no loaders) and reports identity, sequences, channel
+        layout, splits and calibration.  Tolerant -- it describes a partial
+        dataset without raising, unlike the constructor.  See :meth:`describe`
+        for the returned schema.
+        """
+        self = cls.__new__(cls)
+        self._load_profile(directory)
+        return self._structure()
+
     def __init__(
         self,
         root_dir: str | Path,
@@ -355,7 +388,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             frozenset(sequence_ids) if sequence_ids is not None else None
         )
 
-        self._splits_spec: SplitSpec | None = _parse_splits_spec(raw.get("splits", {}))
+        # _splits_spec is set by _load_profile (structural, profile-derived).
         self._frame_filter: set[tuple[str, str]] | None = None
         if (
             split is not None
@@ -645,58 +678,109 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             return 0
         return len(next(iter(self._loaders.values())))
 
-    def describe(self, sequence_id: str | None = None) -> dict:
-        """Describe available channels for this dataset.
+    def _sequence_dirs(self) -> list[Path]:
+        """Sequence directories on disk, from the profile geometry alone.
 
-        Reads ``.apairo`` at the dataset root (creating it if absent) and
-        cross-references it with the profile's declared modalities to show
-        which raw channels are present or missing, and which preprocessed
-        channels have been registered.
+        Lists directories at the profile's sequence depth (children of the
+        ``fixed`` prefix).  Structural only -- no file discovery -- so it works
+        on a partially-built instance (``init``/``inventory``)."""
+        prefix = [
+            layer.value
+            for layer in self._layers[: self._seq_layer_idx]
+            if layer.type == "fixed"
+        ]
+        base = self._root / Path(*prefix) if prefix else self._root
+        if not base.is_dir():
+            return []
+        if not self._has_sequence_layer:
+            return [base]
+        return sorted(
+            d for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")
+        )
+
+    def _structure(self) -> dict:
+        """The structured self-description returned by :meth:`describe` /
+        :meth:`inventory`.  Profile geometry + cheap filesystem probes only --
+        no loaders, no per-frame counting (that is recoverable from a loaded
+        dataset: ``len(ds)``, ``ds[i].data[key].shape``, ``ds.sequence_ids``)."""
+        root = self._root
+        fixed = [layer.value for layer in self._layers if layer.type == "fixed"]
+
+        raw_channels: dict[str, dict] = {}
+        present: list[str] = []
+        missing: list[str] = []
+        for key in sorted(self.available_keys):
+            spec = self._modalities[key]
+            is_present = self._is_present(root, key)
+            (present if is_present else missing).append(key)
+            raw_channels[key] = {
+                "loader": spec.loader or _EXT_TO_LOADER.get(spec.ext, "bin"),
+                "dir": self._mapped_name(key),  # canonical -> on-disk subdir name
+                "present": is_present,
+                "optional": spec.optional,
+                "sequence_file": spec.is_sequence_file,
+            }
+
+        preprocess: dict[str, dict] = {}
+        if config_exists(root):
+            preprocess = {
+                k: v
+                for k, v in read_config(root).get("channels", {}).items()
+                if v.get("kind") == "preprocess"
+            }
+
+        manifest = read_manifest(root)
+        return {
+            "class": type(self).__name__,
+            "name": manifest.get("name", root.name),
+            "root": str(root),
+            "layout": {"fixed": fixed},
+            "sequences": [d.name for d in self._sequence_dirs()],
+            "splits": self.splits,
+            "calibration": sorted(read_calibration(root)),
+            "raw": {"present": present, "missing": missing, "channels": raw_channels},
+            "preprocess": preprocess,
+        }
+
+    def describe(self, sequence_id: str | None = None) -> dict:
+        """Describe this dataset's structure -- identity, sequences, channels.
+
+        Returns a structured dict (and prints a human-readable summary).  Cross-
+        references the profile's declared modalities with what is on disk to show
+        which raw channels are present or missing and where each lives, plus any
+        registered preprocessed channels.  Per-frame facts (counts, shapes) are
+        intentionally *not* here -- read them from the loaded dataset
+        (``len(ds)``, ``ds[i].data[key].shape``).
 
         Args:
-            sequence_id: Optional sequence identifier -- used as the display
-                label only. Channel availability is dataset-wide.
+            sequence_id: Optional identifier used as the printed display label
+                only. Channel availability is dataset-wide.
 
         Returns:
-            ``{"raw": {"present": [...], "missing": [...]}, "preprocess": {...}}``
+            ``{"class", "name", "root", "layout": {"fixed": [...]},
+            "sequences": [...], "splits": [...], "calibration": [...],
+            "raw": {"present": [...], "missing": [...], "channels": {key: {...}}},
+            "preprocess": {key: meta}}``
 
         Example::
 
             ds = Rellis3DDataset("/data/RELLIS")
             ds.describe("00000")
         """
-        from apairo.core.config import config_exists, read_config
-
-        # Raw channels: probe filesystem directly — .apairo only stores preprocessed ones.
-        raw_present = sorted(
-            k for k in self.available_keys if self._is_present(self._root, k)
-        )
-        raw_missing = sorted(
-            k for k in self.available_keys if not self._is_present(self._root, k)
-        )
-
-        preprocess = {}
-        if config_exists(self._root):
-            config = read_config(self._root)
-            preprocess = {
-                k: v
-                for k, v in config.get("channels", {}).items()
-                if v.get("kind") == "preprocess"
-            }
-
-        label = sequence_id if sequence_id is not None else self._root.name
-        print(f"\n{type(self).__name__} -- {label}")
+        info = self._structure()
+        label = sequence_id if sequence_id is not None else info["name"]
+        print(f"\n{info['class']} -- {label}")
         print("─" * 50)
         print("Raw channels")
-        if raw_present:
-            print("  present  :", ", ".join(raw_present))
-        if raw_missing:
-            print("  missing  :", ", ".join(raw_missing))
-        if not raw_present and not raw_missing:
+        if info["raw"]["present"]:
+            print("  present  :", ", ".join(info["raw"]["present"]))
+        if info["raw"]["missing"]:
+            print("  missing  :", ", ".join(info["raw"]["missing"]))
+        if not info["raw"]["present"] and not info["raw"]["missing"]:
             print("  (none)")
         print("Preprocessed channels")
-        if preprocess:
-            for key, meta in sorted(preprocess.items()):
+        if info["preprocess"]:
+            for key, meta in sorted(info["preprocess"].items()):
                 ts_info = (
                     f"<- timestamps from {meta['timestamps_from']}"
                     if "timestamps_from" in meta
@@ -709,10 +793,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         else:
             print("  (none)")
         print()
-        return {
-            "raw": {"present": raw_present, "missing": raw_missing},
-            "preprocess": preprocess,
-        }
+        return info
 
     @property
     def splits(self) -> list[str]:
