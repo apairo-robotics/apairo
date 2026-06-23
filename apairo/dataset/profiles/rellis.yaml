@@ -12,7 +12,7 @@ modalities:
   labels:
     ext: .label
     dtype: int32
-    torch_dtype: int64
+    cast_dtype: int64
   poses:
     ext: .txt
     loader: txt_rows

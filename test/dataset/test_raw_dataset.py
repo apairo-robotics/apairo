@@ -115,6 +115,88 @@ def test_single_sequence_keys_restrict(tmp_path):
     assert len(ds) == 3
 
 
+# ───────────────────────────────── aliases ───────────────────────────────────
+
+def test_alias_exposes_channel_under_public_name(tmp_path):
+    from apairo.core.config import set_alias
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)        # channels: lidar, imu
+    set_alias(seq, "lidar", "points")     # rename the public name
+
+    ds = RawDataset(seq, keys=["points", "imu"])  # request by alias
+    assert set(ds.keys) == {"points", "imu"}
+    assert "points" in ds.timestamps and "lidar" not in ds.timestamps
+    assert set(ds[0].data) <= {"points", "imu"}   # sample exposes the alias
+
+
+def test_alias_request_by_real_name_still_resolves(tmp_path):
+    from apairo.core.config import set_alias
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)
+    set_alias(seq, "lidar", "points")
+
+    # asking by the on-disk name works, but the channel is exposed as the alias
+    ds = RawDataset(seq, keys=["lidar"])
+    assert ds.keys == ["points"]
+
+
+def test_alias_default_keys_use_public_names(tmp_path):
+    from apairo.core.config import set_alias
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)
+    set_alias(seq, "lidar", "points")
+
+    ds = RawDataset(seq)                   # keys=None -> all, by public name
+    assert ds.available == frozenset({"points", "imu"})
+
+
+def test_alias_propagates_through_root(tmp_path):
+    from apairo.core.config import set_alias
+
+    root = tmp_path / "my_root"
+    _make_sequence(root / "seq_a", n_lidar=3)
+    _make_sequence(root / "seq_b", n_lidar=2)
+    for seq in ("seq_a", "seq_b"):
+        set_alias(root / seq, "lidar", "points")
+
+    ds = RawDataset(root, keys=["points"])
+    assert ds.keys == ["points"]
+    assert len(ds) == 5                    # 3 + 2 lidar frames, exposed as points
+
+
+def test_set_alias_rejects_collision(tmp_path):
+    # A colliding alias would make the dataset unloadable, so it is blocked
+    # at set time rather than only flagged afterwards.
+    from apairo.core.config import set_alias
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)         # channels: lidar, imu
+    set_alias(seq, "lidar", "x")
+    with pytest.raises(ValueError):
+        set_alias(seq, "imu", "x")         # duplicate of lidar's alias
+    with pytest.raises(ValueError):
+        set_alias(seq, "imu", "lidar")     # shadows an existing channel name
+    set_alias(seq, "lidar", "y")           # re-aliasing the same channel is fine
+
+
+def test_set_alias_force_reassigns(tmp_path):
+    from apairo.core.config import read_config, set_alias
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)
+    set_alias(seq, "lidar", "x")
+    displaced = set_alias(seq, "imu", "x", force=True)   # steal it
+    assert displaced == ["lidar"]
+    ch = read_config(seq)["channels"]
+    assert ch["imu"]["alias"] == "x" and "alias" not in ch["lidar"]
+    # force still cannot shadow a real directory name
+    with pytest.raises(ValueError):
+        set_alias(seq, "imu", "lidar", force=True)
+
+
 def test_single_sequence_is_not_root(tmp_path):
     seq = tmp_path / "seq_a"
     _make_sequence(seq, n_lidar=3)

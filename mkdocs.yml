@@ -58,24 +58,28 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Quickstart: quickstart.md
-  - Command Line: cli.md
-  - Concepts: concepts.md
-  - Design & Philosophy: design.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quickstart: quickstart.md
+    - Command Line: cli.md
+  - Concepts:
+    - Concepts: concepts.md
+    - Design & Philosophy: design.md
   - Datasets:
     - Overview: datasets/index.md
     - YAML Profiles: datasets/yaml-profiles.md
     - Adding a Dataset: datasets/adding-a-dataset.md
-  - Async Datasets: async-datasets.md
-  - Frames & Transforms: frames.md
-  - Preprocessing: preprocessing.md
-  - Transforms: transform.md
-  - Filtering: filter.md
-  - Views & Caching: views.md
-  - Combining Datasets: combining.md
+    - Async Datasets: async-datasets.md
+  - The dataset API:
+    - Frames & Calibration: frames.md
+    - Transforms: transform.md
+    - Filtering: filter.md
+    - Views & Caching: views.md
+    - Combining Datasets: combining.md
+    - Preprocessing: preprocessing.md
   - Examples:
     - Multi-dataset training: examples/cross_dataset_concat.md
     - Sequence k-fold CV: examples/sequence_kfold.md
     - Cached prior + live augments: examples/join_cached_prior.md
-  - API Reference: api/reference.md
+  - Reference:
+    - API Reference: api/reference.md

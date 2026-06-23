@@ -85,35 +85,36 @@ modalities:
     ext: .label
     dtype: int32
     mask: 65535
-    torch_dtype: int64
+    cast_dtype: int64
 ```
 
 ### Fields
 
 | Field | Required | Description |
 |---|---|---|
-| `ext` | yes* | File extension, with or without leading dot (`.bin`, `bin`, `.label`, `.npy`, `.png`, `.jpg`, `.pt`, `.txt`). Required for per-frame modalities; can be omitted for sequence-file loaders that imply their own extension. |
+| `ext` | yes* | File extension, with or without leading dot (`.bin`, `bin`, `.label`, `.npy`, `.png`, `.jpg`, `.txt`). Required for per-frame modalities; can be omitted for sequence-file loaders that imply their own extension. |
 | `dtype` | no | NumPy dtype string used by `np.fromfile` for binary formats (`.bin`, `.label`). Not used for structured formats or sequence-file loaders. |
 | `reshape` | no | List of ints passed to `ndarray.reshape()` after loading. Use `[-1, 4]` for `(N, 4)` point clouds, `[3, 4]` for a 3x4 pose matrix. |
 | `mask` | no | Integer bitmask applied as `arr & mask` before dtype conversion. Use `65535` (`0xFFFF`) to strip SemanticKITTI instance bits. |
-| `torch_dtype` | no | NumPy dtype name for a final `.astype()` cast -- e.g., `int64` to convert `int32` labels. |
-| `loader` | no | Override the default loader. Per-frame: `bin`, `npy`, `img`, `pt`. Sequence-file: `txt_rows` (one row per frame in a single `.txt` file). |
+| `cast_dtype` | no | NumPy dtype name for a final `.astype()` cast -- e.g., `int64` to convert `int32` labels (commonly so a downstream `nn.CrossEntropyLoss` gets `Long` targets). Was `torch_dtype` (deprecated alias, still accepted with a warning) -- it has always resolved to a NumPy dtype; apairo has no torch dependency. |
+| `loader` | no | Override the default loader. Per-frame: `bin`, `npy`, `img`. Sequence-file: `txt_rows` (one row per frame in a single `.txt` file). |
 | `subpath` | no | Extra path components below the modality directory. Use when there is an additional sub-folder between the channel directory and the files. |
 | `optional` | no | If `true`, the key is silently skipped when absent from disk instead of raising `FileNotFoundError`. Default: `false`. |
 
 ### Loader selection
 
-For binary formats (`.bin`, `.label`), apairo uses `np.fromfile` directly -- `dtype`, `reshape`, `mask`, and `torch_dtype` all apply.
+For binary formats (`.bin`, `.label`), apairo uses `np.fromfile` directly -- `dtype`, `reshape`, `mask`, and `cast_dtype` all apply.
 
-For structured formats, the appropriate loader is selected by extension:
+For structured formats, the loader is selected by extension. Every loader
+returns a **NumPy array** -- apairo has no torch/torchvision dependency; convert
+to tensors at the edge (a `DataLoader` `collate_fn`), never inside the dataset:
 
-| Extension | Loader | Notes |
+| Extension | Loader | Returns |
 |---|---|---|
-| `.npy` | `npy` | `np.load` -> `torch.from_numpy` |
-| `.png`, `.jpg` | `img` | `torchvision.io.read_image` -> `torch.Tensor` (CHW, uint8) |
-| `.pt` | `pt` | `torch.load(weights_only=True)` |
+| `.npy` | `npy` | `np.load(path)` -> `np.ndarray` |
+| `.png`, `.jpg` | `img` | `PIL.Image.open(path)` -> `np.array` -> `np.ndarray` (HWC). Requires Pillow (optional dependency). |
 
-`reshape`, `mask`, and `torch_dtype` are applied after loading for structured formats as well.
+`reshape`, `mask`, and `cast_dtype` are applied after loading for structured formats as well.
 
 ---
 
@@ -138,7 +139,7 @@ For structured formats, the appropriate loader is selected by extension:
         ext: .label
         dtype: int32
         mask: 65535           # 0xFFFF: strip upper 16 bits (instance ID)
-        torch_dtype: int64    # labels must be int64 for nn.CrossEntropyLoss
+        cast_dtype: int64    # labels must be int64 for nn.CrossEntropyLoss
     ```
 
 === "GOOSE"
@@ -158,7 +159,7 @@ For structured formats, the appropriate loader is selected by extension:
       labels:
         ext: .label
         dtype: int32
-        torch_dtype: int64
+        cast_dtype: int64
     ```
 
     !!! info "Why two `split` layers?"
@@ -182,7 +183,7 @@ For structured formats, the appropriate loader is selected by extension:
       labels:
         ext: .label
         dtype: int32
-        torch_dtype: int64
+        cast_dtype: int64
       poses:
         ext: .txt
         loader: txt_rows    # single file per sequence, one row = one frame

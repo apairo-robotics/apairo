@@ -7,6 +7,56 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Channel aliases for `RawDataset`** -- a raw channel can carry an `alias` in
+  `.apairo/channels.yaml`, the public name it is loaded and exposed under (e.g.
+  the on-disk `ouster_points` directory exposed as `lidar`). The directory keeps
+  its real name; `keys=[...]`, `sample.data` and `timestamps` use the alias. This
+  brings the profile-free loader the canonical-naming ergonomics profiled
+  datasets get from their layout. Set it in Python (`apairo.set_alias(seq, chan,
+  alias)` or `register_raw_channel(..., alias=...)`) or from the shell
+  (`apairo alias <channel> <alias>`, root-aware); `apairo status` surfaces it.
+  A clashing alias (one already in use, or shadowing a real directory name) is
+  rejected up front -- it would make the dataset unloadable -- with `--force`
+  to reassign an alias from its current holder.
+- **Profile-aware `apairo status`** -- a directory initialized with
+  `init --as <Class>` is now recognized as that dataset: `status` names the class,
+  lists its sequences, and resolves canonical channel names (`lidar`) to their
+  real nested directories, instead of the profile-unaware generic reading that
+  reported spurious "directory not found" / "unknown loader" issues. The dataset
+  class is recorded in `.apairo/dataset.yaml` (the root **manifest**) by
+  `ProfiledDataset.init`; `status` dispatches on it.
+- **`apairo status -s/--sequence <ID>`** -- per-channel detail for one sequence
+  addressed by **id** from the dataset root (`status <root> -s 00000`), instead of
+  pointing at the nested sequence directory. For profiled datasets this is the
+  only way to inspect a sequence with canonical channel names.
+- **`ProfiledDataset.inventory(root)`** -- the path-based, tolerant form of
+  `describe()`: structural self-description (identity, sequences, channel->layout
+  resolution, splits, calibration) without constructing the dataset.
+- **`read_manifest` / `write_manifest`** in `apairo.core.config` -- read/write the
+  `.apairo/dataset.yaml` root manifest.
+
+### Deprecated
+- **Profile field `torch_dtype` -> `cast_dtype`** -- the YAML modality field that
+  drives the post-load `.astype()` cast is renamed to `cast_dtype`, its honest
+  name: it has always resolved to a **NumPy** dtype (`apairo` has no torch
+  dependency -- deps are numpy + PyYAML). The old `torch_dtype` spelling is still
+  accepted with a `DeprecationWarning`; `cast_dtype` wins if both are present.
+  Built-in profiles (rellis, goose, semantic_kitti) updated.
+
+### Changed
+- **`ProfiledDataset.describe()`** now returns a richer **structured** dict
+  (identity, `sequences`, `splits`, `calibration`, and per-channel
+  `loader`/`dir`/`present`) in addition to the existing `raw`/`preprocess` keys;
+  the printed human summary is unchanged. Per-frame facts (counts, shapes) stay
+  out of `describe` -- they are recoverable from a loaded dataset (`len(ds)`,
+  `ds[i].data[key].shape`).
+- **`apairo status` / `init` output is now plain ASCII** (no box-drawing rule,
+  em-dash header or arrow glyphs), so it pastes cleanly into ASCII-only contexts.
+- **Docs** -- the navigation is grouped into sidebar sections, and the
+  coordinate-frame page is renamed "Frames & Calibration" (was "Frames &
+  Transforms") to stop colliding with the `.transform()` API page "Transforms".
+
 ### Removed
 - **`KittiDataset` alias** — removed (it was a transitional alias for
   `AsyncLayoutDataset` introduced in 0.2.0). `AsyncLayoutDataset` is also no

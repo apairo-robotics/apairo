@@ -192,7 +192,38 @@ ds = TartanKittiDataset("/data/tartan/2024-01-01_forest", keys=["velodyne_0", "m
 
 ---
 
-## Synchronizing: async → sync
+## Aliasing channels
+
+`RawDataset` takes its channel names straight from the directories on disk, which
+for `apairo-extractor` output are ROS topic names (`ouster_points`,
+`dlio_odom_node_odom`). An **alias** gives a channel a clean public name without
+renaming anything on disk: the directory keeps its real name, but the dataset
+loads and exposes it under the alias. This brings the profile-free `RawDataset`
+the canonical-naming ergonomics a profiled dataset gets from its layout -- and
+the naming lives in `.apairo`, not scattered across your scripts.
+
+```python
+import apairo
+
+apairo.set_alias("/data/barakuda/seq_a", "ouster_points", "lidar")
+apairo.set_alias("/data/barakuda/seq_a", "dlio_odom_node_odom", "pose")
+
+ds = apairo.RawDataset("/data/barakuda/seq_a", keys=["lidar", "pose"])
+ds[0].data["lidar"]          # the ouster_points directory, exposed as "lidar"
+ds.timestamps["lidar"]       # keyed by the public name too
+```
+
+- The real directory name is still accepted in `keys=[...]`, but the channel is
+  always exposed under its alias (the alias is the canonical public name).
+- `apairo.set_alias(seq_dir, channel, None)` clears the alias.
+- From the shell: [`apairo alias <channel> <alias>`](cli.md#apairo-alias)
+  (root-aware), and `apairo status` surfaces the aliases.
+- It is recorded per channel in `.apairo/channels.yaml` as
+  `{loader: ..., alias: lidar}`.
+
+---
+
+## Synchronizing: async -> sync
 
 The event timeline is the honest representation of a recording, but training
 usually wants complete frames. `synchronize()` resamples the dataset onto a

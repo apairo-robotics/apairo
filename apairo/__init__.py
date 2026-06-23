@@ -26,7 +26,7 @@ from apairo.dataset.mnt import MNTDataset
 
 from apairo.core.layout import ChannelSpec, DatasetLayout
 from apairo.core.transform import Compose
-from apairo.core.config import register_channel, register_raw_channel, verify_config
+from apairo.core.config import register_channel, register_raw_channel, set_alias, verify_config
 from apairo.writer import WRITERS
 from apairo.loader import DERIVED_LOADERS
 
@@ -61,6 +61,7 @@ __all__ = [
     "Compose",
     "register_channel",
     "register_raw_channel",
+    "set_alias",
     "verify_config",
     "WRITERS",
     "DERIVED_LOADERS",

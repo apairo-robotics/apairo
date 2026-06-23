@@ -13,7 +13,7 @@ def test_modality_spec_from_dict_basic():
     assert spec.dtype == "float32"
     assert spec.reshape == [-1, 4]
     assert spec.mask is None
-    assert spec.torch_dtype is None
+    assert spec.cast_dtype is None
     assert spec.optional is False
     assert spec.effective_subpath("lidar") == ["lidar"]
 
@@ -30,15 +30,35 @@ def test_modality_spec_with_all_fields():
             "ext": ".label",
             "dtype": "int32",
             "mask": 65535,
-            "torch_dtype": "int64",
+            "cast_dtype": "int64",
             "subpath": ["camera", "left"],
             "optional": True,
         },
     )
     assert spec.mask == 65535
-    assert spec.torch_dtype == "int64"
+    assert spec.cast_dtype == "int64"
     assert spec.effective_subpath("labels") == ["camera", "left"]
     assert spec.optional is True
+
+
+def test_modality_spec_torch_dtype_deprecated_alias():
+    # 'torch_dtype' is the deprecated spelling of 'cast_dtype' -- still honored,
+    # but warns. It always resolved to a NumPy dtype (apairo has no torch dep).
+    with pytest.warns(DeprecationWarning, match="torch_dtype"):
+        spec = ModalitySpec.from_dict("labels", {"ext": ".label", "torch_dtype": "int64"})
+    assert spec.cast_dtype == "int64"
+    assert spec.resolved_dtype is np.int64
+
+
+def test_modality_spec_cast_dtype_wins_over_torch_dtype():
+    # When both are present, the canonical 'cast_dtype' takes precedence silently.
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # no deprecation warning expected
+        spec = ModalitySpec.from_dict(
+            "labels", {"ext": ".label", "cast_dtype": "int64", "torch_dtype": "int32"}
+        )
+    assert spec.cast_dtype == "int64"
 
 
 def test_parse_layers_goose():
@@ -164,7 +184,7 @@ def test_goose_getitem_shapes(goose_root):
     assert s.data["lidar"].shape == (N_POINTS, 4)
     assert s.data["labels"].shape == (N_POINTS,)
     assert s.data["lidar"].dtype == np.float32
-    assert s.data["labels"].dtype == np.int64  # int32 promoted via torch_dtype
+    assert s.data["labels"].dtype == np.int64  # int32 promoted via cast_dtype
 
 
 def test_goose_iter_count(goose_root):

@@ -23,10 +23,12 @@ from typing import Optional
 import numpy as np
 
 from apairo.core.config import (
+    alias_conflict,
     config_exists,
     read_calibration,
     read_config,
     read_manifest,
+    set_alias,
     verify_config,
 )
 from apairo.dataset.kitti.dataset import _detect_loader
@@ -45,7 +47,7 @@ DATASETS = {
     "Rellis3DDataset": Rellis3DDataset,
     "Goose3DDataset": Goose3DDataset,
 }
-_BAR = "─" * 52
+_BAR = "-" * 52
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -109,6 +111,7 @@ def _channel_detail_dir(cdir: Path, meta: Optional[dict]) -> dict:
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,
         "transform": meta.get("transform") if meta else None,
+        "alias": meta.get("alias") if meta else None,
         "loader": loader,
         "frames": len(ts) if ts is not None else _count_files(cdir),
         "rate_hz": rate,
@@ -147,7 +150,7 @@ def _seq_info(seq_dir: Path) -> dict:
         "start": min(starts) if starts else None,
         "events": sum(c["frames"] for c in channels.values()),
         "issues": verify_config(seq_dir) if config_exists(seq_dir)
-        else ["not initialized — run `apairo init`"],
+        else ["not initialized -- run `apairo init`"],
     }
 
 
@@ -163,7 +166,7 @@ def _sequence_dirs(root: Path) -> list[Path]:
 
 
 def _fmt_channels(d: dict) -> str:
-    return ", ".join(f"{k} ({v})" for k, v in sorted(d.items())) if d else "—"
+    return ", ".join(f"{k} ({v})" for k, v in sorted(d.items())) if d else "-"
 
 
 # ── status ──────────────────────────────────────────────────────────────────
@@ -309,6 +312,7 @@ def _build_status(path: Path) -> Optional[dict]:
     raw: dict = {}
     preprocess: dict = {}
     tf: dict = {}
+    aliases: dict = {}
     untracked: set[str] = set()
     issues: list[str] = []
     calibration: set[str] = set()
@@ -319,6 +323,8 @@ def _build_status(path: Path) -> Optional[dict]:
                 tf[ch] = d["loader"]
             else:
                 (raw if d["kind"] == "raw" else preprocess)[ch] = d["loader"]
+            if d.get("alias"):
+                aliases[ch] = d["alias"]
         untracked.update(f"{name}/{u}" for u in info["untracked"])
         issues += [f"{name}: {i}" for i in info["issues"]]
         events += info["events"]
@@ -333,6 +339,7 @@ def _build_status(path: Path) -> Optional[dict]:
         "raw": raw,
         "preprocess": preprocess,
         "tf": tf,
+        "aliases": aliases,
         "untracked": sorted(untracked),
         "calibration": sorted(calibration),
         "events": events,
@@ -355,20 +362,23 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         ["loader", "frames", "rate", "span", "shape", ""]
     rows = []
     for name, c in all_ch:
-        rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "—"
-        span = f"{c['span'][0] - ref:.2f}–{c['span'][1] - ref:.2f}s" if c["span"] else "—"
+        rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "-"
+        span = f"{c['span'][0] - ref:.2f}-{c['span'][1] - ref:.2f}s" if c["span"] else "-"
         if c["kind"] == "untracked":
-            note = "← run `apairo add`"
+            note = "<- run `apairo add`"
         elif c.get("transform"):
             tf = c["transform"]
-            note = f"← tf {tf.get('parent')}→{tf.get('child')}"
+            note = f"<- tf {tf.get('parent')}->{tf.get('child')}"
             if tf.get("static"):
                 note += " (static)"
         elif c.get("timestamps_from"):
-            note = f"← from {c['timestamps_from']}"
+            note = f"<- from {c['timestamps_from']}"
         else:
             note = ""
-        row = [name, c["kind"]] + ([c.get("frame") or "—"] if show_frame else []) + [
+        # An aliased channel is shown alias-first (the name you load it by), with
+        # its on-disk directory in parentheses.
+        display = f"{c['alias']} ({name})" if c.get("alias") else name
+        row = [display, c["kind"]] + ([c.get("frame") or "-"] if show_frame else []) + [
             c["loader"] or "?", str(c["frames"]), rate, span, _fmt_shape(c), note,
         ]
         rows.append(row)
@@ -382,18 +392,21 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
 def _print_status(s: dict, show_tf: bool = False) -> None:
     cls = s.get("class", "RawDataset")
     if s["kind"] == "root":
-        print(f"{cls} — {s['name']}   (root · {len(s['sequences'])} sequences)")
+        print(f"{cls} - {s['name']}   (root, {len(s['sequences'])} sequences)")
         print(_BAR)
         print(f"sequences   {', '.join(s['sequences'])}")
         print(f"raw         {_fmt_channels(s['raw'])}")
         print(f"preprocess  {_fmt_channels(s['preprocess'])}")
+        if s.get("aliases"):
+            shown = ", ".join(f"{real} as {alias}" for real, alias in sorted(s["aliases"].items()))
+            print(f"aliases     {shown}")
         if s["untracked"]:
-            print(f"untracked   {', '.join(s['untracked'])}   ← run `apairo add`")
+            print(f"untracked   {', '.join(s['untracked'])}   <- run `apairo add`")
         n_tf = len(s.get("tf", {}))
         if show_tf and s.get("tf"):
             print(f"tf          {_fmt_channels(s['tf'])}")
     else:
-        print(f"{cls} — {s['name']}   (sequence)")
+        print(f"{cls} - {s['name']}   (sequence)")
         print(_BAR)
         if s.get("start") is not None:
             print(f"start       {s['start']:.2f}s   (span shown relative to this)")
@@ -415,7 +428,7 @@ def _print_status(s: dict, show_tf: bool = False) -> None:
             bits.append(f"{n_tf} channel{'s' if n_tf > 1 else ''}")
         if n_cal:
             bits.append(f"{n_cal} static")
-        print(f"tf          hidden ({', '.join(bits)}) — pass --show-tf to show")
+        print(f"tf          hidden ({', '.join(bits)}) -- pass --show-tf to show")
     print(f"events      {s['events']}")
     print(f"issues      {'none' if not s['issues'] else ''}")
     for issue in s["issues"]:
@@ -479,7 +492,7 @@ def _print_registered(path: Path) -> None:
     listing = ", ".join(
         f"{k} ({v.get('loader', '?')})" for k, v in sorted(channels.items())
     )
-    print(f"registered: {listing or '—'}")
+    print(f"registered: {listing or '-'}")
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -496,12 +509,72 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"init failed: {exc}", file=sys.stderr)
         return 1
     rel = written.relative_to(path) if written.is_relative_to(path) else written
-    print(f"✓ wrote {rel}  (as {cls.__name__})")
+    print(f"wrote {rel}  (as {cls.__name__})")
     if issubclass(cls, ProfiledDataset):
         _print_registered(path)
         _hint_unregistered(cls, path)
     else:
         _print_status(_build_status(path))
+    return 0
+
+
+# ── alias ─────────────────────────────────────────────────────────────────────
+
+def _alias_targets(path: Path, channel: str) -> list[Path]:
+    """Sequence directories under *path* whose config declares *channel*.
+
+    A single sequence resolves to itself; a root resolves to every sequence
+    holding the channel -- so one command aliases the channel everywhere."""
+    if config_exists(path) and channel in read_config(path).get("channels", {}):
+        return [path]
+    return [
+        d for d in _sequence_dirs(path)
+        if config_exists(d) and channel in read_config(d).get("channels", {})
+    ]
+
+
+def cmd_alias(args: argparse.Namespace) -> int:
+    path = Path(args.path).expanduser()
+    if not path.is_dir():
+        print(f"Not a directory: {path}", file=sys.stderr)
+        return 2
+    if not args.remove and not args.alias:
+        print("Provide an alias (`apairo alias <channel> <alias>`) or pass --remove.",
+              file=sys.stderr)
+        return 2
+
+    targets = _alias_targets(path, args.channel)
+    if not targets:
+        print(f"Channel '{args.channel}' is not declared under '{path}'.",
+              file=sys.stderr)
+        return 1
+
+    new_alias = None if args.remove else args.alias
+    # Validate every target before writing any, so a clash leaves nothing half-set.
+    # With --force an alias-vs-alias clash is allowed; a directory-name clash is not.
+    clashes = [
+        (seq, msg) for seq in targets
+        if (msg := alias_conflict(seq, args.channel, new_alias, force=args.force))
+    ]
+    if clashes:
+        for seq, msg in clashes:
+            print(f"cannot alias in '{seq.name}': {msg}", file=sys.stderr)
+        print("Pick another name, clear the conflicting alias with "
+              "`apairo alias <channel> --remove`, or pass --force to reassign it.",
+              file=sys.stderr)
+        return 1
+
+    displaced: set[str] = set()
+    for seq in targets:
+        displaced.update(set_alias(seq, args.channel, new_alias, force=args.force))
+
+    where = "1 sequence" if len(targets) == 1 else f"{len(targets)} sequences"
+    if args.remove:
+        print(f"removed alias of '{args.channel}' ({where})")
+    else:
+        print(f"aliased '{args.channel}' as '{args.alias}' ({where})")
+    if displaced:
+        print(f"  displaced: {', '.join(sorted(displaced))} (now unaliased)")
     return 0
 
 
@@ -553,6 +626,21 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_status.add_argument("--show-tf", dest="show_tf", action="store_true",
                           help="include the transform layer: static calibration and "
                                "dynamic tf channels (hidden by default)")
+
+    p_alias = sub.add_parser(
+        "alias",
+        help="expose a channel under a clean public name (e.g. ouster_points as lidar)",
+    )
+    p_alias.add_argument("channel", help="the channel's on-disk directory name")
+    p_alias.add_argument("alias", nargs="?",
+                         help="public name to expose it under (omit with --remove)")
+    p_alias.add_argument("--path", default=".",
+                         help="dataset directory (default: .); root-aware")
+    p_alias.add_argument("--remove", action="store_true",
+                         help="clear the channel's alias instead of setting it")
+    p_alias.add_argument("--force", action="store_true",
+                         help="reassign the alias even if another channel holds it "
+                              "(that channel is left unaliased)")
     return parser
 
 
@@ -568,7 +656,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         raise SystemExit(result if isinstance(result, int) else 0)
 
     args = _build_parser(set(plugins)).parse_args(argv)
-    handler = {"init": cmd_init, "status": cmd_status}[args.command]
+    handler = {"init": cmd_init, "status": cmd_status, "alias": cmd_alias}[args.command]
     sys.exit(handler(args))
 
 

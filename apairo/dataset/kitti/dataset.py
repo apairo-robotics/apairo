@@ -92,14 +92,26 @@ class AsyncLayoutDataset(AbstractDataset):
     ) -> None:
         directory = Path(directory)
 
+        # alias_of: on-disk directory name -> public name it is exposed under
+        # (declared per channel in .apairo). Everything below is keyed by the
+        # public name; the directory name is only used to locate files on disk.
+        self._alias_of: Dict[str, str] = {}
+
         if dataset_profile is not None:
             self._profile: Dict[str, str] = load_profile(dataset_profile)
         elif config_exists(directory):
             config = read_config(directory)
             channels = config.get("channels", {})
-            self._profile = {k: v["loader"] for k, v in channels.items() if "loader" in v}
+            self._alias_of = {
+                k: v["alias"] for k, v in channels.items() if v.get("alias")
+            }
+            self._profile = {
+                self._public(k): v["loader"]
+                for k, v in channels.items()
+                if "loader" in v
+            }
             if keys is None:
-                keys = sorted(channels.keys())
+                keys = sorted(self._profile.keys())
         else:
             raise FileNotFoundError(
                 f"No dataset_profile given and no .apairo found in '{directory}'. "
@@ -113,8 +125,20 @@ class AsyncLayoutDataset(AbstractDataset):
                 "Pass keys=[...] or use .apairo (call init() first)."
             )
 
-        self._files: Dict[str, str] = get_files(str(directory))
+        # Re-key the on-disk directories by their public name so a request, a
+        # loader and a sample all speak the same (aliased) language.
+        self._files: Dict[str, str] = {}
+        for real, path in get_files(str(directory)).items():
+            public = self._public(real)
+            if public in self._files:
+                raise ValueError(
+                    f"Alias collision in '{directory}': the public name '{public}' "
+                    f"is claimed by more than one channel. Clear one alias with "
+                    f"`apairo alias <channel> --remove` (see `apairo status`)."
+                )
+            self._files[public] = path
 
+        keys = [self._resolve_key(k) for k in keys]
         missing = set(keys) - set(self._files)
         if missing:
             raise KeyError(f"Keys not found in dataset directory: {missing}")
@@ -122,6 +146,20 @@ class AsyncLayoutDataset(AbstractDataset):
         self._keys: List[str] = []
         self._set_keys(keys)
         self._init()
+
+    # ------------------------------------------------------------------ alias
+
+    def _public(self, real_name: str) -> str:
+        """Public name a directory is exposed under (its alias, else itself)."""
+        return self._alias_of.get(real_name, real_name)
+
+    def _resolve_key(self, key: str) -> str:
+        """Normalize a requested key (alias *or* real directory name) to its
+        public name. Unknown keys pass through unchanged so the usual
+        not-found error still fires."""
+        if key in self._alias_of:  # a real name that has an alias -> its alias
+            return self._alias_of[key]
+        return key  # already a public name (an alias, or an unaliased real name)
 
     @classmethod
     def init(
@@ -227,6 +265,7 @@ class AsyncLayoutDataset(AbstractDataset):
 
     @keys.setter
     def keys(self, keys: List[str]) -> None:
+        keys = [self._resolve_key(k) for k in keys]
         missing = set(keys) - set(self._files)
         if missing:
             raise KeyError(f"Keys not found in dataset directory: {missing}")

@@ -13,4 +13,4 @@ modalities:
     ext: .label
     dtype: int32
     mask: 65535
-    torch_dtype: int64
+    cast_dtype: int64

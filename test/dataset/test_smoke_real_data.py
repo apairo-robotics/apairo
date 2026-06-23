@@ -47,7 +47,7 @@ def test_rellis_load(rellis_root):
     assert sample.data["lidar"].shape == (1024, 4)
     assert sample.data["lidar"].dtype == np.float32
     assert sample.data["labels"].shape == (1024,)
-    assert sample.data["labels"].dtype == np.int64  # torch_dtype from profile
+    assert sample.data["labels"].dtype == np.int64  # cast_dtype from profile
 
 
 def test_rellis_poses(rellis_root):

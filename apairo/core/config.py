@@ -119,6 +119,7 @@ def register_raw_channel(
     *,
     frame: Optional[str] = None,
     transform: Optional[dict] = None,
+    alias: Optional[str] = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -140,6 +141,10 @@ def register_raw_channel(
             stream), the edge it provides, e.g.
             ``{"parent": "odom", "child": "base_link"}`` (optionally
             ``"static": True``, ``"format": "t_xyz_q_xyzw"``). Descriptive only.
+        alias: Public name the channel is exposed under when loaded (e.g. expose
+            the on-disk ``ouster_points`` directory as ``lidar``). The directory
+            name stays the storage key; the alias is what ``keys=[...]`` and
+            ``sample.data`` use. See :func:`set_alias`.
     """
     root_dir = Path(root_dir)
     config = (
@@ -153,8 +158,112 @@ def register_raw_channel(
         entry["frame"] = frame
     if transform is not None:
         entry["transform"] = transform
+    if alias is not None:
+        entry["alias"] = alias
     config["channels"][key] = entry
     write_config(root_dir, config)
+
+
+def set_alias(
+    root_dir: str | Path, channel: str, alias: Optional[str], *, force: bool = False
+) -> list[str]:
+    """Set (or clear) the public alias of a raw channel in ``channels.yaml``.
+
+    An alias is the name the channel is exposed under at load time: the on-disk
+    directory keeps its real name, but ``RawDataset(root, keys=[alias])`` loads
+    it and ``sample.data[alias]`` returns it. This brings the profile-free
+    :class:`~apairo.dataset.raw.RawDataset` the canonical-naming ergonomics that
+    profiled datasets get from their layout -- naming lives in ``.apairo``, not
+    in the call site.
+
+    Args:
+        root_dir: Sequence directory holding ``.apairo/channels.yaml``.
+        channel: The channel's on-disk directory name. Must already be declared.
+        alias: Public name to expose it under; ``None`` clears any alias.
+        force: Reassign *alias* even if another channel already holds it -- the
+            previous holder is left **unaliased** (reverts to its directory
+            name). Has no effect on a clash with a real directory *name*, which
+            can never be reassigned.
+
+    Returns:
+        The channels whose alias was cleared to make room (empty unless
+        ``force`` displaced a previous holder).
+
+    Raises:
+        FileNotFoundError: if no ``channels.yaml`` exists at *root_dir*.
+        KeyError: if *channel* is not declared in the config.
+        ValueError: if *alias* would collide with another channel's directory
+            name (never reassignable), or with another channel's alias and
+            ``force`` is not set. Clear the conflicting alias first, pass
+            ``force=True``, or pick another name.
+    """
+    root_dir = Path(root_dir)
+    if not config_exists(root_dir):
+        raise FileNotFoundError(
+            f"No {CONFIG_DIR}/{CHANNELS_FILE} in '{root_dir}'. Run `apairo init` first."
+        )
+    config = read_config(root_dir)
+    channels = config.get("channels", {})
+    if channel not in channels:
+        raise KeyError(
+            f"Channel '{channel}' is not declared in '{root_dir}'. "
+            f"Available: {sorted(channels)}."
+        )
+    displaced: list[str] = []
+    if alias:
+        clash = _alias_conflict(channels, channel, alias, force=force)
+        if clash:
+            raise ValueError(f"Cannot alias '{channel}' as '{alias}': {clash}.")
+        if force:
+            displaced = _alias_holders(channels, channel, alias)
+            for other in displaced:
+                channels[other].pop("alias", None)
+        channels[channel]["alias"] = alias
+    else:
+        channels[channel].pop("alias", None)
+    write_config(root_dir, config)
+    return displaced
+
+
+def _alias_holders(channels: dict, channel: str, alias: str) -> list[str]:
+    """Other channels currently exposing *alias* as their public name."""
+    return [
+        other for other, meta in channels.items()
+        if other != channel and meta.get("alias") == alias
+    ]
+
+
+def _alias_conflict(
+    channels: dict, channel: str, alias: str, force: bool = False
+) -> Optional[str]:
+    """Reason aliasing *channel* as *alias* would clash within *channels*, or None.
+
+    A public name must be unique: it cannot shadow another channel's on-disk
+    directory name, nor duplicate another channel's alias -- otherwise two
+    channels would claim the same loaded key and the dataset fails to build.
+    With *force*, an alias-vs-alias clash is allowed (the holder is displaced);
+    a clash with a directory *name* is never reassignable."""
+    if alias in channels and alias != channel:
+        return f"'{alias}' is already a channel directory name (cannot be reassigned)"
+    if not force and _alias_holders(channels, channel, alias):
+        holder = _alias_holders(channels, channel, alias)[0]
+        return f"'{alias}' is already the alias of '{holder}' (pass force to reassign)"
+    return None
+
+
+def alias_conflict(
+    root_dir: str | Path, channel: str, alias: Optional[str], force: bool = False
+) -> Optional[str]:
+    """Message if aliasing *channel* as *alias* would clash in *root_dir*, else None.
+
+    Read-only counterpart to :func:`set_alias`'s guard -- lets a caller validate
+    across several sequences before writing any of them. With *force*, only an
+    unreassignable directory-name clash is reported."""
+    if not alias:
+        return None
+    root_dir = Path(root_dir)
+    channels = read_config(root_dir).get("channels", {}) if config_exists(root_dir) else {}
+    return _alias_conflict(channels, channel, alias, force=force)
 
 
 def read_calibration(root_dir: str | Path) -> dict[str, np.ndarray]:
@@ -278,5 +387,21 @@ def verify_config(root_dir: str | Path) -> list[str]:
                 issues.append(
                     f"Channel '{key}': source '{src}' is not declared in channels"
                 )
+
+    # Aliases must be unique and must not shadow a real channel directory.
+    seen_alias: dict[str, str] = {}
+    for key, meta in channels.items():
+        alias = meta.get("alias")
+        if not alias:
+            continue
+        if alias in channels:
+            issues.append(
+                f"Channel '{key}': alias '{alias}' collides with an existing channel name"
+            )
+        if alias in seen_alias:
+            issues.append(
+                f"Channel '{key}': alias '{alias}' is already used by '{seen_alias[alias]}'"
+            )
+        seen_alias[alias] = key
 
     return issues

@@ -1,8 +1,8 @@
-# Frames & Transforms
+# Frames & Calibration
 
 Robotics data lives in **coordinate frames** (a lidar scan in the `lidar` frame,
-a pose as `odom → base_link`, …). apairo's job is to *describe* that frame
-information so downstream tools can use it — **not** to compute geometry.
+a pose as `odom -> base_link`, ...). apairo's job is to *describe* that frame
+information so downstream tools can use it -- **not** to compute geometry.
 
 ## Where the line is
 
@@ -81,7 +81,7 @@ stacks) is preserved as **distinct channels** you can compare, never merged or
 dropped. (Static transforms go to `calibration`, above — only time-varying
 edges become channels.) Set it manually with
 `register_raw_channel(..., transform={"parent": ..., "child": ...})`;
-`apairo status` shows the edge (`← tf odom→base_link`).
+`apairo status` shows the edge (`<- tf odom→base_link`).
 
 **Looking it up** at an arbitrary time — composing the tree, interpolating with
 `Se3Interp` — is the natural next step, but it is a geometric *verb*: it belongs

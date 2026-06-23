@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -109,7 +110,7 @@ class ModalitySpec:
     dtype: Optional[str] = None
     reshape: Optional[list] = None
     mask: Optional[int] = None
-    torch_dtype: Optional[str] = None
+    cast_dtype: Optional[str] = None
     loader: Optional[str] = None
     subpath: list[str] = field(default_factory=list)
     optional: bool = False
@@ -120,17 +121,29 @@ class ModalitySpec:
         ext = d.get("ext", "")
         if ext and not ext.startswith("."):
             ext = f".{ext}"
-        torch_dtype = d.get("torch_dtype")
+        # ``cast_dtype``: target NumPy dtype for a final ``.astype()`` after
+        # loading (e.g. int32 labels -> int64). ``torch_dtype`` is the deprecated
+        # spelling -- it never touched torch, it always resolved to a NumPy dtype.
+        cast_dtype = d.get("cast_dtype")
+        if cast_dtype is None and "torch_dtype" in d:
+            warnings.warn(
+                "Profile field 'torch_dtype' is deprecated; rename it to "
+                "'cast_dtype'. It has always resolved to a NumPy dtype for a "
+                "final .astype() -- apairo does not depend on torch.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            cast_dtype = d.get("torch_dtype")
         return cls(
             ext=ext,
             dtype=d.get("dtype"),
             reshape=d.get("reshape"),
             mask=d.get("mask"),
-            torch_dtype=torch_dtype,
+            cast_dtype=cast_dtype,
             loader=d.get("loader"),
             subpath=d.get("subpath", []),
             optional=d.get("optional", False),
-            resolved_dtype=_NUMPY_DTYPE.get(torch_dtype) if torch_dtype else None,
+            resolved_dtype=_NUMPY_DTYPE.get(cast_dtype) if cast_dtype else None,
         )
 
     @property

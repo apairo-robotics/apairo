@@ -156,7 +156,7 @@ def test_status_profiled_text_header(rellis_root, capsys):
     capsys.readouterr()
     _run(["status", str(rellis_root)])
     out = capsys.readouterr().out
-    assert "Rellis3DDataset — rellis" in out  # header names the dataset class
+    assert "Rellis3DDataset - rellis" in out  # header names the dataset class
     assert "00000, 00001" in out
 
 
@@ -180,7 +180,7 @@ def test_status_profiled_sequence_text_header(rellis_root, capsys):
     capsys.readouterr()
     _run(["status", str(rellis_root), "-s", "00001"])
     out = capsys.readouterr().out
-    assert "Rellis3DDataset — 00001   (sequence)" in out
+    assert "Rellis3DDataset - 00001   (sequence)" in out
     assert "lidar" in out and "frames" in out
 
 
@@ -280,8 +280,8 @@ def test_status_span_is_relative_to_earliest(tmp_path, capsys):
     _run(["status", str(seq)])
     out = capsys.readouterr().out
     assert f"start       {base:.2f}s" in out   # absolute reference shown once
-    assert "0.00–2.00s" in out                 # channel a, relative
-    assert "0.50–2.50s" in out                 # channel b, relative offset preserved
+    assert "0.00-2.00s" in out                 # channel a, relative
+    assert "0.50-2.50s" in out                 # channel b, relative offset preserved
 
     _run(["status", str(seq), "--json"])
     data = json.loads(capsys.readouterr().out)
@@ -332,13 +332,13 @@ def test_status_shows_transform_edge(raw_root, capsys):
     capsys.readouterr()
     _run(["status", str(raw_root / "seq_a")])
     out = capsys.readouterr().out
-    assert "odom→base_link" not in out
+    assert "odom->base_link" not in out
     assert "--show-tf" in out
 
     # --show-tf reveals the transform edge
     capsys.readouterr()
     _run(["status", str(raw_root / "seq_a"), "--show-tf"])
-    assert "odom→base_link" in capsys.readouterr().out
+    assert "odom->base_link" in capsys.readouterr().out
 
 
 def test_calibration_roundtrip_and_status(raw_root, capsys):
@@ -387,3 +387,72 @@ def test_status_untracked_channel_detail(raw_root, capsys):
     assert "segmentation" in data["untracked"]
     assert data["untracked"]["segmentation"]["kind"] == "untracked"
     assert data["untracked"]["segmentation"]["frames"] == 3
+
+
+# ── channel aliases (apairo alias) ────────────────────────────────────────────
+
+def test_alias_command_is_root_aware(raw_root):
+    from apairo.core.config import read_config
+
+    _run(["init", str(raw_root)])
+    assert _run(["alias", "lidar", "points", "--path", str(raw_root)]) == 0
+    # applied to every sequence holding the channel
+    for s in ("seq_a", "seq_b"):
+        assert read_config(raw_root / s)["channels"]["lidar"]["alias"] == "points"
+
+
+def test_alias_command_remove(raw_root):
+    from apairo.core.config import read_config
+
+    _run(["init", str(raw_root)])
+    _run(["alias", "lidar", "points", "--path", str(raw_root)])
+    assert _run(["alias", "lidar", "--remove", "--path", str(raw_root)]) == 0
+    assert "alias" not in read_config(raw_root / "seq_a")["channels"]["lidar"]
+
+
+def test_alias_command_unknown_channel_errors(raw_root):
+    _run(["init", str(raw_root)])
+    assert _run(["alias", "nope", "x", "--path", str(raw_root)]) == 1
+
+
+def test_alias_command_rejects_collision(raw_root):
+    from apairo.core.config import read_config
+
+    _run(["init", str(raw_root)])
+    _run(["alias", "lidar", "x", "--path", str(raw_root)])
+    assert _run(["alias", "imu", "x", "--path", str(raw_root)]) == 1
+    # the failed command wrote nothing
+    assert "alias" not in read_config(raw_root / "seq_a")["channels"]["imu"]
+
+
+def test_alias_command_force_reassigns(raw_root, capsys):
+    from apairo.core.config import read_config
+
+    _run(["init", str(raw_root)])
+    _run(["alias", "lidar", "x", "--path", str(raw_root)])
+    capsys.readouterr()
+    assert _run(["alias", "imu", "x", "--force", "--path", str(raw_root)]) == 0
+    out = capsys.readouterr().out
+    assert "displaced: lidar" in out
+    ch = read_config(raw_root / "seq_a")["channels"]
+    assert ch["imu"]["alias"] == "x" and "alias" not in ch["lidar"]
+
+
+def test_status_shows_alias_root_and_sequence(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    _run(["alias", "lidar", "points", "--path", str(raw_root)])
+    capsys.readouterr()
+
+    _run(["status", str(raw_root)])
+    out = capsys.readouterr().out
+    assert "aliases" in out and "lidar as points" in out   # root summary line
+
+    capsys.readouterr()
+    _run(["status", str(raw_root), "-s", "seq_a"])
+    out = capsys.readouterr().out
+    assert "points (lidar)" in out                          # alias-first in the table
+
+    capsys.readouterr()
+    _run(["status", str(raw_root / "seq_a"), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["channels"]["lidar"]["alias"] == "points"   # json keyed by real name
