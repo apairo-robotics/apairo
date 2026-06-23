@@ -111,6 +111,99 @@ def test_status_not_a_dataset(tmp_path):
     assert _run(["status", str(empty)]) == 1
 
 
+# ── profiled datasets (init --as <Class>) ─────────────────────────────────────
+
+
+@pytest.fixture
+def rellis_root(tmp_path):
+    """A RELLIS-3D layout: <root>/Rellis-3D/<seq>/os1_cloud_node_kitti_bin/*.bin."""
+    root = tmp_path / "rellis"
+    for seq in ("00000", "00001"):
+        d = root / "Rellis-3D" / seq / "os1_cloud_node_kitti_bin"
+        d.mkdir(parents=True)
+        for i in range(3):
+            np.random.rand(40, 4).astype("float32").tofile(d / f"{i:06d}.bin")
+    return root
+
+
+def test_init_profiled_writes_manifest_class(rellis_root):
+    import yaml
+
+    assert _run(["init", str(rellis_root), "--as", "Rellis3DDataset"]) == 0
+    manifest = yaml.safe_load((rellis_root / ".apairo" / "dataset.yaml").read_text())
+    assert manifest["class"] == "Rellis3DDataset"  # identity persisted for status
+
+
+def test_status_profiled_dispatches_through_profile(rellis_root, capsys):
+    _run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    capsys.readouterr()
+    _run(["status", str(rellis_root), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["class"] == "Rellis3DDataset"        # recognized, not generic
+    assert data["kind"] == "root"
+    assert data["sequences"] == ["00000", "00001"]   # sequences are visible
+    assert data["raw"] == {"lidar": "bin"}           # canonical names, real loader
+    assert data["events"] == 6                        # 2 seqs x 3 frames
+    # no generic false-positives ("directory not found", "unknown loader txt_rows");
+    # only the genuinely-missing required channel is reported.
+    assert data["issues"] == [
+        "raw channel 'labels' declared in Rellis3DDataset profile but not found on disk"
+    ]
+
+
+def test_status_profiled_text_header(rellis_root, capsys):
+    _run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    capsys.readouterr()
+    _run(["status", str(rellis_root)])
+    out = capsys.readouterr().out
+    assert "Rellis3DDataset — rellis" in out  # header names the dataset class
+    assert "00000, 00001" in out
+
+
+def test_status_profiled_sequence_by_id(rellis_root, capsys):
+    # -s <id> drills into one sequence from the root, resolving canonical names
+    # to their nested dirs -- impossible via `status Rellis-3D/00000`.
+    _run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    capsys.readouterr()
+    _run(["status", str(rellis_root), "-s", "00000", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["kind"] == "sequence"
+    assert data["class"] == "Rellis3DDataset"
+    assert data["name"] == "00000"
+    assert data["channels"]["lidar"]["loader"] == "bin"
+    assert data["channels"]["lidar"]["frames"] == 3   # per-frame census of the resolved dir
+    assert data["events"] == 3
+
+
+def test_status_profiled_sequence_text_header(rellis_root, capsys):
+    _run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    capsys.readouterr()
+    _run(["status", str(rellis_root), "-s", "00001"])
+    out = capsys.readouterr().out
+    assert "Rellis3DDataset — 00001   (sequence)" in out
+    assert "lidar" in out and "frames" in out
+
+
+def test_status_sequence_unknown_id_errors(rellis_root, capsys):
+    _run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    capsys.readouterr()
+    assert _run(["status", str(rellis_root), "-s", "99999"]) == 1
+    err = capsys.readouterr().err
+    assert "not found" in err
+    assert "00000" in err and "00001" in err  # available sequences listed
+
+
+def test_status_generic_sequence_by_id(raw_root, capsys):
+    # -s works uniformly on a generic root: resolves <root>/<id>.
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root), "-s", "seq_a", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["kind"] == "sequence"
+    assert data["name"] == "seq_a"
+    assert data["events"] == 8   # same as `status raw_root/seq_a`
+
+
 # ── ecosystem dispatch (apairo <tool>) ────────────────────────────────────────
 
 class _FakeEntryPoint:

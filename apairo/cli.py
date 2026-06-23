@@ -22,10 +22,15 @@ from typing import Optional
 
 import numpy as np
 
-from apairo.core.config import config_exists, read_calibration, read_config, verify_config
+from apairo.core.config import (
+    config_exists,
+    read_calibration,
+    read_config,
+    read_manifest,
+    verify_config,
+)
 from apairo.dataset.kitti.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
-from apairo.dataset.raw.dataset import _read_manifest
 from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
 from apairo.dataset.semantic_kitti import SemanticKittiDataset
@@ -87,9 +92,15 @@ def _count_files(channel_dir: Path) -> int:
 
 
 def _channel_detail(seq_dir: Path, channel: str, meta: Optional[dict]) -> dict:
-    """Per-channel facts, all cheap: timestamps give frames/rate/span, the .npy
-    header gives shape/dtype (mmap). ``meta=None`` marks an untracked channel."""
-    cdir = seq_dir / channel
+    """Per-channel facts for the channel directory ``seq_dir/channel``."""
+    return _channel_detail_dir(seq_dir / channel, meta)
+
+
+def _channel_detail_dir(cdir: Path, meta: Optional[dict]) -> dict:
+    """Per-channel facts for an explicit directory, all cheap: timestamps give
+    frames/rate/span, the .npy header gives shape/dtype (mmap). ``meta=None``
+    marks an untracked channel.  Taking the directory explicitly lets a profiled
+    dataset point this at a nested, resolved channel dir (canonical name != dir)."""
     ts = _read_timestamps(cdir)
     rate, span = _rate_span(ts)
     loader = meta.get("loader") if meta else _detect_loader(cdir)
@@ -157,10 +168,136 @@ def _fmt_channels(d: dict) -> str:
 
 # ── status ──────────────────────────────────────────────────────────────────
 
+def _profiled_status_class(path: Path):
+    """The profiled dataset class this directory was initialized as, if any.
+
+    Read from the root manifest (``.apairo/dataset.yaml``) written by
+    ``init --as <Class>``.  Returns ``None`` for a generic (profile-free)
+    directory, so status falls through to the generic reading."""
+    name = read_manifest(path).get("class")
+    cls = DATASETS.get(name)
+    if cls is not None and issubclass(cls, ProfiledDataset):
+        return cls
+    return None
+
+
+def _build_profiled_status(path: Path, cls) -> dict:
+    """Status for a profiled dataset, built from the dataset's own layout.
+
+    The dataset resolves canonical channel names to their real (nested,
+    per-sequence) directories via :meth:`ProfiledDataset.inventory`; the CLI then
+    runs its generic per-directory census on those resolved paths.  Neither side
+    re-derives the other's job (mapping vs counting)."""
+    inv = cls.inventory(path)
+    prefix = Path(*inv["layout"]["fixed"]) if inv["layout"]["fixed"] else Path()
+    sequences = inv["sequences"]
+    raw_channels = inv["raw"]["channels"]
+
+    raw = {k: c["loader"] for k, c in raw_channels.items() if c["present"]}
+    preprocess = {k: v.get("loader", "?") for k, v in inv["preprocess"].items()}
+
+    # Census (frames) over the resolved per-sequence directories.
+    def _chan_dir(seq: str, subdir: str) -> Path:
+        return path / prefix / seq / subdir
+
+    events = 0
+    for seq in sequences:
+        for c in raw_channels.values():
+            if c["present"] and not c["sequence_file"]:
+                events += _count_files(_chan_dir(seq, c["dir"]))
+        for key in inv["preprocess"]:
+            events += _count_files(_chan_dir(seq, key))
+
+    issues = [
+        f"raw channel '{k}' declared in {cls.__name__} profile but not found on disk"
+        for k in inv["raw"]["missing"]
+        if not raw_channels[k]["optional"]
+    ]
+
+    return {
+        "name": inv["name"],
+        "class": inv["class"],
+        "kind": "root",
+        "sequences": sequences,
+        "raw": raw,
+        "preprocess": preprocess,
+        "tf": {},
+        "untracked": [],
+        "calibration": inv["calibration"],
+        "events": events,
+        "issues": issues,
+    }
+
+
+def _build_profiled_sequence_status(path: Path, cls, seq_id: str) -> Optional[dict]:
+    """Per-channel detail for one sequence of a profiled dataset, addressed by id.
+
+    Resolves each canonical channel to its nested per-sequence directory and runs
+    the generic per-directory census on it, so the table shows canonical names
+    (``lidar``) with real frames/shape/rate -- which a plain
+    ``status Rellis-3D/<seq>`` cannot, the profile mapping being unknown there."""
+    inv = cls.inventory(path)
+    if seq_id not in inv["sequences"]:
+        return None
+    prefix = Path(*inv["layout"]["fixed"]) if inv["layout"]["fixed"] else Path()
+    seq_base = path / prefix / seq_id
+
+    channels: dict = {}
+    for key, c in inv["raw"]["channels"].items():
+        # Sequence-level files (e.g. poses.txt) are not per-frame dirs -- skip the
+        # per-frame table for them.
+        if not c["present"] or c["sequence_file"]:
+            continue
+        channels[key] = _channel_detail_dir(
+            seq_base / c["dir"], {"loader": c["loader"], "kind": "raw"}
+        )
+    for key, meta in inv["preprocess"].items():
+        channels[key] = _channel_detail_dir(seq_base / key, {**meta, "kind": "preprocess"})
+
+    starts = [c["span"][0] for c in channels.values() if c["span"]]
+    return {
+        "name": seq_id,
+        "class": inv["class"],
+        "kind": "sequence",
+        "calibration": inv["calibration"],
+        "channels": channels,
+        "untracked": {},
+        "start": min(starts) if starts else None,
+        "events": sum(c["frames"] for c in channels.values()),
+        "issues": [],
+    }
+
+
+def _available_sequences(path: Path) -> list[str]:
+    """Sequence ids under *path*, profile-aware -- for error hints."""
+    profiled = _profiled_status_class(path)
+    if profiled is not None:
+        return profiled.inventory(path)["sequences"]
+    return [d.name for d in _sequence_dirs(path)]
+
+
+def _build_sequence_status(path: Path, seq_id: str) -> Optional[dict]:
+    """Per-sequence status addressed by id from the root (``status -s <id>``).
+
+    Profiled datasets resolve the sequence through the profile; generic datasets
+    resolve it to the ``<root>/<id>`` sub-directory."""
+    profiled = _profiled_status_class(path)
+    if profiled is not None:
+        return _build_profiled_sequence_status(path, profiled, seq_id)
+    seq_dir = path / seq_id
+    if not _is_sequence(seq_dir):
+        return None
+    return _build_status(seq_dir)
+
+
 def _build_status(path: Path) -> Optional[dict]:
+    profiled = _profiled_status_class(path)
+    if profiled is not None:
+        return _build_profiled_status(path, profiled)
+
     if _is_sequence(path):
         return {
-            "name": path.name, "kind": "sequence",
+            "name": path.name, "class": "RawDataset", "kind": "sequence",
             "calibration": sorted(read_calibration(path)),
             **_seq_info(path),
         }
@@ -187,9 +324,10 @@ def _build_status(path: Path) -> Optional[dict]:
         events += info["events"]
     for d in seq_dirs:
         calibration.update(read_calibration(d))
-    manifest = _read_manifest(path)
+    manifest = read_manifest(path)
     return {
         "name": manifest.get("name", path.name),
+        "class": "RawDataset",
         "kind": "root",
         "sequences": list(per),
         "raw": raw,
@@ -242,8 +380,9 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
 
 
 def _print_status(s: dict, show_tf: bool = False) -> None:
+    cls = s.get("class", "RawDataset")
     if s["kind"] == "root":
-        print(f"RawDataset — {s['name']}   (root · {len(s['sequences'])} sequences)")
+        print(f"{cls} — {s['name']}   (root · {len(s['sequences'])} sequences)")
         print(_BAR)
         print(f"sequences   {', '.join(s['sequences'])}")
         print(f"raw         {_fmt_channels(s['raw'])}")
@@ -254,7 +393,7 @@ def _print_status(s: dict, show_tf: bool = False) -> None:
         if show_tf and s.get("tf"):
             print(f"tf          {_fmt_channels(s['tf'])}")
     else:
-        print(f"RawDataset — {s['name']}   (sequence)")
+        print(f"{cls} — {s['name']}   (sequence)")
         print(_BAR)
         if s.get("start") is not None:
             print(f"start       {s['start']:.2f}s   (span shown relative to this)")
@@ -288,11 +427,20 @@ def cmd_status(args: argparse.Namespace) -> int:
     if not path.is_dir():
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
-    status = _build_status(path)
-    if status is None:
-        print(f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
-              f"Run `apairo init` to set it up.", file=sys.stderr)
-        return 1
+    if args.sequence:
+        status = _build_sequence_status(path, args.sequence)
+        if status is None:
+            avail = _available_sequences(path)
+            hint = f" Available: {', '.join(avail)}." if avail else ""
+            print(f"Sequence '{args.sequence}' not found under '{path}'.{hint}",
+                  file=sys.stderr)
+            return 1
+    else:
+        status = _build_status(path)
+        if status is None:
+            print(f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
+                  f"Run `apairo init` to set it up.", file=sys.stderr)
+            return 1
     if args.json:
         print(json.dumps(status, indent=2, sort_keys=True))
     else:
@@ -398,6 +546,10 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_status = sub.add_parser("status", help="show what a dataset directory contains")
     _add_common(p_status)
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
+    p_status.add_argument("--sequence", "-s", dest="sequence", metavar="ID",
+                          help="show the per-channel detail for a single sequence "
+                               "(by id), addressed from the dataset root -- avoids "
+                               "pointing status at the nested sequence directory")
     p_status.add_argument("--show-tf", dest="show_tf", action="store_true",
                           help="include the transform layer: static calibration and "
                                "dynamic tf channels (hidden by default)")
