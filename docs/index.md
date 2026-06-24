@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/apairo_logo_full.svg" alt="apairo" width="340">
+  <img src="resources/apairo_logo_full.svg" alt="apairo" width="480">
 </p>
 
 **Unified robotics dataset loader for time-series and annotated sensor data.**
