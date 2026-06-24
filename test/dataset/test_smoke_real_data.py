@@ -166,6 +166,36 @@ def test_sequence_preprocessor_per_frame_multi_sequence(rellis_root):
     assert len(train) == 5
 
 
+def test_sequence_preprocessor_stacked_multi_sequence(rellis_root):
+    """A stacked SequencePreprocessor (output_loader='npy') writes one stacked
+    file per sequence and loads back frame-aligned on a multi-sequence dataset,
+    including under a split -- the NPYLoader-style stacked path on ProfiledDataset.
+    """
+
+    class StackedPose(SequencePreprocessor):
+        output_key = "icp_pose"
+        output_loader = "npy"  # one stacked <seq>/icp_pose/icp_pose.npy per sequence
+        input_keys = ["lidar"]
+        timestamps_from = "lidar"
+        sources = ["lidar"]
+
+        def process(self, frames):
+            n = len(list(frames))
+            return np.stack([np.eye(4) * i for i in range(n)])
+
+    Rellis3DDataset(rellis_root, keys=["lidar"]).run_preprocess(StackedPose())
+
+    ds = Rellis3DDataset(rellis_root, keys=["lidar", "icp_pose"])
+    assert len(ds) == 10
+    assert ds[0].data["icp_pose"].shape == (4, 4)
+    diag = np.array([ds[i].data["icp_pose"][0, 0] for i in range(len(ds))])
+    np.testing.assert_array_equal(diag, [0, 1, 2, 3, 4, 0, 1, 2, 3, 4])
+
+    train = Rellis3DDataset(rellis_root, keys=["lidar", "icp_pose"], split="train")
+    assert len(train) == 5
+    assert train[0].data["icp_pose"].shape == (4, 4)
+
+
 # ------------------------------------------------------------------ Tartan (async)
 
 TARTAN_KEYS = ["velodyne_0", "cmd", "multisense_imu"]

@@ -60,11 +60,11 @@ def run(
 
     # Per-frame output (any FramePreprocessor, or a SequencePreprocessor that
     # emits one row per frame via output_loader="npys") is placed per frame by
-    # derived_path; a stacked SequencePreprocessor writes one file at the root.
+    # derived_path; a stacked SequencePreprocessor writes one file per sequence
+    # in that frame's channel directory (<seq>/<key>/<key>.ext).
     if isinstance(preprocessor, SequencePreprocessor) and preprocessor.output_loader != "npys":
         first_path = (
-            Path(dataset.root_dir)
-            / preprocessor.output_key
+            dataset.derived_path(0, preprocessor.output_key, ext).parent
             / f"{preprocessor.output_key}.{ext}"
         )
     else:
@@ -124,20 +124,37 @@ def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:
 def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None:
     if preprocessor.output_loader == "npys":
         _run_sequence_per_frame(preprocessor, dataset, ext)
-        return
+    else:
+        _run_sequence_stacked(preprocessor, dataset, ext)
 
-    # Stacked output: a single {output_key}.{ext} file at the dataset root.
-    result = _to_numpy(preprocessor.process(iter(dataset)))
-    out = (
-        dataset.root_dir / preprocessor.output_key / f"{preprocessor.output_key}.{ext}"
-    )
-    WRITERS[preprocessor.output_loader]().write(result, out)
 
-    # Synchronous datasets have no timestamps -- nothing to propagate.
+def _run_sequence_stacked(preprocessor: SequencePreprocessor, dataset, ext: str) -> None:
+    """Stacked output (output_loader="npy"): one {key}.{ext} file per sequence.
+
+    ``process()`` runs once per sequence and the result is written to that
+    sequence's channel directory (``<seq>/<key>/<key>.ext``) via ``derived_path``,
+    so a multi-sequence ProfiledDataset finds one stacked file per sequence.  For
+    a single-sequence dataset (an MNT mission, an async sequence) this is the same
+    file the previous single-stream path wrote.
+    """
+    writer = WRITERS[preprocessor.output_loader]()
+    groups = getattr(dataset, "_seq_groups", None) or {None: list(range(len(dataset)))}
     parent_ts = getattr(dataset, "timestamps", None)
-    if isinstance(parent_ts, dict):
-        ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
-        np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])
+
+    for indices in groups.values():
+        if not indices:
+            continue
+        frames = [dataset[i] for i in indices]
+        result = _to_numpy(preprocessor.process(iter(frames)))
+        out = (
+            dataset.derived_path(indices[0], preprocessor.output_key, ext).parent
+            / f"{preprocessor.output_key}.{ext}"
+        )
+        writer.write(result, out)
+        # Synchronous datasets have no timestamps -- nothing to propagate.
+        if isinstance(parent_ts, dict):
+            ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
+            np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])
 
 
 def _run_sequence_per_frame(
