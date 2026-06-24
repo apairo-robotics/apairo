@@ -115,6 +115,25 @@ def test_rellis_derived_channel_split(rellis_root):
     assert len(full.filter_split("train")) == 5
 
 
+def test_rellis_poses_under_split(rellis_root):
+    """A stacked sequence-file channel (poses, txt_rows) loads frame-aligned under
+    a split. Regression: it kept every row regardless of the split and raised
+    'Mismatched frame counts per key'.
+    """
+    full = Rellis3DDataset(rellis_root, keys=["lidar", "poses"])
+    gt = {
+        (full.frame_sequence_ids[i], full.frame_stems[i]): full[i].data["poses"]
+        for i in range(len(full))
+    }
+    for split, n in [("train", 5), ("val", 3), ("test", 2)]:
+        ds = Rellis3DDataset(rellis_root, keys=["lidar", "poses"], split=split)
+        assert len(ds) == n
+        for i in range(len(ds)):
+            key = (ds.frame_sequence_ids[i], ds.frame_stems[i])
+            assert ds[i].data["poses"].shape == (3, 4)
+            np.testing.assert_allclose(ds[i].data["poses"], gt[key])
+
+
 def test_sequence_preprocessor_per_frame_multi_sequence(rellis_root):
     """A per-frame SequencePreprocessor (output_loader='npys') runs once per
     sequence and writes one file per frame, so a multi-sequence ProfiledDataset

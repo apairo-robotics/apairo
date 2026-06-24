@@ -24,7 +24,7 @@ from apairo.core.config import (
     write_config,
     write_manifest,
 )
-from apairo.loader import DERIVED_LOADERS, TXTLoader
+from apairo.loader import DERIVED_LOADERS
 
 _NUMPY_DTYPE: dict[str, type] = {
     "int8": np.int8,
@@ -206,6 +206,50 @@ class _PerFrameLoader:
         if spec.resolved_dtype is not None:
             arr = arr.astype(spec.resolved_dtype)
         return arr
+
+
+def _loadtxt_2d(path: Path) -> np.ndarray:
+    return np.atleast_2d(np.loadtxt(path))
+
+
+class _StackedSequenceLoader:
+    """A channel stored as one stacked file per sequence (one row per frame),
+    exposed in the dataset's selected global frame order.
+
+    Each per-sequence file holds *all* of that sequence's frames as rows, in the
+    sequence's full native order.  ``index[i] = (seq_id, row)`` maps global frame
+    ``i`` to its row, so splits/filters/sequence selection stay aligned with the
+    per-frame channels -- ``loaders[key][i]`` is frame ``i`` for every channel,
+    whatever its on-disk layout.  ``reader`` turns a file into its 2-D array
+    (e.g. ``np.load`` for ``.npy``, ``loadtxt`` for ``.txt``); arrays are cached
+    per sequence on first access.
+    """
+
+    def __init__(self, seq_paths, reader, index, reshape=None) -> None:
+        self._seq_paths = dict(seq_paths)
+        self._reader = reader
+        self._index = list(index)
+        self._reshape = reshape
+        self._cache: dict = {}
+
+    def _array(self, seq_id):
+        arr = self._cache.get(seq_id)
+        if arr is None:
+            arr = self._reader(self._seq_paths[seq_id])
+            self._cache[seq_id] = arr
+        return arr
+
+    @property
+    def paths(self) -> list:
+        return list(self._seq_paths.values())
+
+    def __len__(self) -> int:
+        return len(self._index)
+
+    def __getitem__(self, idx: int) -> np.ndarray:
+        seq_id, row = self._index[idx]
+        value = self._array(seq_id)[row]
+        return value.reshape(self._reshape) if self._reshape is not None else value
 
 
 class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
@@ -450,8 +494,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         self._set_keys(list(keys))
         self._files: dict[str, list[Path]] = {}
-        self._loaders: dict[str, _PerFrameLoader | TXTLoader] = {}
+        self._loaders: dict = {}
         self._ref_key: str | None = None
+        stacked_native: dict[str, ModalitySpec] = {}
 
         for key in raw_keys:
             spec = self._modalities[key]
@@ -463,7 +508,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                         f"files found under {self._root}."
                     )
                 if paths:
-                    self._loaders[key] = TXTLoader(paths, spec.reshape)
+                    # Deferred: built once the global frame order is known, so the
+                    # stacked rows can be aligned to the selected frames.
+                    stacked_native[key] = spec
             else:
                 paths = self._discover_native(key)
                 if not paths and not spec.optional:
@@ -511,8 +558,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                         self._modality_idx = rel_parts.index(mapped)
                     break
 
-        self._set_keys([k for k in keys if k in self._loaders])
-
+        # Global frame order (anchor-driven) -- built before the stacked
+        # sequence-file loaders, which align their rows to it.
         self._seq_groups: dict[str, list[int]] = {}
         anchor = (
             self._files.get(self._ref_key)
@@ -530,6 +577,23 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             for i, path in enumerate(anchor):
                 seq_name = self._seq_root(path).name
                 self._seq_groups.setdefault(seq_name, []).append(i)
+
+        # Stacked sequence-file channels (one file per sequence, one row per
+        # frame), mapped into the selected frame order so a split or filter keeps
+        # them aligned with the per-frame channels.
+        for key, spec in stacked_native.items():
+            self._loaders[key] = self._build_stacked_loader(
+                self._discover_sequence_files(key),
+                reshape=spec.reshape,
+                reader=_loadtxt_2d,
+            )
+
+        # Every channel must now expose the same number of selected frames.
+        frame_counts = {k: len(v) for k, v in self._loaders.items()}
+        if len(set(frame_counts.values())) > 1:
+            raise ValueError(f"Mismatched frame counts per key: {frame_counts}")
+
+        self._set_keys([k for k in keys if k in self._loaders])
 
     def _seq_root(self, path: Path) -> Path:
         d = path
@@ -654,7 +718,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             )
         return files
 
-    def _discover_native(self, key: str) -> list[Path]:
+    def _discover_native(self, key: str, apply_frame_filter: bool = True) -> list[Path]:
         spec = self._modalities[key]
         fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
         mapped = self._mapped_name(key)
@@ -681,13 +745,50 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             files = [
                 f for f in files if self._seq_root(f).name in self._sequence_ids_filter
             ]
-        if self._frame_filter is not None:
+        if self._frame_filter is not None and apply_frame_filter:
             files = [
                 f
                 for f in files
                 if (self._seq_root(f).name, f.stem) in self._frame_filter
             ]
         return files
+
+    def _full_anchor_rows(self) -> dict[str, dict[str, int]]:
+        """Row of each frame stem within its sequence's full (unfiltered) order.
+
+        Stacked sequence files store a sequence's frames as rows in this order,
+        so this maps a selected frame's stem to its row -- letting a stacked
+        channel honour the same split/predicate selection as the per-frame
+        channels.  Keyed off the anchor (``_ref_key``) glob without the frame
+        filter."""
+        per_seq: dict[str, list[str]] = {}
+        for f in self._discover_native(self._ref_key, apply_frame_filter=False):
+            per_seq.setdefault(self._seq_root(f).name, []).append(f.stem)
+        return {
+            seq: {stem: i for i, stem in enumerate(stems)}
+            for seq, stems in per_seq.items()
+        }
+
+    def _build_stacked_loader(self, paths, reshape, reader) -> _StackedSequenceLoader:
+        """Wrap one-stacked-file-per-sequence paths into a loader aligned to the
+        selected global frame order (so it stays in step with per-frame channels
+        under splits and filters)."""
+        # A sequence file lives directly in its sequence directory, so its
+        # sequence id is the parent dir name (not _seq_root, which is tuned to
+        # the deeper per-frame modality layout).
+        seq_paths = {p.parent.name: p for p in paths}
+        if self._ref_key is not None and self._seq_groups:
+            rows = self._full_anchor_rows()
+            seqs, stems = self.frame_sequence_ids, self.frame_stems
+            index = [(seqs[i], rows[seqs[i]][stems[i]]) for i in range(len(self))]
+        else:
+            # No per-frame anchor to define a selection: expose every row in order.
+            index = [
+                (seq, r)
+                for seq in sorted(seq_paths)
+                for r in range(len(reader(seq_paths[seq])))
+            ]
+        return _StackedSequenceLoader(seq_paths, reader, index, reshape)
 
     @property
     def loaders(self) -> dict:
