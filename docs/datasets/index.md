@@ -35,7 +35,8 @@ ds = apairo.Rellis3DDataset("/data/rellis", keys=["lidar"])
 |---|---|---|---|
 | `root_dir` | `str \| Path` | -- | Dataset root directory |
 | `keys` | `list[str] \| None` | all non-optional keys | Modalities to load |
-| `split` | `str \| None` | `None` | Filter by split directory (`"train"`, `"val"`, `"test"`) |
+| `split` | `str \| None` | `None` | Restrict to a named split (e.g. `"train"`, `"val"`, `"test"`) |
+| `sequences` | `list[str] \| None` | all | Restrict to these sequence ids -- the symmetric counterpart of `split` |
 
 ### Expected directory layouts
 

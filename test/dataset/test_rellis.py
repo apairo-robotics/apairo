@@ -268,7 +268,7 @@ def test_split_and_sequence_ids(rellis_root_with_splits):
         rellis_root_with_splits,
         keys=["lidar", "labels"],
         split="train",
-        sequence_ids=["00000"],
+        sequences=["00000"],
     )
     assert len(ds) == N_TRAIN
 

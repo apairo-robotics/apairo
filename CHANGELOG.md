@@ -37,6 +37,12 @@ All notable changes to apairo are documented here. The format is based on
   `.apairo/dataset.yaml` root manifest.
 
 ### Deprecated
+- **`ProfiledDataset(..., sequence_ids=...)` -> `sequences=`** -- the constructor
+  argument that restricts loading to a set of sequences is renamed to `sequences`,
+  the symmetric counterpart of `split` (both default to "all"). The old
+  `sequence_ids=` keyword is still accepted with a `DeprecationWarning`; the 4th
+  positional argument is unchanged. The `sequence_ids` *property* (the list of
+  available sequence ids) and `frame_sequence_ids` are unaffected.
 - **Profile field `torch_dtype` -> `cast_dtype`** -- the YAML modality field that
   drives the post-load `.astype()` cast is renamed to `cast_dtype`, its honest
   name: it has always resolved to a **NumPy** dtype (`apairo` has no torch

@@ -437,13 +437,28 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         root_dir: str | Path,
         keys: list[str] | None = None,
         split: str | None = None,
+        sequences: list[str] | None = None,
+        *,
         sequence_ids: list[str] | None = None,
     ) -> None:
         self._load_profile(root_dir)
 
+        # ``sequences`` selects which sequences to load (None = all), the
+        # symmetric counterpart of ``split``.  ``sequence_ids`` is the deprecated
+        # spelling.
+        if sequence_ids is not None:
+            warnings.warn(
+                "ProfiledDataset(..., sequence_ids=...) is deprecated; use "
+                "'sequences=' (same meaning: the sequence ids to keep).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if sequences is None:
+                sequences = sequence_ids
+
         self._split_filter = split
         self._sequence_ids_filter: frozenset[str] | None = (
-            frozenset(sequence_ids) if sequence_ids is not None else None
+            frozenset(sequences) if sequences is not None else None
         )
 
         # _splits_spec is set by _load_profile (structural, profile-derived).
@@ -942,7 +957,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             self._root,
             keys=list(self._keys),
             split=name,
-            sequence_ids=list(self._sequence_ids_filter)
+            sequences=list(self._sequence_ids_filter)
             if self._sequence_ids_filter
             else None,
         )

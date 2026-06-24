@@ -341,36 +341,43 @@ def test_derived_missing_files_raises(goose_root):
 
 
 def test_kitti_sequence_ids_filter(kitti_root):
-    ds = _KittiDS(kitti_root, keys=["lidar", "labels"], sequence_ids=["00"])
+    ds = _KittiDS(kitti_root, keys=["lidar", "labels"], sequences=["00"])
     assert len(ds) == 4  # only seq "00" (4 frames), not "01"
     assert ds.sequence_ids == ["00"]
 
 
 def test_kitti_sequence_ids_filter_multiple(kitti_root):
-    ds = _KittiDS(kitti_root, keys=["lidar", "labels"], sequence_ids=["00", "01"])
+    ds = _KittiDS(kitti_root, keys=["lidar", "labels"], sequences=["00", "01"])
     assert len(ds) == 8  # both sequences
 
 
 def test_kitti_sequence_ids_filter_empty_result(kitti_root):
     with pytest.raises(FileNotFoundError):
-        _KittiDS(kitti_root, keys=["lidar"], sequence_ids=["99"])
+        _KittiDS(kitti_root, keys=["lidar"], sequences=["99"])
 
 
 def test_goose_sequence_ids_filter(goose_root):
-    ds = _GooseDS(goose_root, keys=["lidar"], sequence_ids=["seq_a"])
+    ds = _GooseDS(goose_root, keys=["lidar"], sequences=["seq_a"])
     assert len(ds) == 3  # only seq_a (3 frames)
     assert ds.sequence_ids == ["seq_a"]
 
 
 def test_rellis_sequence_ids_filter(rellis_root):
-    ds = _RellisDS(rellis_root, keys=["lidar"], sequence_ids=["00000"])
+    ds = _RellisDS(rellis_root, keys=["lidar"], sequences=["00000"])
     assert len(ds) == 3  # only seq "00000"
     assert ds.sequence_ids == ["00000"]
 
 
 def test_sequence_ids_none_loads_all(kitti_root):
-    ds = _KittiDS(kitti_root, keys=["lidar"], sequence_ids=None)
+    ds = _KittiDS(kitti_root, keys=["lidar"], sequences=None)
     assert len(ds) == 8
+
+
+def test_sequence_ids_param_deprecated_alias(kitti_root):
+    """The old 'sequence_ids=' keyword still works, with a DeprecationWarning."""
+    with pytest.warns(DeprecationWarning, match="sequences="):
+        ds = _KittiDS(kitti_root, keys=["lidar"], sequence_ids=["00"])
+    assert ds.sequence_ids == ["00"]  # property keeps its name
 
 
 # --- describe ---
