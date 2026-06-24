@@ -27,7 +27,14 @@ from apairo.dataset.mnt import MNTDataset
 
 from apairo.core.layout import ChannelSpec, DatasetLayout
 from apairo.core.transform import Compose
-from apairo.core.config import register_channel, register_raw_channel, set_alias, verify_config
+from apairo.core.config import (
+    register_channel,
+    register_raw_channel,
+    set_alias,
+    verify_calibration,
+    verify_config,
+    verify_manifest,
+)
 from apairo.writer import WRITERS
 from apairo.loader import DERIVED_LOADERS
 
@@ -67,6 +74,8 @@ __all__ = [
     "register_raw_channel",
     "set_alias",
     "verify_config",
+    "verify_manifest",
+    "verify_calibration",
     "WRITERS",
     "DERIVED_LOADERS",
     "__version__",

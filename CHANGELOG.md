@@ -8,6 +8,14 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`.apairo` schema frozen & documented as `version: 1`** -- a dedicated docs
+  page ("The .apairo Schema") specifies `channels.yaml`, `dataset.yaml` and
+  `calibration.yaml` as a stable on-disk contract. `dataset.yaml` now carries
+  `version: 1` like the other two. `verify_manifest` and `verify_calibration`
+  join `verify_config` (all top-level exports); validation is **tolerant** -- an
+  unknown field is reported as a warning and otherwise ignored (forward
+  compatible) -- and now also checks `kind`, `transform` structure, and the
+  4x4 calibration matrices. The manifest and calibration files stay optional.
 - **Channel aliases for `RawDataset`** -- a raw channel can carry an `alias` in
   `.apairo/channels.yaml`, the public name it is loaded and exposed under (e.g.
   the on-disk `ouster_points` directory exposed as `lidar`). The directory keeps
@@ -85,7 +93,7 @@ All notable changes to apairo are documented here. The format is based on
 
 - [x] **Freeze the public API** — `KittiDataset` alias removed and
   `AsyncLayoutDataset` demoted to an internal base class; no pending renames.
-- [ ] **Freeze & document the `.apairo` schema** (`channels.yaml`,
+- [x] **Freeze & document the `.apairo` schema** (`channels.yaml`,
   `dataset.yaml`, `calibration.yaml`) as a stable `version: 1` contract.
 - [ ] **Settle the CLI** — ship or explicitly defer `apairo add` / `apairo check`;
   lock `init` / `status` / ecosystem dispatch.

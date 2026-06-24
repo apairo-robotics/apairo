@@ -67,6 +67,7 @@ nav:
     - Design & Philosophy: design.md
   - Datasets:
     - Overview: datasets/index.md
+    - The .apairo Schema: datasets/apairo-schema.md
     - YAML Profiles: datasets/yaml-profiles.md
     - Adding a Dataset: datasets/adding-a-dataset.md
     - Async Datasets: async-datasets.md

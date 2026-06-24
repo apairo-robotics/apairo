@@ -15,6 +15,41 @@ KNOWN_LOADERS: frozenset[str] = frozenset(
     {"npy", "npys", "bin", "img", "zarr"}
 )
 
+# ── .apairo schema, version 1 ────────────────────────────────────────────────
+# The on-disk contract. Validation is tolerant: an unknown field is reported as a
+# warning and otherwise ignored, so a sidecar written by a newer apairo still
+# loads on an older one. See docs/datasets/apairo-schema.md.
+SCHEMA_VERSION = 1
+
+_CHANNELS_TOP_FIELDS: frozenset[str] = frozenset({"version", "channels"})
+_CHANNEL_FIELDS: frozenset[str] = frozenset(
+    {"kind", "loader", "timestamps_from", "sources", "frame", "transform", "alias"}
+)
+_CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
+_TRANSFORM_FIELDS: frozenset[str] = frozenset({"parent", "child", "static", "format"})
+
+# class (profiled root) | name/sequences/channels (generic root roll-up).
+_MANIFEST_FIELDS: frozenset[str] = frozenset(
+    {"version", "class", "name", "sequences", "channels"}
+)
+
+_CALIBRATION_TOP_FIELDS: frozenset[str] = frozenset({"version", "transforms"})
+_CALIBRATION_TRANSFORM_FIELDS: frozenset[str] = frozenset({"parent", "child", "matrix"})
+
+
+def _unknown(present, known: frozenset[str], where: str) -> list[str]:
+    """Warnings for keys in *present* not in the version-1 schema (*known*).
+
+    Tolerant by policy -- unknown fields are ignored at load time; this only
+    surfaces them (a typo, or a field from a newer apairo)."""
+    if not isinstance(present, dict):
+        return []
+    return [
+        f"{where}: unknown field '{k}' (ignored -- not in the version {SCHEMA_VERSION} schema)"
+        for k in present
+        if k not in known
+    ]
+
 
 def _apairo_dir(root_dir: Path) -> Path:
     return root_dir / CONFIG_DIR
@@ -55,12 +90,17 @@ def read_manifest(root_dir: str | Path) -> dict:
 
 
 def write_manifest(root_dir: str | Path, manifest: dict) -> Path:
-    """Write ``<root>/.apairo/dataset.yaml`` (the root manifest). Returns its path."""
+    """Write ``<root>/.apairo/dataset.yaml`` (the root manifest). Returns its path.
+
+    Stamps the schema ``version`` (``1``) if the caller did not set one, so the
+    manifest carries the same version contract as ``channels.yaml`` and
+    ``calibration.yaml``."""
     d = _apairo_dir(Path(root_dir))
     d.mkdir(exist_ok=True)
     path = d / DATASET_FILE
+    payload = {"version": SCHEMA_VERSION, **manifest}
     with open(path, "w") as f:
-        yaml.dump(manifest, f, default_flow_style=False, sort_keys=True)
+        yaml.dump(payload, f, default_flow_style=False, sort_keys=True)
     return path
 
 
@@ -357,8 +397,9 @@ def verify_config(root_dir: str | Path) -> list[str]:
         return [f"Cannot parse channels.yaml: {exc}"]
 
     version = config.get("version")
-    if version != 1:
-        issues.append(f"Unknown version: {version!r} (expected 1)")
+    if version != SCHEMA_VERSION:
+        issues.append(f"Unknown version: {version!r} (expected {SCHEMA_VERSION})")
+    issues += _unknown(config, _CHANNELS_TOP_FIELDS, "channels.yaml")
 
     channels = config.get("channels", {})
     if not isinstance(channels, dict):
@@ -366,14 +407,41 @@ def verify_config(root_dir: str | Path) -> list[str]:
         return issues
 
     for key, meta in channels.items():
+        if not isinstance(meta, dict):
+            issues.append(f"Channel '{key}': entry is not a mapping")
+            continue
+
         if not (root_dir / key).is_dir():
             issues.append(
                 f"Channel '{key}': directory not found on disk ({root_dir / key})"
             )
 
+        issues += _unknown(meta, _CHANNEL_FIELDS, f"channel '{key}'")
+
+        kind = meta.get("kind")
+        if kind is not None and kind not in _CHANNEL_KINDS:
+            issues.append(
+                f"Channel '{key}': unknown kind '{kind}' (expected one of "
+                f"{sorted(_CHANNEL_KINDS)})"
+            )
+
         loader = meta.get("loader")
         if loader and loader not in KNOWN_LOADERS:
             issues.append(f"Channel '{key}': unknown loader '{loader}'")
+
+        tf = meta.get("transform")
+        if tf is not None:
+            if not isinstance(tf, dict):
+                issues.append(f"Channel '{key}': 'transform' is not a mapping")
+            else:
+                for field in ("parent", "child"):
+                    if field not in tf:
+                        issues.append(
+                            f"Channel '{key}': transform is missing '{field}'"
+                        )
+                issues += _unknown(
+                    tf, _TRANSFORM_FIELDS, f"channel '{key}' transform"
+                )
 
         ts_from = meta.get("timestamps_from")
         if ts_from and ts_from not in channels:
@@ -405,3 +473,81 @@ def verify_config(root_dir: str | Path) -> list[str]:
         seen_alias[alias] = key
 
     return issues
+
+
+def verify_manifest(root_dir: str | Path) -> list[str]:
+    """Check ``.apairo/dataset.yaml`` (the root manifest) against the version-1
+    schema.  The manifest is **optional**: an absent file is not an issue
+    (returns ``[]``).  Validates ``version`` and warns on unknown fields.
+    """
+    path = _apairo_dir(Path(root_dir)) / DATASET_FILE
+    if not path.exists():
+        return []
+    try:
+        with open(path) as f:
+            manifest = yaml.safe_load(f) or {}
+    except Exception as exc:
+        return [f"Cannot parse dataset.yaml: {exc}"]
+    if not isinstance(manifest, dict):
+        return ["dataset.yaml: top level is not a mapping"]
+
+    issues: list[str] = []
+    version = manifest.get("version")
+    if version is not None and version != SCHEMA_VERSION:
+        issues.append(f"dataset.yaml: unknown version {version!r} (expected {SCHEMA_VERSION})")
+    issues += _unknown(manifest, _MANIFEST_FIELDS, "dataset.yaml")
+    return issues
+
+
+def verify_calibration(root_dir: str | Path) -> list[str]:
+    """Check ``.apairo/calibration.yaml`` against the version-1 schema.
+
+    Calibration is **optional** (many datasets ship already-calibrated data or
+    have no extrinsics): an absent file is not an issue (returns ``[]``).  When
+    present, validates ``version``, the ``transforms`` mapping, each entry's
+    ``parent``/``child``/``matrix`` (a 4x4), and warns on unknown fields.
+    """
+    path = _apairo_dir(Path(root_dir)) / CALIBRATION_FILE
+    if not path.exists():
+        return []
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as exc:
+        return [f"Cannot parse calibration.yaml: {exc}"]
+    if not isinstance(data, dict):
+        return ["calibration.yaml: top level is not a mapping"]
+
+    issues: list[str] = []
+    version = data.get("version")
+    if version is not None and version != SCHEMA_VERSION:
+        issues.append(
+            f"calibration.yaml: unknown version {version!r} (expected {SCHEMA_VERSION})"
+        )
+    issues += _unknown(data, _CALIBRATION_TOP_FIELDS, "calibration.yaml")
+
+    transforms = data.get("transforms") or {}
+    if not isinstance(transforms, dict):
+        issues.append("calibration.yaml: 'transforms' is not a mapping")
+        return issues
+
+    for name, entry in transforms.items():
+        # A bare 4x4 (no parent/child wrapper) is accepted by read_calibration.
+        if not isinstance(entry, dict):
+            if not _is_4x4(entry):
+                issues.append(f"transform '{name}': not a 4x4 matrix")
+            continue
+        for field in ("parent", "child", "matrix"):
+            if field not in entry:
+                issues.append(f"transform '{name}': missing '{field}'")
+        if "matrix" in entry and not _is_4x4(entry["matrix"]):
+            issues.append(f"transform '{name}': 'matrix' is not 4x4")
+        issues += _unknown(entry, _CALIBRATION_TRANSFORM_FIELDS, f"transform '{name}'")
+    return issues
+
+
+def _is_4x4(matrix) -> bool:
+    try:
+        return np.asarray(matrix, dtype=float).shape == (4, 4)
+    except Exception:
+        return False
