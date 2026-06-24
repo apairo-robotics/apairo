@@ -19,6 +19,7 @@ from apairo import (
     SequencePreprocessor,
     TartanKittiDataset,
 )
+from apairo.core.config import register_static_transform
 
 ASSETS = Path(__file__).parent.parent / "assets"
 
@@ -134,6 +135,21 @@ def test_rellis_poses_under_split(rellis_root):
             np.testing.assert_allclose(ds[i].data["poses"], gt[key])
 
 
+def test_rellis_calibration_resolves(rellis_root):
+    """A synchronous ProfiledDataset exposes calibration from its root .apairo --
+    not just RawDataset. Regression: ds.calibration used to always be empty unless
+    the dataset was a RawDataset."""
+    T = np.eye(4)
+    T[:3, 3] = [0.0, 0.0, 1.0]  # os1_lidar mounted 1 m above base_link
+    register_static_transform(rellis_root, "base_link", "os1_lidar", T)
+
+    ds = Rellis3DDataset(rellis_root, keys=["lidar", "labels"])
+    assert "base_link_to_os1_lidar" in ds.calibration
+    np.testing.assert_allclose(
+        ds.calibration.get_tf("os1_lidar", "base_link")[:3, 3], [0, 0, 1.0]
+    )
+
+
 def test_sequence_preprocessor_per_frame_multi_sequence(rellis_root):
     """A per-frame SequencePreprocessor (output_loader='npys') runs once per
     sequence and writes one file per frame, so a multi-sequence ProfiledDataset
@@ -237,6 +253,20 @@ def test_tartan_synchronize(tartan_seq):
     assert (sync.time_offsets("multisense_imu") <= 0).all()
     # imu fires at ~400 Hz: the latest event is always fresh
     assert abs(sync.time_offsets("multisense_imu")).max() < 0.01
+
+
+def test_tartan_calibration_resolves(tartan_seq):
+    """An asynchronous profiled dataset (TartanKittiDataset) reads calibration from
+    its sequence .apairo, same as RawDataset -- the static tree is resolvable
+    without dropping to the generic loader."""
+    T = np.eye(4)
+    T[:3, 3] = [0.0, 0.0, 1.2]  # velodyne 1.2 m above base_link
+    register_static_transform(tartan_seq, "base_link", "velodyne", T)
+
+    ds = TartanKittiDataset(tartan_seq, keys=["velodyne_0"])
+    np.testing.assert_allclose(
+        ds.calibration.get_tf("velodyne", "base_link")[:3, 3], [0, 0, 1.2]
+    )
 
 
 def test_tartan_synchronize_chain_shuffled_access(tartan_seq):

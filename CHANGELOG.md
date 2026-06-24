@@ -17,6 +17,13 @@ All notable changes to apairo are documented here. The format is based on
   connects them. Resolution has exactly one canonical form, so it belongs in the
   core; *applying* the matrix to data (points vs poses vs normals) stays in
   `apairo_transform`. The `frames` docs and schema page are updated accordingly.
+- **`ds.calibration` on every dataset, not just `RawDataset`** -- the property now
+  reads `<root_dir>/.apairo/calibration.yaml` on any dataset with a root, so the
+  synchronous profiled datasets (Rellis/Goose/SemanticKITTI) and the async family
+  (`TartanKittiDataset`) all resolve their static tree. Each sensor can sit in its
+  own frame regardless of how the dataset is loaded; the async family still merges
+  per-sequence tables. Datasets without an on-disk root (cached/concat views)
+  return an empty `Calibration`.
 
 ## [0.3.0] - 2026-06-24
 

@@ -32,6 +32,8 @@ from typing import TYPE_CHECKING, Callable, List
 
 import numpy as np
 
+from apairo.core.config import Calibration, read_calibration
+
 if TYPE_CHECKING:
     from apairo.core.sequence_view import SequenceView
 
@@ -87,6 +89,18 @@ class RootSequenceMixin:
     @property
     def root_dir(self) -> Path:
         return self._root_dir if self._is_root else self._sequence_dir
+
+    @property
+    def calibration(self) -> Calibration:
+        """Static extrinsics from ``.apairo/calibration.yaml`` (e.g. written from
+        ``/tf_static``). On a root, sequences' tables are merged -- each sequence
+        carries its own, so the calibration follows the data, not the root."""
+        if not self._is_root:
+            return read_calibration(self._sequence_dir)
+        merged = Calibration()
+        for seq in self._sequences:
+            merged.update(read_calibration(seq._sequence_dir))
+        return merged
 
     @property
     def available(self) -> frozenset:

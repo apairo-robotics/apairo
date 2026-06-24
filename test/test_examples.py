@@ -26,10 +26,12 @@ ALL_EXAMPLES = sorted(p.name for p in EXAMPLES.glob("*.py"))
 # Executed end-to-end against the mini fixtures (root injected via env var).
 RELLIS_EXAMPLES = [
     "join_cached_prior.py",
+    "rellis_traversability.py",
     "sequence_kfold.py",
     "training_pipeline_rellis.py",
 ]
 TARTAN_EXAMPLES = [
+    "tartan_frame_transform.py",
     "tartan_kitti_basic.py",
     "tartan_synchronize.py",
     "tartan_kitti_preprocess.py",

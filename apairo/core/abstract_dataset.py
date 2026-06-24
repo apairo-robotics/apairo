@@ -9,7 +9,7 @@ from . import abstract_loader
 from .utils.typing import _Key
 from .utils.exceptions import KeysEmptyError, KeysDuplicateError
 from .sample import Sample
-from .config import Calibration
+from .config import Calibration, read_calibration
 
 
 class AbstractDataset(ABC):
@@ -62,10 +62,16 @@ class AbstractDataset(ABC):
         """Sensor extrinsics for this dataset, as a :class:`~apairo.core.config.Calibration`.
 
         Keys follow ``"<parent>_to_<child>"`` and values are 4x4 float64 matrices.
-        Resolve any pair with ``ds.calibration.get_tf(source, target)``. Empty when
-        the dataset provides no calibration; override to expose a calibration file.
+        Resolve any pair with ``ds.calibration.get_tf(source, target)``.
+
+        Read from ``<root_dir>/.apairo/calibration.yaml`` -- every dataset with a
+        ``root_dir`` exposes its extrinsics, not just :class:`RawDataset`. Empty when
+        no calibration file exists, or the dataset has no on-disk root (e.g. a
+        cached or concatenated view). The async family overrides this to merge
+        per-sequence tables (see :class:`~apairo.core.root_sequence.RootSequenceMixin`).
         """
-        return Calibration()
+        root = getattr(self, "root_dir", None)
+        return read_calibration(root) if root is not None else Calibration()
 
     def __iter__(self):
         for i in range(len(self)):
