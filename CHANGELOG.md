@@ -7,7 +7,12 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-24
+
 ### Added
+- **Brand identity** -- apairo logo and a badge row (PyPI, Python, CI, license,
+  docs) on the README and docs home, plus the mkdocs header/favicon. The README
+  logo is a PNG referenced by absolute URL so it renders on PyPI.
 - **`apairo check`** -- validates the `.apairo` schema (channels, manifest,
   calibration) and reports issues, exiting non-zero on any (CI-friendly). It is
   profile-aware (same reading as `status`) and consumes `verify_config` /
@@ -169,5 +174,6 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/apairo-robotics/apairo/compare/v0.2.1...v0.3.0
 [0.2.0]: https://github.com/apairo-robotics/apairo/compare/v0.1.0...v0.2.0

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/resources/apairo_logo_full.svg" alt="apairo" width="380">
+  <img src="https://raw.githubusercontent.com/apairo-robotics/apairo/main/docs/resources/apairo_logo_full.png" alt="apairo" width="380">
 </p>
 
 <p align="center">
