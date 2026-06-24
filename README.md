@@ -44,7 +44,6 @@ sample = ds[0]
 | `SemanticKittiDataset` | synchronous | lidar, labels |
 | `Rellis3DDataset` | synchronous | lidar, labels, poses |
 | `Goose3DDataset` | synchronous | lidar, labels |
-| `MNTDataset` | synchronous | lidar, labels, poses |
 | `RawDataset` | asynchronous | any channels — declared in `.apairo/channels.yaml` |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
 

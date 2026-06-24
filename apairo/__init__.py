@@ -23,7 +23,6 @@ from apairo.core.interpolator import Interpolator
 from apairo.dataset.semantic_kitti import SemanticKittiDataset
 from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
-from apairo.dataset.mnt import MNTDataset
 
 from apairo.core.layout import ChannelSpec, DatasetLayout
 from apairo.core.transform import Compose
@@ -66,7 +65,6 @@ __all__ = [
     "SemanticKittiDataset",
     "Rellis3DDataset",
     "Goose3DDataset",
-    "MNTDataset",
     "ChannelSpec",
     "DatasetLayout",
     "Compose",

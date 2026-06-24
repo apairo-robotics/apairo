@@ -6,7 +6,7 @@ importing it. So every example is compile-checked, and the ones with a mini
 fixture (Rellis-3D, TartanDrive) are executed end-to-end as subprocesses with the
 dataset root injected via an environment variable.
 
-Examples without a fixture (Goose / MNT / cross-dataset) are compile-checked only.
+Examples without a fixture (Goose / cross-dataset) are compile-checked only.
 """
 
 import os

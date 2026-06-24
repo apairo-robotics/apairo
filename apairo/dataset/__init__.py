@@ -6,7 +6,6 @@ from .rellis import Rellis3DDataset
 from .semantic_kitti import SemanticKittiDataset
 from .concat import ConcatDataset
 from .zip import ZipDataset
-from .mnt import MNTDataset
 
 from apairo.core.config import register_channel
 
@@ -40,7 +39,6 @@ __all__ = [
     "SemanticKittiDataset",
     "ConcatDataset",
     "ZipDataset",
-    "MNTDataset",
     "register_channel",
     "split_sequences",
 ]

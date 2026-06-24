@@ -77,6 +77,14 @@ All notable changes to apairo are documented here. The format is based on
   Transforms") to stop colliding with the `.transform()` API page "Transforms".
 
 ### Removed
+- **`MNTDataset`** — removed from core and moved to the downstream
+  `apairo_experiments` repo (`core/datasets/mnt`). It is a specific, internal
+  dataset; the canonical public loaders shipped in apairo stay
+  `SemanticKittiDataset` / `Rellis3DDataset` / `Goose3DDataset` /
+  `TartanKittiDataset` / `RawDataset` ("closed core, open collections"). It keeps
+  working as a normal apairo consumer (a `SynchronousDataset` subclass). The
+  `mnt` optional-dependency group is replaced by a `zarr` extra, since
+  `zarr` is a first-class generic loader (used by `RawDataset`), not MNT-specific.
 - **`KittiDataset` alias** — removed (it was a transitional alias for
   `AsyncLayoutDataset` introduced in 0.2.0). `AsyncLayoutDataset` is also no
   longer a top-level `apairo` export: it is now an internal base class, reached
@@ -104,7 +112,9 @@ All notable changes to apairo are documented here. The format is based on
   post-1.0 (`status` already surfaces untracked channels, and they register from
   Python or by re-running `init`). `init` / `status` / `alias` / ecosystem
   dispatch locked.
-- [ ] **Decide Zarr's scope** (in or out of 1.0).
+- [x] **Decide Zarr's scope** — **in**, as an optional first-class loader (its
+  own `zarr` extra), like `img`/Pillow. It is generic (`RawDataset` reads zarr),
+  not tied to any one dataset.
 - [ ] **Soak** on real datasets + the ecosystem roundtrip
   (extractor → apairo → transform / preprocess).
 

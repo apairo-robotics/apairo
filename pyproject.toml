@@ -38,7 +38,7 @@ Issues = "https://github.com/apairo-robotics/apairo/issues"
 
 [project.optional-dependencies]
 vision = ["Pillow"]
-mnt = ["zarr>=3.0", "Pillow"]
+zarr = ["zarr>=3.0"]
 dev = ["pytest", "Pillow", "zarr>=3.0", "ruff"]
 docs = [
     "mkdocs>=1.6",

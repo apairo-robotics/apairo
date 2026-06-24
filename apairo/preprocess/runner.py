@@ -134,8 +134,8 @@ def _run_sequence_stacked(preprocessor: SequencePreprocessor, dataset, ext: str)
     ``process()`` runs once per sequence and the result is written to that
     sequence's channel directory (``<seq>/<key>/<key>.ext``) via ``derived_path``,
     so a multi-sequence ProfiledDataset finds one stacked file per sequence.  For
-    a single-sequence dataset (an MNT mission, an async sequence) this is the same
-    file the previous single-stream path wrote.
+    a single-sequence dataset (a single mission, an async sequence) this is the
+    same file the previous single-stream path wrote.
     """
     writer = WRITERS[preprocessor.output_loader]()
     groups = getattr(dataset, "_seq_groups", None) or {None: list(range(len(dataset)))}
