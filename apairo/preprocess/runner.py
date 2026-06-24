@@ -58,8 +58,10 @@ def run(
 
     ext = _LOADER_TO_EXT[preprocessor.output_loader]
 
-    if isinstance(preprocessor, SequencePreprocessor):
-        # Sequence output is a single stacked file, not per-frame files.
+    # Per-frame output (any FramePreprocessor, or a SequencePreprocessor that
+    # emits one row per frame via output_loader="npys") is placed per frame by
+    # derived_path; a stacked SequencePreprocessor writes one file at the root.
+    if isinstance(preprocessor, SequencePreprocessor) and preprocessor.output_loader != "npys":
         first_path = (
             Path(dataset.root_dir)
             / preprocessor.output_key
@@ -120,6 +122,11 @@ def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:
 
 
 def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None:
+    if preprocessor.output_loader == "npys":
+        _run_sequence_per_frame(preprocessor, dataset, ext)
+        return
+
+    # Stacked output: a single {output_key}.{ext} file at the dataset root.
     result = _to_numpy(preprocessor.process(iter(dataset)))
     out = (
         dataset.root_dir / preprocessor.output_key / f"{preprocessor.output_key}.{ext}"
@@ -131,3 +138,40 @@ def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None
     if isinstance(parent_ts, dict):
         ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
         np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])
+
+
+def _run_sequence_per_frame(
+    preprocessor: SequencePreprocessor, dataset, ext: str
+) -> None:
+    """Per-frame output (output_loader="npys") from a sequence-level computation.
+
+    ``process()`` runs once per sequence -- so it never crosses a sequence
+    boundary -- and its rows are written one file per frame via ``derived_path``,
+    the same on-disk layout a FramePreprocessor produces.  That is what lets a
+    multi-sequence ProfiledDataset (e.g. Rellis) load the result back: a single
+    stacked file at the dataset root is invisible to per-sequence discovery.
+    """
+    writer = WRITERS[preprocessor.output_loader]()
+    # Per-sequence groups of global frame indices; datasets that do not expose a
+    # sequence structure are treated as one sequence.
+    groups = getattr(dataset, "_seq_groups", None) or {None: list(range(len(dataset)))}
+
+    for indices in groups.values():
+        frames = [dataset[i] for i in indices]
+        result = _to_numpy(preprocessor.process(iter(frames)))
+        if len(result) != len(indices):
+            raise ValueError(
+                f"{preprocessor.__class__.__name__}.process returned {len(result)} "
+                f"rows for a {len(indices)}-frame sequence; a per-frame "
+                f"(output_loader='npys') sequence preprocessor must return one row "
+                f"per input frame."
+            )
+        seq_timestamps: list = []
+        last_path = None
+        for row, idx, sample in zip(result, indices, frames):
+            last_path = dataset.derived_path(idx, preprocessor.output_key, ext)
+            writer.write(_to_numpy(row), last_path)
+            if sample.timestamp is not None:
+                seq_timestamps.append(sample.timestamp)
+        if seq_timestamps and last_path is not None:
+            np.savetxt(last_path.parent / "timestamps.txt", seq_timestamps)

@@ -13,7 +13,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from apairo import FramePreprocessor, Rellis3DDataset, TartanKittiDataset
+from apairo import (
+    FramePreprocessor,
+    Rellis3DDataset,
+    SequencePreprocessor,
+    TartanKittiDataset,
+)
 
 ASSETS = Path(__file__).parent.parent / "assets"
 
@@ -108,6 +113,38 @@ def test_rellis_derived_channel_split(rellis_root):
     # filter_split() reaches the same frames from the unsplit dataset.
     full = Rellis3DDataset(rellis_root, keys=["lidar", "trav_gt"])
     assert len(full.filter_split("train")) == 5
+
+
+def test_sequence_preprocessor_per_frame_multi_sequence(rellis_root):
+    """A per-frame SequencePreprocessor (output_loader='npys') runs once per
+    sequence and writes one file per frame, so a multi-sequence ProfiledDataset
+    loads it back. Regression: it used to write a single root-level stacked file,
+    invisible to per-sequence discovery (and crossing sequence boundaries).
+    """
+
+    class PositionInSequence(SequencePreprocessor):
+        # Emit each frame's index within its own sequence -- a sequence-global
+        # computation whose per-frame output resets to 0 at every boundary.
+        output_key = "seq_pos"
+        output_loader = "npys"
+        input_keys = ["lidar"]
+        timestamps_from = "lidar"
+        sources = ["lidar"]
+
+        def process(self, frames):
+            return np.arange(len(list(frames)), dtype=np.int64)
+
+    Rellis3DDataset(rellis_root, keys=["lidar"]).run_preprocess(PositionInSequence())
+
+    ds = Rellis3DDataset(rellis_root, keys=["lidar", "seq_pos"])
+    assert len(ds) == 10
+    pos = np.array([int(ds[i].data["seq_pos"]) for i in range(len(ds))])
+    # Per-sequence reset proves process() ran per sequence, not across the root.
+    np.testing.assert_array_equal(pos, [0, 1, 2, 3, 4, 0, 1, 2, 3, 4])
+
+    # And it loads under a split, frame-aligned with lidar.
+    train = Rellis3DDataset(rellis_root, keys=["lidar", "seq_pos"], split="train")
+    assert len(train) == 5
 
 
 # ------------------------------------------------------------------ Tartan (async)
