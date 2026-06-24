@@ -9,6 +9,7 @@ from . import abstract_loader
 from .utils.typing import _Key
 from .utils.exceptions import KeysEmptyError, KeysDuplicateError
 from .sample import Sample
+from .config import Calibration
 
 
 class AbstractDataset(ABC):
@@ -57,20 +58,14 @@ class AbstractDataset(ABC):
         return getattr(self, "timestamps", None) is None
 
     @property
-    def calibration(self) -> Dict[str, np.ndarray]:
-        """Sensor extrinsics for this dataset.
+    def calibration(self) -> Calibration:
+        """Sensor extrinsics for this dataset, as a :class:`~apairo.core.config.Calibration`.
 
-        Keys follow the convention ``"<from>_to_<to>"`` and values are 4x4
-        homogeneous transformation matrices (float64).  Returns an empty dict
-        when the dataset provides no calibration.
-
-        Override in a subclass to expose the dataset's calibration file::
-
-            @property
-            def calibration(self) -> dict[str, np.ndarray]:
-                return {"lidar_to_camera": self._load_calib()}
+        Keys follow ``"<parent>_to_<child>"`` and values are 4x4 float64 matrices.
+        Resolve any pair with ``ds.calibration.get_tf(source, target)``. Empty when
+        the dataset provides no calibration; override to expose a calibration file.
         """
-        return {}
+        return Calibration()
 
     def __iter__(self):
         for i in range(len(self)):

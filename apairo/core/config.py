@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import deque
 from pathlib import Path
 from typing import Optional
 import numpy as np
@@ -306,18 +307,74 @@ def alias_conflict(
     return _alias_conflict(channels, channel, alias, force=force)
 
 
-def read_calibration(root_dir: str | Path) -> dict[str, np.ndarray]:
-    """Static extrinsics from ``root_dir/.apairo/calibration.yaml``.
+def _invert_rigid(T: np.ndarray) -> np.ndarray:
+    """Exact inverse of a 4x4 rigid transform (transpose R, re-rotate t)."""
+    R, t = T[:3, :3], T[:3, 3]
+    out = np.eye(4)
+    out[:3, :3] = R.T
+    out[:3, 3] = -R.T @ t
+    return out
 
-    Returns ``{"<parent>_to_<child>": 4x4 float64 ndarray}`` (empty if absent).
-    apairo only *exposes* these transforms; it never applies them.
+
+class Calibration(dict):
+    """A dataset's static extrinsics: ``{"<parent>_to_<child>": (4,4) float64}``.
+
+    A plain ``dict`` (``cal["lidar_to_base"]`` and iteration work) that can also
+    *resolve* the transform between any two connected frames -- the one canonical
+    operation a static-transform graph supports. It resolves; applying the matrix
+    to data is the caller's job (e.g. ``apairo_transform.ApplyMatrix``), since that
+    depends on what the data is (points, poses, normals...).
+
+    Each edge ``"<parent>_to_<child>"`` is ``T_parent_from_child`` (ROS ``/tf``):
+    it maps a point in *child* coordinates into *parent*.
     """
+
+    def get_tf(self, source: str, target: str) -> np.ndarray:
+        """``T_target_from_source`` -- ``p_target = get_tf(source, target) @ p_source``.
+
+        Walks the undirected transform tree (composing edges and their rigid
+        inverses); identity when ``source == target``.
+
+        Raises:
+            KeyError: if no path connects them (the message lists the frames
+                reachable from *source*).
+            ValueError: if a key is not ``"<parent>_to_<child>"``.
+        """
+        if source == target:
+            return np.eye(4)
+        adj: dict[str, list[tuple[str, np.ndarray]]] = {}
+        for key, matrix in self.items():
+            parent, sep, child = key.partition("_to_")
+            if not sep:
+                raise ValueError(f"Calibration key {key!r} is not '<parent>_to_<child>'.")
+            T = np.asarray(matrix, dtype=np.float64)
+            adj.setdefault(child, []).append((parent, T))
+            adj.setdefault(parent, []).append((child, _invert_rigid(T)))
+        seen = {source}
+        queue: "deque[tuple[str, np.ndarray]]" = deque([(source, np.eye(4))])
+        while queue:
+            frame, T_frame_from_source = queue.popleft()
+            if frame == target:
+                return T_frame_from_source
+            for nxt, T_nxt_from_frame in adj.get(frame, ()):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    queue.append((nxt, T_nxt_from_frame @ T_frame_from_source))
+        raise KeyError(
+            f"No static-transform path from {source!r} to {target!r}. "
+            f"Reachable from {source!r}: {sorted(seen)}"
+        )
+
+
+def read_calibration(root_dir: str | Path) -> Calibration:
+    """Static extrinsics from ``root_dir/.apairo/calibration.yaml`` as a
+    :class:`Calibration` (empty if absent)."""
     path = Path(root_dir) / CONFIG_DIR / CALIBRATION_FILE
+    out = Calibration()
     if not path.exists():
-        return {}
+        return out
     with open(path) as f:
         data = yaml.safe_load(f) or {}
-    out: dict[str, np.ndarray] = {}
     for key, entry in (data.get("transforms") or {}).items():
         matrix = entry["matrix"] if isinstance(entry, dict) else entry
         out[key] = np.asarray(matrix, dtype=np.float64)

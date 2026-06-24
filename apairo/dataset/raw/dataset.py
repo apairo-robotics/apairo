@@ -45,6 +45,7 @@ import yaml
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
+    Calibration,
     config_exists,
     read_calibration,
     read_config,
@@ -252,12 +253,12 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         return self._name
 
     @property
-    def calibration(self) -> dict:
+    def calibration(self) -> Calibration:
         """Static extrinsics from ``.apairo/calibration.yaml`` (e.g. written from
         ``/tf_static``). On a root, sequences' tables are merged."""
         if not self._is_root:
             return read_calibration(self._sequence_dir)
-        merged: dict = {}
+        merged = Calibration()
         for seq in self._sequences:
             merged.update(read_calibration(seq._sequence_dir))
         return merged

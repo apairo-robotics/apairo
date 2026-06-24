@@ -78,9 +78,10 @@ generic (`RawDataset`) root.
 
 ## `calibration.yaml` (static extrinsics, optional)
 
-Time-independent transforms. apairo only **exposes** them (via
-`dataset.calibration` → `{"<parent>_to_<child>": 4x4 float64}`); it never applies
-them.
+Time-independent transforms. apairo **exposes** them (via `dataset.calibration` →
+`{"<parent>_to_<child>": 4x4 float64}`) and **resolves** any pair of connected
+frames with `dataset.calibration.get_tf(source, target)`; it never *applies* the
+result to data — that is `apairo_transform`'s job.
 
 ```yaml
 version: 1

@@ -7,6 +7,17 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`ds.calibration.get_tf(source, target)`** -- the static-transform tree is now
+  *resolved* in the core, not just exposed. `dataset.calibration` returns a
+  `Calibration` (a `dict` subclass, fully backward compatible) whose `get_tf`
+  walks the `"<parent>_to_<child>"` edges to return the 4x4 mapping a point from
+  `source` into `target` (`p_target = T @ p_source`), composing and inverting as
+  needed -- identity when the frames match, `KeyError` when no static path
+  connects them. Resolution has exactly one canonical form, so it belongs in the
+  core; *applying* the matrix to data (points vs poses vs normals) stays in
+  `apairo_transform`. The `frames` docs and schema page are updated accordingly.
+
 ## [0.3.0] - 2026-06-24
 
 ### Added
