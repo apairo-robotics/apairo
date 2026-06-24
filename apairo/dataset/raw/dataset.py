@@ -67,11 +67,12 @@ def _read_manifest(root: Path) -> dict:
 
 
 def _is_dataset_root(path: Path) -> bool:
-    """A root has a dataset manifest, or subdirectories that are sequences."""
+    """A root has a dataset manifest, or subdirectories that are sequences --
+    already initialised (``.apairo``) or a bare channel layout to bootstrap."""
     if (path / CONFIG_DIR / _MANIFEST_FILE).exists():
         return True
     return any(
-        config_exists(d)
+        config_exists(d) or RawDataset._is_sequence_layout(d)
         for d in path.iterdir()
         if d.is_dir() and not d.name.startswith(".")
     )
@@ -81,15 +82,15 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     r"""Generic ``channels.yaml``-driven dataset; single sequence or dataset root.
 
     Args:
-        directory: A sequence directory (has ``.apairo/channels.yaml``) **or** a
-            dataset root directory (has ``.apairo/dataset.yaml`` or sequence
-            subdirectories) -- auto-detected.
+        directory: A sequence directory or a dataset root directory --
+            auto-detected. A directory with no ``.apairo`` is bootstrapped on
+            load (loaders inferred from file extensions), so raw data works with
+            no manual :meth:`init`.
         keys: Channels to load. ``None`` -> every channel declared in
             ``channels.yaml``.
 
     Example::
 
-        RawDataset.init(seq_dir)                      # once: write .apairo
         ds = RawDataset(root, keys=["lidar", "imu"])  # whole dataset
         ds.run_preprocess(MyLabeler())                # persisted as a new channel
     """
@@ -101,18 +102,21 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     ) -> None:
         path = Path(directory)
 
-        if config_exists(path):
+        # A sequence loads directly; a bare channel layout (no .apairo) is
+        # bootstrapped on the spot, so raw data needs no manual init().
+        if config_exists(path) or self._is_sequence_layout(path):
             self._is_root = False
             self._sequence_dir = path
             self._name = path.name
+            if not config_exists(path):
+                self._load_or_create_config(path)
             super().__init__(path, keys=keys)
         elif _is_dataset_root(path):
             self._init_raw_root(path, keys)
         else:
             raise FileNotFoundError(
-                f"'{path}' is neither a sequence (no {CONFIG_DIR}/channels.yaml) nor a "
-                f"dataset root (no {CONFIG_DIR}/{_MANIFEST_FILE} and no sequence "
-                f"subdirectories). Initialize a sequence with RawDataset.init(<seq>)."
+                f"'{path}' is neither a sequence (no recognizable channel "
+                f"sub-directories) nor a dataset root (no sequence sub-directories)."
             )
 
     # ------------------------------------------------------------------ init
@@ -214,22 +218,25 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         manifest = _read_manifest(root)
         self._name = manifest.get("name", root.name)
 
+        def is_seq(d: Path) -> bool:  # initialised, or a bare layout to bootstrap
+            return config_exists(d) or self._is_sequence_layout(d)
+
         # Sequence order: manifest order if given, else sorted discovery.
         if manifest.get("sequences"):
-            seq_dirs = [
-                root / s for s in manifest["sequences"] if config_exists(root / s)
-            ]
+            seq_dirs = [root / s for s in manifest["sequences"] if is_seq(root / s)]
         else:
             seq_dirs = sorted(
                 d
                 for d in root.iterdir()
-                if d.is_dir() and not d.name.startswith(".") and config_exists(d)
+                if d.is_dir() and not d.name.startswith(".") and is_seq(d)
             )
         if not seq_dirs:
             raise FileNotFoundError(f"No sequences found under '{root}'.")
 
+        # type(self) so a profiled subclass (e.g. TartanKittiDataset) builds
+        # sequences of its own kind, keeping its channel profile.
         super()._init_root(
-            root, seq_dirs, lambda d: RawDataset(d, keys=keys), build_index=True
+            root, seq_dirs, lambda d: type(self)(d, keys=keys), build_index=True
         )
 
     # ------------------------------------------------------------------ hooks

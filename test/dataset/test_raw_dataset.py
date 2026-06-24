@@ -115,6 +115,30 @@ def test_single_sequence_keys_restrict(tmp_path):
     assert len(ds) == 3
 
 
+def test_timestamps_from_shares_source_clock(tmp_path):
+    """A derived channel with no own timestamps.txt borrows its source's clock via
+    ``timestamps_from`` -- even when the source is not among the loaded keys.
+
+    Regression: the shared async loader ignored ``timestamps_from`` (it only knew a
+    hardcoded replacement map), so a channel registered with
+    ``register_channel(..., timestamps_from=...)`` failed to load through RawDataset.
+    """
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)  # lidar (own ts) + imu
+
+    # A derived channel: per-frame files, no timestamps.txt of its own.
+    vox = seq / "voxel"
+    vox.mkdir()
+    for i in range(3):
+        np.save(vox / f"{i:06d}.npy", np.random.rand(2, 3))
+    RawDataset.register_channel(seq, "voxel", "npys", timestamps_from="lidar", sources=["lidar"])
+
+    ds = RawDataset(seq, keys=["voxel"])  # source "lidar" deliberately absent
+    assert len(ds) == 3
+    src = RawDataset(seq, keys=["lidar"])
+    np.testing.assert_array_equal(ds.timestamps["voxel"], src.timestamps["lidar"])
+
+
 # ───────────────────────────────── aliases ───────────────────────────────────
 
 def test_alias_exposes_channel_under_public_name(tmp_path):

@@ -25,6 +25,31 @@ All notable changes to apairo are documented here. The format is based on
   per-sequence tables. Datasets without an on-disk root (cached/concat views)
   return an empty `Calibration`.
 
+### Changed
+- **`RawDataset` bootstraps raw data on load** -- pointing it at a sequence or a
+  root that has no `.apairo` now infers the channels (loaders from file
+  extensions) and writes the sidecar on the spot, instead of raising and asking
+  for an explicit `RawDataset.init()`. `init()` still works and is the way to pin
+  loaders or a manifest up front; it is just no longer required to read raw data.
+- **`TartanKittiDataset` is now a thin `RawDataset` subclass** (247 -> 40 lines).
+  TartanDrive was always "a `RawDataset` whose channels are a fixed set", so the
+  class now *is* exactly that: it pins the TartanDrive profile (`available_keys`
+  plus a profile-pinned `_bootstrap_config`) and inherits all loading, root,
+  synchronization and preprocessing behaviour. Public usage
+  (`TartanKittiDataset(seq_or_root, keys=[...])`) is unchanged. The previously
+  documented lazy mode (`keys=None` -> no loaders, set `ds.keys` later) is gone:
+  `keys=None` now loads every present channel, the same as `RawDataset`.
+
+### Fixed
+- **`timestamps_from` is honored on the whole asynchronous family** -- a channel
+  declared with `register_channel(..., timestamps_from=...)` (a derived channel
+  with no `timestamps.txt` of its own) now loads through `RawDataset` and every
+  `AsyncLayoutDataset`, not just `TartanKittiDataset`. The shared loader used to
+  ignore the field and consult only a hardcoded replacement map, so such a channel
+  raised when loaded generically. Timestamp resolution (own file -> shared
+  `timestamps_from` source -> legacy map) now lives once in
+  `AsyncLayoutDataset._collect_timestamps`.
+
 ## [0.3.0] - 2026-06-24
 
 ### Added

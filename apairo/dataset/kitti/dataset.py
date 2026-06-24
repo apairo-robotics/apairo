@@ -92,19 +92,24 @@ class AsyncLayoutDataset(AbstractDataset):
     ) -> None:
         directory = Path(directory)
 
-        # alias_of: on-disk directory name -> public name it is exposed under
-        # (declared per channel in .apairo). Everything below is keyed by the
-        # public name; the directory name is only used to locate files on disk.
-        self._alias_of: Dict[str, str] = {}
+        # Channel metadata from .apairo (empty when a dataset_profile is passed
+        # and no sidecar exists). alias_of maps an on-disk directory name to the
+        # public name it is exposed under; timestamp_aliases maps a channel to the
+        # one it borrows its clock from (its `timestamps_from`). Everything below
+        # is keyed by the public name; the directory name only locates files.
+        channels = read_config(directory).get("channels", {}) if config_exists(directory) else {}
+        self._alias_of: Dict[str, str] = {
+            k: v["alias"] for k, v in channels.items() if v.get("alias")
+        }
+        self._timestamp_aliases: Dict[str, str] = {
+            self._public(k): self._resolve_key(v["timestamps_from"])
+            for k, v in channels.items()
+            if v.get("timestamps_from")
+        }
 
         if dataset_profile is not None:
             self._profile: Dict[str, str] = load_profile(dataset_profile)
-        elif config_exists(directory):
-            config = read_config(directory)
-            channels = config.get("channels", {})
-            self._alias_of = {
-                k: v["alias"] for k, v in channels.items() if v.get("alias")
-            }
+        elif channels:
             self._profile = {
                 self._public(k): v["loader"]
                 for k, v in channels.items()
@@ -291,10 +296,36 @@ class AsyncLayoutDataset(AbstractDataset):
             key: str_to_loader[self._profile[key]](self._files[key])
             for key in self._keys
         }
-        self.timestamps: Dict[str, np.ndarray] = loads_timestamps(
-            self._keys, self._files
-        )
+        self.timestamps: Dict[str, np.ndarray] = self._collect_timestamps()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
+
+    def _collect_timestamps(self) -> Dict[str, np.ndarray]:
+        """Timestamps per loaded key: its own ``timestamps.txt`` when present,
+        else the channel named by its ``timestamps_from`` (a derived channel
+        sharing its source's clock), else the legacy replacement map handled by
+        :func:`~apairo.loader.loads_timestamps`."""
+        timestamps: Dict[str, np.ndarray] = {}
+        fallback: List[str] = []
+        for key in self._keys:
+            ts_path = Path(self._files[key]) / "timestamps.txt"
+            if ts_path.exists():
+                timestamps[key] = np.loadtxt(ts_path)
+            elif key in self._timestamp_aliases:
+                src = self._timestamp_aliases[key]
+                if src not in timestamps:
+                    src_path = Path(self._files[src]) / "timestamps.txt"
+                    if not src_path.exists():
+                        raise ValueError(
+                            f"'{key}' shares timestamps with '{src}' (timestamps_from), "
+                            f"but '{src}' has no timestamps.txt."
+                        )
+                    timestamps[src] = np.loadtxt(src_path)
+                timestamps[key] = timestamps[src]
+            else:
+                fallback.append(key)
+        if fallback:
+            timestamps.update(loads_timestamps(fallback, self._files))
+        return timestamps
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
