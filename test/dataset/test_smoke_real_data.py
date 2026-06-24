@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from apairo import Rellis3DDataset, TartanKittiDataset
+from apairo import FramePreprocessor, Rellis3DDataset, TartanKittiDataset
 
 ASSETS = Path(__file__).parent.parent / "assets"
 
@@ -78,6 +78,36 @@ def test_rellis_chaining(rellis_root):
     assert 0 < len(view) <= 10
     sample = view[0]
     assert (sample.data["lidar"][:, 0] > 0).all()
+
+
+def test_rellis_derived_channel_split(rellis_root):
+    """A preprocessed (derived) channel loads correctly under an lst split.
+
+    Regression: _discover_derived used to apply the path-based split filter
+    unconditionally, so a derived channel (no split dir in its path) came back
+    empty under split="train" on lst-split datasets like Rellis.
+    """
+
+    class TravLabel(FramePreprocessor):
+        output_key = "trav_gt"
+        output_loader = "npys"
+        input_keys = ["labels"]
+        timestamps_from = "lidar"
+        sources = ["labels"]
+
+        def process(self, sample):
+            return (sample.data["labels"] > 0).astype(np.uint8)
+
+    Rellis3DDataset(rellis_root, keys=["lidar", "labels"]).run_preprocess(TravLabel())
+
+    ds = Rellis3DDataset(rellis_root, keys=["lidar", "trav_gt"], split="train")
+    assert len(ds) == 5  # train split, not the full 10 frames
+    sample = ds[0]
+    assert sample.data["trav_gt"].shape == sample.data["lidar"].shape[:1]
+
+    # filter_split() reaches the same frames from the unsplit dataset.
+    full = Rellis3DDataset(rellis_root, keys=["lidar", "trav_gt"])
+    assert len(full.filter_split("train")) == 5
 
 
 # ------------------------------------------------------------------ Tartan (async)

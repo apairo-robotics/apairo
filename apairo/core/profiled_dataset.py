@@ -624,12 +624,19 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             pattern = f"**/{key}/**/*.{ext}"
 
         files = sorted(self._root.glob(pattern))
+        # Directory-based splits live in the path (filter by it); lst-based splits
+        # have no split layer and are resolved by _frame_filter below -- mirror
+        # _discover_native so a derived channel splits the same way a native one does.
         if self._split_filter:
-            files = [
-                f
-                for f in files
-                if self._split_filter in f.relative_to(self._root).parts
-            ]
+            split_layer = next(
+                (layer for layer in self._layers if layer.type == "split"), None
+            )
+            if split_layer is not None:
+                files = [
+                    f
+                    for f in files
+                    if self._split_filter in f.relative_to(self._root).parts
+                ]
         if self._sequence_ids_filter is not None:
             files = [
                 f for f in files if self._seq_root(f).name in self._sequence_ids_filter
