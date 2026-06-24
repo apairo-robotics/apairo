@@ -107,6 +107,16 @@ def test_transform_chaining_returns_self(sample_ds):
     assert sample_ds.transform("lidar", lambda x: x) is sample_ds
 
 
+def test_transform_reversed_args_raises(sample_ds):
+    with pytest.raises(TypeError, match="reversed"):
+        sample_ds.transform(lambda x: x, "lidar")  # (fn, key) instead of (key, fn)
+
+
+def test_transform_key_without_fn_raises(sample_ds):
+    with pytest.raises(TypeError, match="callable"):
+        sample_ds.transform("lidar")  # forgot the function
+
+
 def test_transform_multi_channel_sync(sample_ds):
     def keep_first_row(s):
         s.data["lidar"]  = s.data["lidar"][:1]

@@ -126,9 +126,20 @@ class AbstractDataset(ABC):
             ``ds.select(ds.keys)``) and register transforms on each branch.
         """
         if fn is None:
+            if not callable(key_or_fn):
+                raise TypeError(
+                    f"transform(fn) expects a callable sample->sample; got "
+                    f"{key_or_fn!r}. For a per-channel transform use "
+                    f"transform(key, fn)."
+                )
             step = key_or_fn
         else:
             key = key_or_fn
+            if not isinstance(key, str) or not callable(fn):
+                raise TypeError(
+                    f"transform(key, fn) expects a channel name then a callable; "
+                    f"got transform({key_or_fn!r}, {fn!r}). Arguments reversed?"
+                )
             def step(sample: Sample, _key=key, _fn=fn, _out=output) -> Sample:
                 if _key in sample.data:
                     result = _fn(sample.data[_key])

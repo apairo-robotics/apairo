@@ -133,6 +133,12 @@ class SynchronizedView(AbstractDataset):
     @staticmethod
     def _resolve_strategies(method, keys: list[str]) -> dict[str, ChannelStrategy]:
         """Normalize *method* into one validated strategy per channel."""
+        if isinstance(method, (set, frozenset)):
+            raise TypeError(
+                f"method must be a single strategy or a dict {{channel: strategy}}, "
+                f"not a set -- did you write {{a, b}} instead of {{a: b}}? "
+                f"Got {method!r}."
+            )
         if isinstance(method, dict):
             unknown = set(method) - set(keys)
             if unknown:

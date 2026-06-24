@@ -64,6 +64,11 @@ All notable changes to apairo are documented here. The format is based on
   Built-in profiles (rellis, goose, semantic_kitti) updated.
 
 ### Changed
+- **`transform` and `synchronize` fail loud on misuse.** `transform(fn, "key")`
+  (arguments reversed) and `transform("key")` (missing function) now raise
+  `TypeError` instead of silently doing nothing, and `synchronize(method={a, b})`
+  (a `set` instead of `{a: b}`) raises with a clear hint. These were the two ways
+  a terse, correct-looking pipeline could quietly do nothing.
 - **`ProfiledDataset.describe()`** now returns a richer **structured** dict
   (identity, `sequences`, `splits`, `calibration`, and per-channel
   `loader`/`dir`/`present`) in addition to the existing `raw`/`preprocess` keys;

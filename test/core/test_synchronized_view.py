@@ -300,6 +300,11 @@ def test_interpolation_tolerance_applies_to_both_neighbours(async_ds):
     np.testing.assert_allclose(view.reference_timestamps, [0.0, 1.0])
 
 
+def test_method_set_raises(async_ds):
+    with pytest.raises(TypeError, match="not a set"):
+        async_ds.synchronize(method={"imu", LerpInterp()})  # set, not {imu: ...}
+
+
 def test_interpolated_frame_indices_and_offsets(async_ds):
     view = async_ds.synchronize(reference="lidar", method={"imu": LerpInterp()})
     assert view.frame_indices["imu"].shape == (4, 2)   # bracketing pairs
