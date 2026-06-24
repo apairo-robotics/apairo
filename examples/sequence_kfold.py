@@ -11,17 +11,39 @@ Pipeline:
   4. For each fold build train / val views with filter_sequences().
 """
 
+import os
 from pathlib import Path
 
 import numpy as np
-from torch.utils.data import DataLoader
 
-from apairo import Rellis3DDataset
+from apairo import Rellis3DDataset, FramePreprocessor
 
-ROOT       = Path("/data/RELLIS")
+ROOT       = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
 INDEX_DIR  = Path("./kfold_indices")
 K          = 5
 MIN_POS    = 200   # minimum traversable points to keep a frame
+
+_TRAVERSABLE_IDS = [1, 3, 10, 23, 31, 33]
+
+
+class TravLabel(FramePreprocessor):
+    """Ground-truth traversability from RELLIS semantic label IDs."""
+
+    output_key      = "trav_gt"
+    output_loader   = "npys"
+    input_keys      = ["labels"]
+    timestamps_from = "lidar"
+    sources         = ["labels"]
+
+    def process(self, sample) -> np.ndarray:
+        return np.isin(sample.data["labels"], _TRAVERSABLE_IDS).astype(np.uint8)
+
+
+# Persist trav_gt once; a later run reuses it (FileExistsError = already computed).
+try:
+    Rellis3DDataset(ROOT, keys=["lidar", "labels"]).run_preprocess(TravLabel())
+except FileExistsError:
+    pass
 
 INDEX_DIR.mkdir(exist_ok=True)
 filtered_idx_path = INDEX_DIR / "filtered_indices.npy"
@@ -65,7 +87,6 @@ for fold_idx, val_order in enumerate(folds):
         f"val {len(ds_val)} frames ({len(val_order)} seqs)"
     )
 
-    train_loader = DataLoader(ds_train, batch_size=4, shuffle=True)
-    val_loader   = DataLoader(ds_val,   batch_size=4, shuffle=False)
-
-    # ... model.fit(train_loader, val_loader) ...
+    # ds_train / ds_val are standard PyTorch datasets — wrap each in a DataLoader
+    # with your own collate_fn and run your training loop here:
+    #     model.fit(DataLoader(ds_train, ...), DataLoader(ds_val, ...))

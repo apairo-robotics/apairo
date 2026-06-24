@@ -12,6 +12,7 @@ everything before it is frozen in RAM, everything after runs fresh every access.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -106,7 +107,7 @@ def random_subsample(n: int):
 # Pipeline
 # ---------------------------------------------------------------------------
 
-root = Path("/data/RELLIS")
+root = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
 
 # Preprocess — run once, results stored in .apairo alongside the raw data
 ds_pre = Rellis3DDataset(root, keys=["lidar", "poses", "labels"])
@@ -132,9 +133,10 @@ ds_val_base = (
 ds_train = ds_train_base.transform(random_subsample(n=4096))  # stochastic
 ds_val   = ds_val_base.transform(random_subsample(n=4096))    # stochastic
 
-# Training — ds_train / ds_val are standard PyTorch datasets, plug in directly
+# Training — ds_train / ds_val are standard PyTorch datasets. Iterate them with
+# your own collate_fn (point clouds are ragged, so the default collate can't
+# stack them — pick padding or a list; see the README), then hand the loaders to
+# your trainer:  trainer = Trainer(model, train_loader, val_loader); trainer.fit()
 train_loader = DataLoader(ds_train, batch_size=4, shuffle=True)
 val_loader   = DataLoader(ds_val,   batch_size=4, shuffle=False)
-
-trainer = Trainer(model, train_loader, val_loader)
-trainer.fit(epochs=10)
+print(f"train frames: {len(ds_train)}  |  val frames: {len(ds_val)}")

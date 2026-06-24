@@ -1,11 +1,13 @@
 """Register and run a custom preprocessing pipeline on a TartanDrive sequence."""
 
+import os
+
 import numpy as np
 from apairo.preprocess import FramePreprocessor, SequencePreprocessor
 from apairo.dataset import TartanKittiDataset
 from apairo.core.sample import Sample
 
-SEQ_DIR = "/data/tartan/2024-01-01_forest"
+SEQ_DIR = os.environ.get("APAIRO_TARTAN_SEQ", "/data/tartan/2024-01-01_forest")
 
 
 # --- Frame-by-frame preprocessor (one output file per scan) ----------------

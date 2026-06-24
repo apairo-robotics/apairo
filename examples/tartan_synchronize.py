@@ -4,11 +4,13 @@ Each sensor fires at its own rate; synchronize() aligns them on a reference
 clock so every sample holds all channels — ready for a map-style DataLoader.
 """
 
+import os
+
 from apairo import TartanKittiDataset
 
-SEQ_DIR = "/data/tartan/2024-01-01_forest"
+SEQ_DIR = os.environ.get("APAIRO_TARTAN_SEQ", "/data/tartan/2024-01-01_forest")
 
-ds = TartanKittiDataset(SEQ_DIR, keys=["velodyne_0", "image_left", "cmd"])
+ds = TartanKittiDataset(SEQ_DIR, keys=["velodyne_0", "multisense_imu", "cmd"])
 print("Timeline events     :", len(ds))
 
 ds_sync = ds.synchronize(reference="velodyne_0", method="latest", tolerance=0.1)
