@@ -24,3 +24,6 @@ Makefile
 
 # Committed real-data fixtures for smoke tests (kept tiny on purpose)
 !test/assets/**
+
+# Benchmark plots are generated on demand (`bench.py --plot`), not committed
+benchmarks/*.png

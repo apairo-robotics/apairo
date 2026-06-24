@@ -22,7 +22,8 @@ mirroring the rosbag → kitti → `RawDataset` path. Generated trees are cached
 | 1000 | 19.9 | 19.8 | 1.00× | 0.03 | 0.01 | 0.000 | 0.2 |
 | 5000 | 20.9 | 19.2 | 1.09× | 0.12 | 0.05 | 0.000 | 0.2 |
 
-![Lazy view memory](view_memory.png)
+`--plot` writes `view_memory.png`: the filter view stays a few KB while the data
+it views climbs into the tens of MB.
 
 ## Access tax vs frame size (300 frames)
 
@@ -33,7 +34,8 @@ mirroring the rosbag → kitti → `RawDataset` path. Generated trees are cached
 | 4096 | 23.3 | 21.3 | 1.09× |
 | 16384 | 35.2 | 34.8 | 1.01× |
 
-![Per-frame access](access.png)
+`--plot` writes `access.png`: `apairo ds[i]` sits right on top of `np.load`, both
+rising with the frame size.
 
 ## Preprocess: compute once, reload free
 
