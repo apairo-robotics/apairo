@@ -143,7 +143,7 @@ RawDataset - my_dataset   (root, 2 sequences)
 sequences   seq_a, seq_b
 raw         imu (npy), lidar (npys)
 preprocess  trav_gt (npys)
-untracked   seq_a/segmentation   <- run `apairo add`
+untracked   seq_a/segmentation   <- run `apairo init` to register
 events      14
 issues      none
 ```
@@ -202,7 +202,7 @@ channel       kind        loader  frames  rate     span         shape
 imu           raw         npy     200     20.0 Hz  0.00-9.95s   (6) float64
 lidar         raw         npys    100     10.0 Hz  0.03-9.93s   (4, 3) float32
 trav_gt       preprocess  npys    100     10.0 Hz  0.03-9.93s   (1,) uint8   <- from lidar
-segmentation  untracked   npys     98      -          -         (2, 2) uint8 <- run `apairo add`
+segmentation  untracked   npys     98      -          -         (2, 2) uint8 <- run `apairo init`
 events      400
 issues      none
 ```
@@ -297,6 +297,28 @@ or `RawDataset.register_raw_channel(seq_dir, channel, loader, alias=...)`.
 
 ---
 
+## `apairo check`
+
+Validate a dataset's `.apairo` sidecars against the [version-1
+schema](datasets/apairo-schema.md) and report any issues. Exits non-zero when
+there is at least one issue, so it drops straight into CI.
+
+```bash
+apairo check [PATH] [--json]
+```
+
+```text
+$ apairo check /data/my_dataset
+OK -- no issues
+```
+
+It is profile-aware (the same reading as `status`) and covers all three files:
+`channels.yaml`, the optional `dataset.yaml` manifest, and the optional
+`calibration.yaml`. Validation is tolerant -- an unknown field is reported as a
+warning, not a hard error.
+
+---
+
 ## The `.apairo` layout
 
 Both commands read and write the same on-disk convention:
@@ -320,7 +342,7 @@ profile.
 This is exactly what [`RawDataset`](async-datasets.md#rawdataset) loads, so
 `init` -> `status` -> load is one coherent workflow.
 
-!!! note "Planned commands"
-    `apairo add` (register an untracked channel) and `apairo check` (consistency
-    check, non-zero exit on problems) are planned follow-ups. `status` already
-    surfaces the untracked channels that `add` will act on.
+!!! note "`apairo add`"
+    `apairo add` (register an untracked channel) is deferred to post-1.0.
+    `status` surfaces the untracked channels, and re-running `apairo init` (or
+    `register_raw_channel` / `register_channel` from Python) registers them.

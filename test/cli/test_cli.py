@@ -111,6 +111,40 @@ def test_status_not_a_dataset(tmp_path):
     assert _run(["status", str(empty)]) == 1
 
 
+# ── check ─────────────────────────────────────────────────────────────────────
+
+def test_check_clean_root(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    rc = _run(["check", str(raw_root), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert data == {"ok": True, "issues": []}
+
+
+def test_check_not_a_dataset(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _run(["check", str(empty)]) == 1
+
+
+def test_check_reports_bad_calibration(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    (raw_root / "seq_a" / ".apairo" / "calibration.yaml").write_text(
+        "version: 1\n"
+        "transforms:\n"
+        "  a_to_b:\n"
+        "    parent: a\n"
+        "    child: b\n"
+        "    matrix: [1, 2, 3]\n"
+    )
+    capsys.readouterr()
+    rc = _run(["check", str(raw_root), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert any("not 4x4" in i for i in data["issues"])
+
+
 # ── profiled datasets (init --as <Class>) ─────────────────────────────────────
 
 

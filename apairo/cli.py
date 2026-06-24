@@ -9,8 +9,13 @@ familiar terminal/git verbs:
                        tracked channels, channels detected on disk but not yet
                        registered ("untracked"), event count, and config issues.
 
-``add`` (register an untracked channel) and ``check`` (consistency check) are
-planned follow-ups; ``status`` already surfaces what ``add`` will act on.
+* ``apairo check``  -- validate the ``.apairo`` schema (channels, manifest,
+                       calibration) and report issues; exit 1 if any.
+
+``add`` (register an untracked channel) is deferred to post-1.0: ``status``
+already surfaces the untracked channels it would act on, and they can be
+registered today from Python (``register_raw_channel`` / ``register_channel``)
+or by re-running ``apairo init`` (which re-scans and merges).
 """
 from __future__ import annotations
 
@@ -29,7 +34,9 @@ from apairo.core.config import (
     read_config,
     read_manifest,
     set_alias,
+    verify_calibration,
     verify_config,
+    verify_manifest,
 )
 from apairo.dataset.kitti.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
@@ -365,7 +372,7 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "-"
         span = f"{c['span'][0] - ref:.2f}-{c['span'][1] - ref:.2f}s" if c["span"] else "-"
         if c["kind"] == "untracked":
-            note = "<- run `apairo add`"
+            note = "<- run `apairo init`"
         elif c.get("transform"):
             tf = c["transform"]
             note = f"<- tf {tf.get('parent')}->{tf.get('child')}"
@@ -404,7 +411,7 @@ def _print_status(s: dict, show_tf: bool = False) -> None:
             shown = ", ".join(f"{real} as {alias}" for real, alias in sorted(s["aliases"].items()))
             print(f"aliases     {shown}")
         if s["untracked"]:
-            print(f"untracked   {', '.join(s['untracked'])}   <- run `apairo add`")
+            print(f"untracked   {', '.join(s['untracked'])}   <- run `apairo init` to register")
         n_tf = len(s.get("tf", {}))
         if show_tf and s.get("tf"):
             print(f"tf          {_fmt_channels(s['tf'])}")
@@ -462,6 +469,49 @@ def cmd_status(args: argparse.Namespace) -> int:
     else:
         _print_status(status, show_tf=args.show_tf)
     return 0
+
+
+# ── check ─────────────────────────────────────────────────────────────────────
+
+def _check_issues(path: Path) -> Optional[list[str]]:
+    """All version-1 schema / consistency issues for a dataset, or ``None`` if
+    *path* is not an apairo dataset.
+
+    Reuses the (profile-aware) ``status`` reading to validate channels, then adds
+    the optional manifest and calibration files."""
+    status = _build_status(path)
+    if status is None:
+        return None
+    issues = list(status.get("issues", []))
+    issues += verify_manifest(path)
+    issues += verify_calibration(path)
+    # Generic roots can carry per-sequence calibration; profiled roots keep it at
+    # the root (covered above) and expose no generic sequence dirs here.
+    if status.get("kind") == "root":
+        for d in _sequence_dirs(path):
+            issues += [f"{d.name}: {i}" for i in verify_calibration(d)]
+    return issues
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    path = Path(args.path).expanduser()
+    if not path.is_dir():
+        print(f"Not a directory: {path}", file=sys.stderr)
+        return 2
+    issues = _check_issues(path)
+    if issues is None:
+        print(f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
+              f"Run `apairo init` to set it up.", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps({"ok": not issues, "issues": issues}, indent=2, sort_keys=True))
+    elif not issues:
+        print("OK -- no issues")
+    else:
+        print(f"{len(issues)} issue{'s' if len(issues) != 1 else ''}:")
+        for issue in issues:
+            print(f"  - {issue}")
+    return 1 if issues else 0
 
 
 # ── init ────────────────────────────────────────────────────────────────────
@@ -630,6 +680,13 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
                           help="include the transform layer: static calibration and "
                                "dynamic tf channels (hidden by default)")
 
+    p_check = sub.add_parser(
+        "check",
+        help="validate the .apairo schema (channels / manifest / calibration); exit 1 on any issue",
+    )
+    _add_common(p_check)
+    p_check.add_argument("--json", action="store_true", help="machine-readable output")
+
     p_alias = sub.add_parser(
         "alias",
         help="expose a channel under a clean public name (e.g. ouster_points as lidar)",
@@ -659,7 +716,12 @@ def main(argv: Optional[list[str]] = None) -> None:
         raise SystemExit(result if isinstance(result, int) else 0)
 
     args = _build_parser(set(plugins)).parse_args(argv)
-    handler = {"init": cmd_init, "status": cmd_status, "alias": cmd_alias}[args.command]
+    handler = {
+        "init": cmd_init,
+        "status": cmd_status,
+        "check": cmd_check,
+        "alias": cmd_alias,
+    }[args.command]
     sys.exit(handler(args))
 
 

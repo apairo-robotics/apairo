@@ -8,6 +8,11 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`apairo check`** -- validates the `.apairo` schema (channels, manifest,
+  calibration) and reports issues, exiting non-zero on any (CI-friendly). It is
+  profile-aware (same reading as `status`) and consumes `verify_config` /
+  `verify_manifest` / `verify_calibration`. (`apairo add` stays deferred to
+  post-1.0.)
 - **`.apairo` schema frozen & documented as `version: 1`** -- a dedicated docs
   page ("The .apairo Schema") specifies `channels.yaml`, `dataset.yaml` and
   `calibration.yaml` as a stable on-disk contract. `dataset.yaml` now carries
@@ -95,8 +100,10 @@ All notable changes to apairo are documented here. The format is based on
   `AsyncLayoutDataset` demoted to an internal base class; no pending renames.
 - [x] **Freeze & document the `.apairo` schema** (`channels.yaml`,
   `dataset.yaml`, `calibration.yaml`) as a stable `version: 1` contract.
-- [ ] **Settle the CLI** — ship or explicitly defer `apairo add` / `apairo check`;
-  lock `init` / `status` / ecosystem dispatch.
+- [x] **Settle the CLI** — `apairo check` shipped; `apairo add` deferred to
+  post-1.0 (`status` already surfaces untracked channels, and they register from
+  Python or by re-running `init`). `init` / `status` / `alias` / ecosystem
+  dispatch locked.
 - [ ] **Decide Zarr's scope** (in or out of 1.0).
 - [ ] **Soak** on real datasets + the ecosystem roundtrip
   (extractor → apairo → transform / preprocess).
