@@ -6,8 +6,7 @@ importing it. So every example is compile-checked, and the ones with a mini
 fixture (Rellis-3D, TartanDrive) are executed end-to-end as subprocesses with the
 dataset root injected via an environment variable.
 
-Examples without a fixture (Goose / MNT / cross-dataset, and the torch+SequencePreprocessor
-training pipeline) are compile-checked only -- see the module docstrings there.
+Examples without a fixture (Goose / MNT / cross-dataset) are compile-checked only.
 """
 
 import os
@@ -25,7 +24,11 @@ ASSETS = Path(__file__).parent / "assets"
 ALL_EXAMPLES = sorted(p.name for p in EXAMPLES.glob("*.py"))
 
 # Executed end-to-end against the mini fixtures (root injected via env var).
-RELLIS_EXAMPLES = ["join_cached_prior.py", "sequence_kfold.py"]
+RELLIS_EXAMPLES = [
+    "join_cached_prior.py",
+    "sequence_kfold.py",
+    "training_pipeline_rellis.py",
+]
 TARTAN_EXAMPLES = [
     "tartan_kitti_basic.py",
     "tartan_synchronize.py",
