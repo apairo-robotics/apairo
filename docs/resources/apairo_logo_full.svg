@@ -1,0 +1,53 @@
+<svg viewBox="5 95 700 545" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="apairo logo">
+  <title>apairo</title>
+
+  <!-- ===================== PICTOGRAM: two clinking databases ===================== -->
+
+  <!-- clink spark -->
+  <g stroke="#6B7A88" stroke-width="5" stroke-linecap="round">
+    <line x1="355" y1="168" x2="355" y2="132"/>
+    <line x1="342" y1="172" x2="329" y2="144"/>
+    <line x1="368" y1="172" x2="381" y2="144"/>
+  </g>
+
+  <!-- LEFT database (charbon) -->
+  <g transform="translate(291,250) rotate(14)" fill="none" stroke="#2E3A48" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="0" cy="-70" rx="46" ry="15"/>
+    <line x1="-46" y1="-70" x2="-46" y2="70"/>
+    <line x1="46" y1="-70" x2="46" y2="70"/>
+    <path d="M-46,-23 a46,15 0 0,0 92,0"/>
+    <path d="M-46,24 a46,15 0 0,0 92,0"/>
+    <path d="M-46,70 a46,15 0 0,0 92,0"/>
+  </g>
+
+  <!-- RIGHT database (ocre) -->
+  <g transform="translate(419,250) rotate(-14)" fill="none" stroke="#DDA42A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="0" cy="-70" rx="46" ry="15"/>
+    <line x1="-46" y1="-70" x2="-46" y2="70"/>
+    <line x1="46" y1="-70" x2="46" y2="70"/>
+    <path d="M-46,-23 a46,15 0 0,0 92,0"/>
+    <path d="M-46,24 a46,15 0 0,0 92,0"/>
+    <path d="M-46,70 a46,15 0 0,0 92,0"/>
+  </g>
+
+  <!-- ===================== WORDMARK: apairo (geometric monoline) ===================== -->
+  <g transform="translate(0,520)" fill="none" stroke="#2E3A48" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- a -->
+    <circle cx="110" cy="-50" r="50"/>
+    <line x1="160" y1="-100" x2="160" y2="0"/>
+    <!-- p -->
+    <circle cx="244" cy="-50" r="50"/>
+    <line x1="194" y1="-100" x2="194" y2="50"/>
+    <!-- a -->
+    <circle cx="378" cy="-50" r="50"/>
+    <line x1="428" y1="-100" x2="428" y2="0"/>
+    <!-- i -->
+    <line x1="462" y1="-100" x2="462" y2="0"/>
+    <circle cx="462" cy="-122" r="5" fill="#2E3A48" stroke="none"/>
+    <!-- r -->
+    <line x1="496" y1="-100" x2="496" y2="0"/>
+    <path d="M496,-72 Q496,-100 524,-100"/>
+    <!-- o -->
+    <circle cx="600" cy="-50" r="50"/>
+  </g>
+</svg>

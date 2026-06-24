@@ -1,4 +1,6 @@
-# apairo
+<p align="center">
+  <img src="docs/resources/apairo_logo_full.svg" alt="apairo" width="380">
+</p>
 
 Unified Python loader for robotics sensor datasets — one API across synchronous and asynchronous layouts, with built-in preprocessing, filtering, and dataset composition.
 

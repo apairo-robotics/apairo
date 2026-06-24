@@ -6,6 +6,8 @@ repo_name: apairo-robotics/apairo
 
 theme:
   name: material
+  logo: resources/apairo_mark.svg
+  favicon: resources/apairo_mark.svg
   palette:
     - scheme: default
       primary: indigo
