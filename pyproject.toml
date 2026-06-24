@@ -39,6 +39,7 @@ Issues = "https://github.com/apairo-robotics/apairo/issues"
 [project.optional-dependencies]
 vision = ["Pillow"]
 zarr = ["zarr>=3.0"]
+bench = ["matplotlib"]
 dev = ["pytest", "Pillow", "zarr>=3.0", "ruff"]
 docs = [
     "mkdocs>=1.6",
