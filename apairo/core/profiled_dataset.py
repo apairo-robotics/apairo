@@ -480,12 +480,28 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         config = self._load_or_create_config(self._root)
         channels: dict = config.get("channels", {})
 
+        # Aliases: a channel may expose a public ``alias``; requests and
+        # ``sample.data`` speak the alias, while file discovery and the profile
+        # keep the real channel name. ``to_real`` inverts the table so a
+        # requested alias resolves to the directory that backs it. This unifies
+        # channel naming across heterogeneous datasets in a single pipeline.
+        self._alias_of: dict[str, str] = {
+            k: v["alias"] for k, v in channels.items() if v.get("alias")
+        }
+        to_real = {alias: real for real, alias in self._alias_of.items()}
+
         if keys is None:
             keys = [
                 k
                 for k, v in channels.items()
                 if v.get("kind", "raw") == "raw" and not self._modalities[k].optional
             ]
+
+        # Normalize each requested key (alias *or* real name) to its real
+        # channel name, and remember the public name it is exposed under so the
+        # loaders and ``sample.data`` speak the request's language.
+        keys = [to_real.get(k, k) for k in keys]
+        self._public_of: dict[str, str] = {k: self._alias_of.get(k, k) for k in keys}
 
         # Classify each requested key.
         raw_keys: list[str] = []
@@ -617,12 +633,18 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 seq_paths, reshape=None, reader=np.load
             )
 
+        # Expose loaders and keys under their public (alias) name; file
+        # discovery, the profile and ``_ref_key`` stay on the real channel name
+        # internally (so ``self._files``/``derived_path`` keep locating files).
+        loaded_real = [k for k in keys if k in self._loaders]
+        self._loaders = {self._public_of[k]: v for k, v in self._loaders.items()}
+
         # Every channel must now expose the same number of selected frames.
         frame_counts = {k: len(v) for k, v in self._loaders.items()}
         if len(set(frame_counts.values())) > 1:
             raise ValueError(f"Mismatched frame counts per key: {frame_counts}")
 
-        self._set_keys([k for k in keys if k in self._loaders])
+        self._set_keys([self._public_of[k] for k in loaded_real])
 
     def _seq_root(self, path: Path) -> Path:
         d = path
@@ -664,7 +686,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         """Modality-depth directories on disk that are neither a mapped raw
         channel nor already declared -- i.e. likely preprocessed channels apairo
         has not been told about.  Report-only helper for :meth:`unregistered_channels`."""
-        from apairo.dataset.kitti.dataset import _detect_loader  # local: avoid import cycle
+        from apairo.dataset.async_layout.dataset import _detect_loader  # local: avoid import cycle
 
         declared = set(config.get("channels", {}))
         raw_dirs = {self._mapped_name(k) for k in self.available_keys}

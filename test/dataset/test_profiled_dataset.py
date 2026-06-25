@@ -522,3 +522,54 @@ def test_frame_sequence_ids_with_filter(kitti_root):
     assert len(ds_train) == 4
     assert len(ds_val)   == 4
     assert len(ds_train) + len(ds_val) == len(view)
+
+
+# ──────────────────────────── aliases on a profile ───────────────────────────
+# Aliases were a RawDataset-only feature; ProfiledDataset ignored the `alias`
+# field and raised KeyError on a request by alias. These pin the parity: a
+# profiled dataset now honours aliases too, so channel names can be unified
+# across heterogeneous datasets in one pipeline.
+
+def test_profiled_alias_request_by_alias(goose_root):
+    from apairo.core.config import set_alias
+
+    _GooseDS(goose_root, keys=["lidar"])      # bootstraps .apairo/channels.yaml
+    set_alias(goose_root, "lidar", "points")  # expose lidar as 'points'
+
+    ds = _GooseDS(goose_root, keys=["points", "labels"])
+    assert len(ds) == 6
+    assert set(ds[0].data) == {"points", "labels"}   # exposed under the alias
+    assert "lidar" not in ds[0].data
+    assert ds.keys == ["points", "labels"]
+
+
+def test_profiled_alias_request_by_real_name_still_resolves(goose_root):
+    from apairo.core.config import set_alias
+
+    _GooseDS(goose_root, keys=["lidar"])
+    set_alias(goose_root, "lidar", "points")
+
+    # Asking by the on-disk/profile name works, but the channel is exposed as the alias.
+    ds = _GooseDS(goose_root, keys=["lidar"])
+    assert set(ds[0].data) == {"points"}
+
+
+def test_profiled_alias_default_keys_use_public_name(goose_root):
+    from apairo.core.config import set_alias
+
+    _GooseDS(goose_root, keys=["lidar"])
+    set_alias(goose_root, "lidar", "points")
+
+    ds = _GooseDS(goose_root)  # keys=None -> defaults exposed under the alias
+    assert "points" in ds.keys and "lidar" not in ds.keys
+
+
+def test_profiled_alias_survives_split(goose_root):
+    from apairo.core.config import set_alias
+
+    _GooseDS(goose_root, keys=["lidar", "labels"])
+    set_alias(goose_root, "lidar", "points")
+
+    ds = _GooseDS(goose_root, keys=["points", "labels"])
+    ds_train = ds.split("train")  # round-trips keys (aliases) through the constructor
+    assert set(ds_train[0].data) == {"points", "labels"}

@@ -211,11 +211,12 @@ def set_alias(
     """Set (or clear) the public alias of a raw channel in ``channels.yaml``.
 
     An alias is the name the channel is exposed under at load time: the on-disk
-    directory keeps its real name, but ``RawDataset(root, keys=[alias])`` loads
-    it and ``sample.data[alias]`` returns it. This brings the profile-free
-    :class:`~apairo.dataset.raw.RawDataset` the canonical-naming ergonomics that
-    profiled datasets get from their layout -- naming lives in ``.apairo``, not
-    in the call site.
+    directory keeps its real name, but ``Dataset(root, keys=[alias])`` loads it
+    and ``sample.data[alias]`` returns it. Honoured by both
+    :class:`~apairo.dataset.raw.RawDataset` and
+    :class:`~apairo.core.profiled_dataset.ProfiledDataset`, so channel names can
+    be unified across heterogeneous datasets in one pipeline -- naming lives in
+    ``.apairo``, not in the call site.
 
     Args:
         root_dir: Sequence directory holding ``.apairo/channels.yaml``.
