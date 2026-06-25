@@ -21,6 +21,7 @@ from apairo.core.config import (
     read_calibration,
     read_config,
     read_manifest,
+    remove_channel as _remove_channel,
     write_config,
     write_manifest,
 )
@@ -407,6 +408,52 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         root = Path(directory)
         config = read_config(root) if config_exists(root) else {"channels": {}}
         return self._preprocessed_candidates(root, config)
+
+    @classmethod
+    def remove_channel(
+        cls, directory: str | Path, key: str, *, data: bool = False
+    ) -> dict:
+        """Remove a channel, profile-aware (overrides
+        :meth:`ConfigurableDataset.remove_channel`).
+
+        A profiled dataset keeps a single ``channels.yaml`` at the root but stores
+        each channel's data **per sequence** (e.g. ``Rellis-3D/<seq>/<modality>``),
+        so the generic ``root/key`` deletion would miss the sequence directories.
+        This drops the (root) declaration and, with ``data=True``, deletes the
+        channel's storage in *every* sequence the profile spans.
+
+        Args:
+            directory: Dataset root directory.
+            key: Channel name to remove (the profile's canonical name).
+            data: Also delete the channel's per-sequence data (destructive).
+        """
+        entry = _remove_channel(directory, key, data=False)
+        if data:
+            import shutil
+
+            self = cls.__new__(cls)
+            self._load_profile(directory)
+            for target in self._channel_storage(key):
+                if target.is_dir():
+                    shutil.rmtree(target, ignore_errors=True)
+                elif target.exists():
+                    target.unlink()
+        return entry
+
+    def _channel_storage(self, key: str) -> list[Path]:
+        """The channel's on-disk storage across all sequences: the per-sequence
+        modality directories (per-frame channels) or the per-sequence stacked
+        files (sequence-file channels). Profile geometry only -- safe on a
+        partially-built instance."""
+        spec = self._modalities[key]
+        mapped = self._mapped_name(key)
+        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        base = self._root / Path(*fixed_parts) if fixed_parts else self._root
+        if not base.is_dir():
+            return []
+        if spec.is_sequence_file:
+            return sorted(base.glob(f"**/{mapped}{spec.ext}"))
+        return sorted(d for d in base.glob(f"**/{mapped}") if d.is_dir())
 
     @classmethod
     def inventory(cls, directory: str | Path) -> dict:

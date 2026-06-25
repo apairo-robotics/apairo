@@ -535,3 +535,16 @@ def test_channel_remove_warns_on_dependents(raw_root, capsys):
     _run(["channel", "remove", "lidar", "--path", str(raw_root), "--yes"])
     err = capsys.readouterr().err
     assert "still referenced by labels" in err
+
+
+def test_channel_remove_profiled_purge_cascades(rellis_root):
+    # A profiled dataset: one root channels.yaml, data per sequence. --purge must
+    # delete every sequence's modality directory, not just <root>/lidar.
+    _run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    seq_dirs = sorted((rellis_root / "Rellis-3D").glob("*/os1_cloud_node_kitti_bin"))
+    assert len(seq_dirs) == 2
+
+    assert _run(["channel", "remove", "lidar", "--path", str(rellis_root),
+                 "--purge", "--yes"]) == 0
+    assert "lidar" not in read_config(rellis_root)["channels"]
+    assert not any(d.exists() for d in seq_dirs)

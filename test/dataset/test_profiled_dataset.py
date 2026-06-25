@@ -553,3 +553,31 @@ def test_profiled_alias_survives_split(goose_root):
     ds = _GooseDS(goose_root, keys=["points", "labels"])
     ds_train = ds.split("train")  # round-trips keys (aliases) through the constructor
     assert set(ds_train[0].data) == {"points", "labels"}
+
+
+# ──────────────── remove_channel cascades per-sequence (profiled) ─────────────
+# A profiled dataset keeps one root channels.yaml but stores data per sequence,
+# so --purge/data=True must reach every sequence's modality directory -- the
+# generic root/key deletion would miss them.
+
+def test_profiled_remove_channel_data_cascades_to_sequences(rellis_root):
+    _RellisDS(rellis_root, keys=["lidar"])  # bootstraps the root .apairo
+    seq_dirs = sorted((rellis_root / "Rellis-3D").glob("*/os1_cloud_node_kitti_bin"))
+    assert len(seq_dirs) == 2 and all(d.is_dir() for d in seq_dirs)
+
+    _RellisDS.remove_channel(rellis_root, "lidar", data=True)
+
+    from apairo.core.config import read_config
+    assert "lidar" not in read_config(rellis_root)["channels"]
+    assert not any(d.exists() for d in seq_dirs)   # every sequence's data gone
+
+
+def test_profiled_remove_channel_config_only_keeps_data(rellis_root):
+    _RellisDS(rellis_root, keys=["lidar"])
+    seq_dirs = sorted((rellis_root / "Rellis-3D").glob("*/os1_cloud_node_kitti_bin"))
+
+    _RellisDS.remove_channel(rellis_root, "lidar")  # config-only (default)
+
+    from apairo.core.config import read_config
+    assert "lidar" not in read_config(rellis_root)["channels"]
+    assert all(d.is_dir() for d in seq_dirs)        # data untouched

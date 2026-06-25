@@ -316,7 +316,9 @@ apairo channel remove old_labels --path /data/barakuda --purge  # + delete data
 ```
 
 It is **root-aware**: pointed at a dataset root, it removes the channel from
-every sequence that declares it.
+every sequence that declares it. For a *profiled* dataset (one root
+`channels.yaml`, data stored per sequence) `--purge` cascades to every
+sequence's modality directory.
 
 Removing a **raw** (source) channel, or passing `--purge`, is hard to undo, so
 the command warns and asks for confirmation; pass `--yes` to skip the prompt.

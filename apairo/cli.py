@@ -658,6 +658,14 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 1
 
+    # A profiled dataset keeps one root channels.yaml but stores data per
+    # sequence; its own remove_channel cascades --purge across the sequences,
+    # which the generic root/key deletion cannot reach.
+    profiled = _profiled_status_class(path)
+    where = ("the dataset" if profiled is not None
+             else "1 sequence" if len(targets) == 1
+             else f"{len(targets)} sequences")
+
     # Across every target: is it raw anywhere, and what still depends on it?
     is_raw = False
     dependents: set[str] = set()
@@ -681,7 +689,6 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
               file=sys.stderr)
 
     if (is_raw or args.purge) and not args.yes:
-        where = "1 sequence" if len(targets) == 1 else f"{len(targets)} sequences"
         verb = "Remove and delete data for" if args.purge else "Remove"
         try:
             resp = input(f"{verb} '{args.channel}' in {where}? [y/N] ")
@@ -691,12 +698,14 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
             print("aborted")
             return 1
 
-    for seq in targets:
-        remove_channel(seq, args.channel, data=args.purge)
+    if profiled is not None:
+        profiled.remove_channel(path, args.channel, data=args.purge)
+    else:
+        for seq in targets:
+            remove_channel(seq, args.channel, data=args.purge)
 
-    where = "1 sequence" if len(targets) == 1 else f"{len(targets)} sequences"
     suffix = " (data deleted)" if args.purge else ""
-    print(f"removed channel '{args.channel}' ({where}){suffix}")
+    print(f"removed channel '{args.channel}' from {where}{suffix}")
     return 0
 
 

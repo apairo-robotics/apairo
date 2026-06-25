@@ -285,7 +285,10 @@ def remove_channel(root_dir: str | Path, channel: str, *, data: bool = False) ->
         root_dir: Dataset root (or sequence) directory.
         channel: The channel's declared name (its on-disk directory name).
         data: Also delete the channel's directory (``root_dir/channel``) from
-            disk. The raw/preprocessed files are gone for good.
+            disk. The raw/preprocessed files are gone for good. Note this deletes
+            only ``root_dir/channel``; a *profiled* dataset stores data per
+            sequence, so use :meth:`ProfiledDataset.remove_channel` (which
+            cascades across sequences) rather than this primitive there.
 
     Returns:
         The removed channel's metadata entry -- so a caller can tell whether it
