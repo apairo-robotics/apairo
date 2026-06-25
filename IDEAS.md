@@ -41,3 +41,26 @@ Open design questions, by priority:
 
 Placement: apairo core — view + persistence mechanism in `.apairo`, in the
 direct lineage of `filter`/`synchronize`. No satellite covers view persistence.
+
+## Aggregating synchronize: N events per tick, not one
+
+Today the matcher is one event per reference tick (`idx.shape == ref_ts.shape`),
+so a fast channel under a slow clock is decimated — `"latest"` keeps 1 IMU
+sample of 20 between two lidar ticks and drops the rest. The natural extension is
+an *aggregating* match mode that returns, per tick, **all** events in the
+interval `(t_prev, t_ref]` (optionally capped: at most `n`, or within a window
+`w`), so a frame holds `{"imu": [the 20 samples], "lidar": scan}`.
+
+This stays squarely synchronize's job — it's still clock-driven rate
+reconciliation, just with cardinality `N` instead of `1`. Two consequences:
+
+- The matcher return goes **ragged** (a list of index arrays, not one `(N,)`
+  array) → a second assembly path in `_load`.
+- The sample becomes ragged (`data["imu"]` is a variable-length list), which
+  violates numpy-in/out. So it **always** needs a downstream reducer to collapse
+  `list[ndarray] -> ndarray` (stack / pad / concat). That reducer is a satellite
+  policy (`apairo_transform`), not core — same split as `window()`'s reducer.
+
+Not needed for current work — parked here. Distinct from `window()`: this is
+async multi-rate accumulation on a clock; `window()` is index-driven
+same-sensor neighbourhoods on an already-ordered (often synchronous) dataset.

@@ -7,6 +7,19 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`ds.window(size, stride=1, reduce=, boundary="clip")` -- temporal windowing
+  as a lazy view.** Groups each frame with its `size - 1` causal neighbours
+  (spaced `stride`), ordered oldest -> newest, and reduces them to one sample via
+  the required `reduce` callable (`list[Sample] -> Sample`). Membership is index
+  arithmetic computed at construction; windows never cross a sequence boundary
+  (`frame_sequence_ids`, with a single-sequence fallback when absent, e.g. after
+  `synchronize()`). `boundary="clip"` shrinks windows at sequence starts (one
+  output per frame); `"drop"` keeps only full windows. This is the random-access
+  counterpart to the stateful `AccumulateFrames` transform -- correct under
+  `split`, shuffling and multi-worker `DataLoader`. Exposed as the chainable
+  `AbstractDataset.window(...)` and the `WindowView` class.
+
 ## [0.4.0] - 2026-06-25
 
 ### Added

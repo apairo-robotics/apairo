@@ -335,6 +335,49 @@ class AbstractDataset(ABC):
 
         return FilteredView(self, indices)
 
+    def window(
+        self,
+        size: int,
+        stride: int = 1,
+        reduce: Callable | None = None,
+        boundary: str = "clip",
+    ) -> "AbstractDataset":
+        """Group each frame with its temporal neighbours, then reduce to one sample.
+
+        Returns a view whose frame ``j`` is the reduction of a causal window
+        ending at an *anchor* frame: the anchor plus the ``size - 1`` preceding
+        frames spaced ``stride`` apart, ordered oldest -> newest. Membership is
+        index arithmetic computed at construction; the window's samples are read
+        lazily and handed to ``reduce`` at access time.
+
+        This is the random-access counterpart to the stateful
+        ``AccumulateFrames`` transform: windows are addressed by index, so the
+        result stays correct under ``.split()``, shuffling and multi-worker
+        ``DataLoader``. It works on any ordered dataset -- a natively synchronous
+        one, or a synchronous view from :meth:`synchronize`::
+
+            ds = (TartanKittiDataset(seq, keys=["lidar", "pose"])
+                    .synchronize(reference="lidar", method={"pose": Se3Interp()})
+                    .window(size=5, stride=1, reduce=StackByPose()))
+
+        Windows never cross a sequence boundary (``frame_sequence_ids``); when the
+        parent has none, the whole dataset is treated as one sequence.
+
+        Args:
+            size: Frames per window, including the anchor (``>= 1``).
+            stride: Gap, in frames, between two window members.
+            reduce: Callable ``list[Sample] -> Sample``. **Required** -- a
+                windowed frame holds several samples and is not a valid sample
+                until reduced (see ``StackByPose`` in ``apairo_transform``).
+            boundary: ``"clip"`` -- shorter windows near a sequence start, one
+                output per frame; ``"drop"`` -- keep only full windows.
+
+        Returns:
+            :class:`~apairo.core.window_view.WindowView`
+        """
+        from apairo.core.window_view import WindowView
+        return WindowView(self, size, stride, reduce, boundary)
+
     def synchronize(
         self,
         reference: "str | np.ndarray | None" = None,
