@@ -267,6 +267,73 @@ def set_alias(
     return displaced
 
 
+def remove_channel(root_dir: str | Path, channel: str, *, data: bool = False) -> dict:
+    """Remove a channel's declaration from ``root_dir/.apairo/channels.yaml``.
+
+    The inverse of :func:`register_channel` / :func:`register_raw_channel`: drops
+    the channel so the dataset stops loading it. By default the on-disk files are
+    left untouched, so the removal is reversible (re-run ``init`` or re-register
+    the channel); pass ``data=True`` to also delete the channel's directory from
+    disk -- destructive and irreversible.
+
+    This is the low-level standalone function. Most users will prefer the
+    classmethod :meth:`ConfigurableDataset.remove_channel`, or the CLI
+    (``apairo channel remove``), which warns before dropping a *raw* (source)
+    channel and before deleting data.
+
+    Args:
+        root_dir: Dataset root (or sequence) directory.
+        channel: The channel's declared name (its on-disk directory name).
+        data: Also delete the channel's directory (``root_dir/channel``) from
+            disk. The raw/preprocessed files are gone for good.
+
+    Returns:
+        The removed channel's metadata entry -- so a caller can tell whether it
+        was ``raw`` or ``preprocess`` (or restore it).
+
+    Raises:
+        FileNotFoundError: if no ``channels.yaml`` exists at *root_dir*.
+        KeyError: if *channel* is not declared in the config.
+    """
+    root_dir = Path(root_dir)
+    if not config_exists(root_dir):
+        raise FileNotFoundError(
+            f"No {CONFIG_DIR}/{CHANNELS_FILE} in '{root_dir}'. Run `apairo init` first."
+        )
+    config = read_config(root_dir)
+    channels = config.get("channels", {})
+    if channel not in channels:
+        raise KeyError(
+            f"Channel '{channel}' is not declared in '{root_dir}'. "
+            f"Available: {sorted(channels)}."
+        )
+    entry = channels.pop(channel)
+    write_config(root_dir, config)
+    if data:
+        import shutil
+
+        channel_dir = root_dir / channel
+        if channel_dir.is_dir():
+            shutil.rmtree(channel_dir)
+    return entry
+
+
+def channel_dependents(channels: dict, channel: str) -> list[str]:
+    """Channels that reference *channel* -- borrowing its clock
+    (``timestamps_from``) or naming it as a derivation ``source``.
+
+    Removing *channel* leaves these dangling (``verify_config`` would flag them),
+    so callers can warn first. Takes the ``channels`` mapping (not a path) so a
+    root-aware caller can reuse a single read."""
+    out = []
+    for name, meta in channels.items():
+        if name == channel or not isinstance(meta, dict):
+            continue
+        if meta.get("timestamps_from") == channel or channel in (meta.get("sources") or []):
+            out.append(name)
+    return out
+
+
 def _alias_holders(channels: dict, channel: str, alias: str) -> list[str]:
     """Other channels currently exposing *alias* as their public name."""
     return [

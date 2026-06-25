@@ -221,6 +221,68 @@ def test_set_alias_force_reassigns(tmp_path):
         set_alias(seq, "imu", "lidar", force=True)
 
 
+# ──────────────────────────── remove_channel ─────────────────────────────────
+
+def test_remove_channel_drops_declaration_keeps_data(tmp_path):
+    from apairo.core.config import read_config, remove_channel
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)            # channels: lidar, imu
+    entry = remove_channel(seq, "imu")        # config-only by default
+
+    assert "imu" not in read_config(seq)["channels"]
+    assert "lidar" in read_config(seq)["channels"]
+    assert entry["kind"] == "raw"             # returns what it removed
+    assert (seq / "imu").is_dir()             # data untouched
+    assert RawDataset(seq).keys == ["lidar"]  # dataset stops loading it
+
+
+def test_remove_channel_data_deletes_directory(tmp_path):
+    from apairo.core.config import read_config, remove_channel
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)
+    remove_channel(seq, "imu", data=True)
+
+    assert "imu" not in read_config(seq)["channels"]
+    assert not (seq / "imu").exists()         # directory removed from disk
+    assert (seq / "lidar").is_dir()           # other channels untouched
+
+
+def test_remove_channel_unknown_raises(tmp_path):
+    from apairo.core.config import remove_channel
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)
+    with pytest.raises(KeyError):
+        remove_channel(seq, "nope")
+
+
+def test_remove_channel_no_config_raises(tmp_path):
+    from apairo.core.config import remove_channel
+
+    (tmp_path / "empty").mkdir()
+    with pytest.raises(FileNotFoundError):
+        remove_channel(tmp_path / "empty", "lidar")
+
+
+def test_channel_dependents_flags_references(tmp_path):
+    from apairo.core.config import (
+        channel_dependents,
+        read_config,
+        register_channel,
+    )
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)
+    # a derived channel that borrows lidar's clock and names it a source
+    register_channel(seq, "labels", "npys", timestamps_from="lidar", sources=["lidar"])
+
+    channels = read_config(seq)["channels"]
+    assert channel_dependents(channels, "lidar") == ["labels"]
+    assert channel_dependents(channels, "imu") == []
+
+
 def test_single_sequence_is_not_root(tmp_path):
     seq = tmp_path / "seq_a"
     _make_sequence(seq, n_lidar=3)

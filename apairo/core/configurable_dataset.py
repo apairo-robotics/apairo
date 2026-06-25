@@ -6,6 +6,7 @@ from typing import Optional
 from apairo.core.config import (
     register_channel as _register_channel,
     register_raw_channel as _register_raw_channel,
+    remove_channel as _remove_channel,
     verify_config as _verify_config,
     read_config,
     write_config,
@@ -85,6 +86,25 @@ class ConfigurableDataset:
             timestamps_from=timestamps_from,
             sources=sources,
         )
+
+    @classmethod
+    def remove_channel(
+        cls, sequence_dir: str | Path, key: str, *, data: bool = False
+    ) -> dict:
+        """Remove a channel from ``sequence_dir/.apairo`` (inverse of
+        :meth:`register_channel`).
+
+        By default only the declaration is dropped, which is reversible; pass
+        ``data=True`` to also delete the channel's directory on disk. Returns the
+        removed metadata entry. For an interactive guard on *raw* channels and
+        data deletion, prefer the CLI (``apairo channel remove``).
+
+        Args:
+            sequence_dir: Dataset sequence directory.
+            key: Channel name to remove (its on-disk directory name).
+            data: Also delete the channel's directory from disk (destructive).
+        """
+        return _remove_channel(sequence_dir, key, data=data)
 
     @abstractmethod
     def _bootstrap_config(self, sequence_dir: Path) -> dict:

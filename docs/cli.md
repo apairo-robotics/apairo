@@ -13,13 +13,15 @@ apairo --help
 ```
 
 ```
-usage: apairo [-h] {init,status,alias} ...
+usage: apairo [-h] {init,status,alias,channel,check} ...
 
 Inspect and initialize apairo datasets.
 
   init     write .apairo sidecars by scanning a directory
   status   show what a dataset directory contains
   alias    expose a channel under a clean public name
+  channel  manage channel declarations (e.g. channel remove)
+  check    validate the .apairo schema
 ```
 
 `PATH` defaults to the current directory, so you can `cd` into a dataset and run
@@ -294,6 +296,43 @@ or `RawDataset.register_raw_channel(seq_dir, channel, loader, alias=...)`.
 | `--path PATH` | Dataset directory (default: `.`); root-aware |
 | `--remove` | Clear the channel's alias instead of setting it |
 | `--force` | Reassign the alias even if another channel holds it (that channel is left unaliased) |
+
+---
+
+## `apairo channel remove`
+
+Drop a channel's declaration from `channels.yaml` -- the inverse of registering
+one. By default the on-disk files are left in place, so the removal is reversible
+(re-run `init` or re-register the channel); pass `--purge` to also delete the
+channel's data directory.
+
+```
+apairo channel remove CHANNEL [--path PATH] [--purge] [--yes]
+```
+
+```bash
+apairo channel remove old_labels --path /data/barakuda          # un-declare only
+apairo channel remove old_labels --path /data/barakuda --purge  # + delete data
+```
+
+It is **root-aware**: pointed at a dataset root, it removes the channel from
+every sequence that declares it.
+
+Removing a **raw** (source) channel, or passing `--purge`, is hard to undo, so
+the command warns and asks for confirmation; pass `--yes` to skip the prompt.
+Preprocessed channels (regenerable, data untouched) are removed silently. If
+another channel still references the one being removed (via `timestamps_from` or
+`sources`), a warning lists the now-dangling dependents.
+
+It also works from Python:
+[`apairo.remove_channel(seq_dir, channel, data=False)`](async-datasets.md), or
+the class form `RawDataset.remove_channel(seq_dir, channel, data=...)`.
+
+| Option | Meaning |
+|---|---|
+| `--path PATH` | Dataset directory (default: `.`); root-aware |
+| `--purge` | Also delete the channel's data directory on disk (destructive) |
+| `--yes`, `-y` | Skip the confirmation prompt for raw channels / `--purge` |
 
 ---
 

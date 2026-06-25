@@ -29,10 +29,12 @@ import numpy as np
 
 from apairo.core.config import (
     alias_conflict,
+    channel_dependents,
     config_exists,
     read_calibration,
     read_config,
     read_manifest,
+    remove_channel,
     set_alias,
     verify_calibration,
     verify_config,
@@ -631,6 +633,73 @@ def cmd_alias(args: argparse.Namespace) -> int:
     return 0
 
 
+def _channel_targets(path: Path, channel: str) -> list[Path]:
+    """Sequence directories under *path* whose config declares *channel*.
+
+    Mirrors :func:`_alias_targets`: a single sequence resolves to itself, a root
+    to every sequence holding the channel -- so one command removes it everywhere."""
+    if config_exists(path) and channel in read_config(path).get("channels", {}):
+        return [path]
+    return [
+        d for d in _sequence_dirs(path)
+        if config_exists(d) and channel in read_config(d).get("channels", {})
+    ]
+
+
+def cmd_channel_remove(args: argparse.Namespace) -> int:
+    path = Path(args.path).expanduser()
+    if not path.is_dir():
+        print(f"Not a directory: {path}", file=sys.stderr)
+        return 2
+
+    targets = _channel_targets(path, args.channel)
+    if not targets:
+        print(f"Channel '{args.channel}' is not declared under '{path}'.",
+              file=sys.stderr)
+        return 1
+
+    # Across every target: is it raw anywhere, and what still depends on it?
+    is_raw = False
+    dependents: set[str] = set()
+    for seq in targets:
+        channels = read_config(seq).get("channels", {})
+        if channels[args.channel].get("kind", "raw") == "raw":
+            is_raw = True
+        dependents.update(channel_dependents(channels, args.channel))
+
+    # Removing a raw (source) channel, or deleting data, is hard to undo: warn,
+    # then confirm unless --yes. A preprocessed channel without --purge is cheap
+    # (regenerable, data untouched) and removed silently.
+    if dependents:
+        print(f"warning: '{args.channel}' is still referenced by "
+              f"{', '.join(sorted(dependents))} (timestamps_from/sources).",
+              file=sys.stderr)
+    if is_raw:
+        print(f"warning: '{args.channel}' is a RAW (source) channel.", file=sys.stderr)
+    if args.purge:
+        print("warning: --purge will delete the channel's data directory on disk.",
+              file=sys.stderr)
+
+    if (is_raw or args.purge) and not args.yes:
+        where = "1 sequence" if len(targets) == 1 else f"{len(targets)} sequences"
+        verb = "Remove and delete data for" if args.purge else "Remove"
+        try:
+            resp = input(f"{verb} '{args.channel}' in {where}? [y/N] ")
+        except EOFError:
+            resp = ""
+        if resp.strip().lower() not in ("y", "yes"):
+            print("aborted")
+            return 1
+
+    for seq in targets:
+        remove_channel(seq, args.channel, data=args.purge)
+
+    where = "1 sequence" if len(targets) == 1 else f"{len(targets)} sequences"
+    suffix = " (data deleted)" if args.purge else ""
+    print(f"removed channel '{args.channel}' ({where}){suffix}")
+    return 0
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def _add_common(p: argparse.ArgumentParser) -> None:
@@ -701,6 +770,20 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_alias.add_argument("--force", action="store_true",
                          help="reassign the alias even if another channel holds it "
                               "(that channel is left unaliased)")
+
+    p_channel = sub.add_parser("channel", help="manage channel declarations in .apairo")
+    channel_sub = p_channel.add_subparsers(dest="channel_command", required=True)
+    p_channel_remove = channel_sub.add_parser(
+        "remove", help="drop a channel's declaration (optionally delete its data)"
+    )
+    p_channel_remove.add_argument("channel", help="the channel's on-disk directory name")
+    p_channel_remove.add_argument("--path", default=".",
+                                  help="dataset directory (default: .); root-aware")
+    p_channel_remove.add_argument("--purge", action="store_true",
+                                  help="also delete the channel's data directory on disk "
+                                       "(destructive; default keeps the files)")
+    p_channel_remove.add_argument("--yes", "-y", action="store_true",
+                                  help="skip the confirmation prompt for raw channels / --purge")
     return parser
 
 
@@ -721,6 +804,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         "status": cmd_status,
         "check": cmd_check,
         "alias": cmd_alias,
+        "channel": cmd_channel_remove,  # only sub-action is `remove`
     }[args.command]
     sys.exit(handler(args))
 

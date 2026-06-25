@@ -29,6 +29,7 @@ from apairo.core.transform import Compose
 from apairo.core.config import (
     register_channel,
     register_raw_channel,
+    remove_channel,
     set_alias,
     verify_calibration,
     verify_config,
@@ -70,6 +71,7 @@ __all__ = [
     "Compose",
     "register_channel",
     "register_raw_channel",
+    "remove_channel",
     "set_alias",
     "verify_config",
     "verify_manifest",

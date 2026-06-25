@@ -490,3 +490,48 @@ def test_status_shows_alias_root_and_sequence(raw_root, capsys):
     _run(["status", str(raw_root / "seq_a"), "--json"])
     data = json.loads(capsys.readouterr().out)
     assert data["channels"]["lidar"]["alias"] == "points"   # json keyed by real name
+
+
+# ── channel remove (apairo channel remove) ────────────────────────────────────
+
+def test_channel_remove_is_root_aware(raw_root):
+    _run(["init", str(raw_root)])
+    # imu is raw -> needs confirmation; --yes skips it
+    assert _run(["channel", "remove", "imu", "--path", str(raw_root), "--yes"]) == 0
+    for s in ("seq_a", "seq_b"):
+        assert "imu" not in read_config(raw_root / s)["channels"]
+        assert (raw_root / s / "imu").is_dir()              # data kept by default
+
+
+def test_channel_remove_purge_deletes_data(raw_root):
+    _run(["init", str(raw_root)])
+    assert _run(["channel", "remove", "imu", "--path", str(raw_root),
+                 "--purge", "--yes"]) == 0
+    for s in ("seq_a", "seq_b"):
+        assert not (raw_root / s / "imu").exists()          # data gone
+
+
+def test_channel_remove_raw_aborts_without_confirmation(raw_root, monkeypatch):
+    _run(["init", str(raw_root)])
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    assert _run(["channel", "remove", "imu", "--path", str(raw_root)]) == 1
+    # aborted -> still declared
+    assert "imu" in read_config(raw_root / "seq_a")["channels"]
+
+
+def test_channel_remove_unknown_channel_errors(raw_root):
+    _run(["init", str(raw_root)])
+    assert _run(["channel", "remove", "nope", "--path", str(raw_root), "--yes"]) == 1
+
+
+def test_channel_remove_warns_on_dependents(raw_root, capsys):
+    from apairo.core.config import register_channel
+
+    _run(["init", str(raw_root)])
+    for s in ("seq_a", "seq_b"):
+        register_channel(raw_root / s, "labels", "npys",
+                         timestamps_from="lidar", sources=["lidar"])
+    capsys.readouterr()
+    _run(["channel", "remove", "lidar", "--path", str(raw_root), "--yes"])
+    err = capsys.readouterr().err
+    assert "still referenced by labels" in err
