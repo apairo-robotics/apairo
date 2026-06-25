@@ -52,7 +52,7 @@ Abstract per-channel layout base for the asynchronous family. Internal base
 class — subclass it to add a fixed-channel async dataset; end users load through
 `RawDataset` or `TartanKittiDataset`.
 
-::: apairo.dataset.kitti.AsyncLayoutDataset
+::: apairo.dataset.async_layout.AsyncLayoutDataset
 
 ---
 

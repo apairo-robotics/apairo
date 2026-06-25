@@ -47,10 +47,10 @@ def _detect_loader(channel_dir: Path) -> str | None:
 class AsyncLayoutDataset(AbstractDataset):
     r"""Abstract *asynchronous layout* loader (one subdirectory per channel).
 
-    This is the format primitive of the asynchronous dataset family -- it is
-    **not** the KITTI dataset (no real KITTI dataset uses it; see
-    :class:`~apairo.dataset.semantic_kitti.SemanticKittiDataset`, which is a
-    synchronous :class:`~apairo.core.profiled_dataset.ProfiledDataset`).
+    This is the format primitive of the asynchronous dataset family. It is not
+    a concrete dataset -- the synchronous KITTI-style datasets are
+    :class:`~apairo.core.profiled_dataset.ProfiledDataset` subclasses (e.g.
+    :class:`~apairo.dataset.semantic_kitti.SemanticKittiDataset`).
 
     It describes *how* channels are stored, never *which* channels exist: each
     channel is a subdirectory with its own ``timestamps.txt`` and data files in
@@ -175,7 +175,7 @@ class AsyncLayoutDataset(AbstractDataset):
         overwrite: bool = False,
         merge: bool = False,
     ) -> None:
-        """Scan a KITTI-layout directory and write ``.apairo/channels.yaml``.
+        """Scan an async-layout directory and write ``.apairo/channels.yaml``.
 
         All detected subdirectories are registered as raw channels.  Loader
         type is inferred from file extensions:
@@ -190,7 +190,7 @@ class AsyncLayoutDataset(AbstractDataset):
         afterwards to override the detected loader.
 
         Args:
-            directory: KITTI root / sequence directory to initialize.
+            directory: Dataset root / sequence directory to initialize.
             raw_keys: Subdirectory names to include.  ``None`` → all detected
                 subdirectories with recognizable file types.
             overwrite: Discard the existing ``.apairo`` and rebuild from

@@ -1,4 +1,4 @@
-from .kitti import AsyncLayoutDataset
+from .async_layout import AsyncLayoutDataset
 from .raw import RawDataset
 from .tartan_kitti import TartanKittiDataset
 from .goose import Goose3DDataset

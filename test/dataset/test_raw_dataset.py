@@ -13,7 +13,7 @@ import yaml
 
 from apairo.core.config import CONFIG_DIR, write_config
 from apairo.core.sample import Sample
-from apairo.dataset.kitti.dataset import _detect_loader
+from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
 
 

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from pathlib import Path
 
-from apairo.dataset.kitti import AsyncLayoutDataset as TartanKittiDataset
+from apairo.dataset.async_layout import AsyncLayoutDataset as TartanKittiDataset
 from apairo.loader import NPYLoader
 from apairo.core.sample import Sample
 from test.utils import (

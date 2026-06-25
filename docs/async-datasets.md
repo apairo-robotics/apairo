@@ -402,7 +402,7 @@ matches your channel set:
   `TartanKittiDataset` does.
 
 ```python
-from apairo.dataset.kitti import AsyncLayoutDataset
+from apairo.dataset.async_layout import AsyncLayoutDataset
 
 ds = AsyncLayoutDataset(
     directory="/data/my_recording",
@@ -429,7 +429,7 @@ path (for multi-sequence root support, also mix in
 
 ```python
 from pathlib import Path
-from apairo.dataset.kitti import AsyncLayoutDataset
+from apairo.dataset.async_layout import AsyncLayoutDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
 
 _PROFILE = Path(__file__).parent / "my_profile.yaml"

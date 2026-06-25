@@ -7,7 +7,7 @@ by tools like ``apairo-extractor``.  No structural profile is needed:
 loader format (``npy``, ``npys``, ``bin``, ``img``, ``zarr``) load correctly.
 
 It is the *profile-free* member of the asynchronous layout family: the on-disk
-format comes from :class:`~apairo.dataset.kitti.AsyncLayoutDataset`, the
+format comes from :class:`~apairo.dataset.async_layout.AsyncLayoutDataset`, the
 multi-sequence root behaviour from
 :class:`~apairo.core.root_sequence.RootSequenceMixin`, and -- unlike
 :class:`~apairo.dataset.tartan_kitti.TartanKittiDataset` -- it pins *no* channel
@@ -50,8 +50,8 @@ from apairo.core.config import (
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
-from apairo.dataset.kitti import AsyncLayoutDataset
-from apairo.dataset.kitti.dataset import _detect_loader
+from apairo.dataset.async_layout import AsyncLayoutDataset
+from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.utils.files import get_files
 
 _MANIFEST_FILE = "dataset.yaml"

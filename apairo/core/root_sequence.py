@@ -12,7 +12,7 @@ instance of the same class; everything else (``__len__``, ``_load``,
 ``synchronize``, ``keys`` propagation, ``sequences``/``sequence()``) is provided
 here and dispatches on ``self._is_root``, delegating the single-sequence path to
 ``super()`` (the layout base, e.g.
-:class:`~apairo.dataset.kitti.AsyncLayoutDataset`).
+:class:`~apairo.dataset.async_layout.AsyncLayoutDataset`).
 
 The mixin must precede the layout base in the MRO::
 

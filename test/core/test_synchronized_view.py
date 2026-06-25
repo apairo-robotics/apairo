@@ -5,7 +5,7 @@ import pytest
 
 from apairo import Interpolator
 from apairo.core import AbstractDataset, FilteredView, Sample
-from apairo.dataset.kitti import AsyncLayoutDataset
+from apairo.dataset.async_layout import AsyncLayoutDataset
 
 
 class LerpInterp(Interpolator):

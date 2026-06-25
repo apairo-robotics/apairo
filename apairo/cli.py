@@ -38,7 +38,7 @@ from apairo.core.config import (
     verify_config,
     verify_manifest,
 )
-from apairo.dataset.kitti.dataset import _detect_loader
+from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.rellis import Rellis3DDataset
 from apairo.dataset.goose import Goose3DDataset
