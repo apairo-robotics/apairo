@@ -41,26 +41,6 @@ def test_modality_spec_with_all_fields():
     assert spec.optional is True
 
 
-def test_modality_spec_torch_dtype_deprecated_alias():
-    # 'torch_dtype' is the deprecated spelling of 'cast_dtype' -- still honored,
-    # but warns. It always resolved to a NumPy dtype (apairo has no torch dep).
-    with pytest.warns(DeprecationWarning, match="torch_dtype"):
-        spec = ModalitySpec.from_dict("labels", {"ext": ".label", "torch_dtype": "int64"})
-    assert spec.cast_dtype == "int64"
-    assert spec.resolved_dtype is np.int64
-
-
-def test_modality_spec_cast_dtype_wins_over_torch_dtype():
-    # When both are present, the canonical 'cast_dtype' takes precedence silently.
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # no deprecation warning expected
-        spec = ModalitySpec.from_dict(
-            "labels", {"ext": ".label", "cast_dtype": "int64", "torch_dtype": "int32"}
-        )
-    assert spec.cast_dtype == "int64"
-
-
 def test_parse_layers_goose():
     raw = [
         {"split": ["train", "val", "test"]},

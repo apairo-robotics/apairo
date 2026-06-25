@@ -123,18 +123,8 @@ class ModalitySpec:
         if ext and not ext.startswith("."):
             ext = f".{ext}"
         # ``cast_dtype``: target NumPy dtype for a final ``.astype()`` after
-        # loading (e.g. int32 labels -> int64). ``torch_dtype`` is the deprecated
-        # spelling -- it never touched torch, it always resolved to a NumPy dtype.
+        # loading (e.g. int32 labels -> int64).
         cast_dtype = d.get("cast_dtype")
-        if cast_dtype is None and "torch_dtype" in d:
-            warnings.warn(
-                "Profile field 'torch_dtype' is deprecated; rename it to "
-                "'cast_dtype'. It has always resolved to a NumPy dtype for a "
-                "final .astype() -- apairo does not depend on torch.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            cast_dtype = d.get("torch_dtype")
         return cls(
             ext=ext,
             dtype=d.get("dtype"),
