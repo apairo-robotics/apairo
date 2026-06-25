@@ -7,7 +7,24 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-25
+
 ### Added
+- **`remove_channel` -- drop a channel declaration** (the inverse of
+  `register_channel` / `register_raw_channel`, which had no counterpart). Removes
+  a channel from `channels.yaml` so the dataset stops loading it; the on-disk
+  files are kept by default (reversible), and `data=True` / `--purge` also deletes
+  the channel's directory. Exposed as `apairo.remove_channel(seq, chan)`, the
+  class form `Dataset.remove_channel(...)`, and the CLI `apairo channel remove`
+  (root-aware). Removing a **raw** (source) channel or deleting data warns and
+  asks for confirmation (`--yes` to skip); a still-referenced channel
+  (`timestamps_from` / `sources`) lists its now-dangling dependents.
+- **Channel aliases honored by `ProfiledDataset`, not just `RawDataset`** -- a
+  profiled dataset now resolves a requested key (alias or real name) to its real
+  channel for file discovery while exposing loaders and `sample.data` under the
+  public alias, mirroring `AsyncLayoutDataset`. Previously `set_alias` was a no-op
+  on profiled datasets (a request by alias raised `KeyError`). This lets one
+  pipeline unify channel names across heterogeneous datasets.
 - **`ds.calibration.get_tf(source, target)`** -- the static-transform tree is now
   *resolved* in the core, not just exposed. `dataset.calibration` returns a
   `Calibration` (a `dict` subclass, fully backward compatible) whose `get_tf`
@@ -26,6 +43,10 @@ All notable changes to apairo are documented here. The format is based on
   return an empty `Calibration`.
 
 ### Changed
+- **`apairo.dataset.kitti` renamed to `apairo.dataset.async_layout`** -- the
+  module held only the abstract `AsyncLayoutDataset` primitive (the class was
+  renamed long ago; its module never followed) and no real KITTI dataset. Import
+  from the new path: `from apairo.dataset.async_layout import AsyncLayoutDataset`.
 - **`RawDataset` bootstraps raw data on load** -- pointing it at a sequence or a
   root that has no `.apairo` now infers the channels (loaders from file
   extensions) and writes the sidecar on the spot, instead of raising and asking
@@ -39,6 +60,12 @@ All notable changes to apairo are documented here. The format is based on
   (`TartanKittiDataset(seq_or_root, keys=[...])`) is unchanged. The previously
   documented lazy mode (`keys=None` -> no loaders, set `ds.keys` later) is gone:
   `keys=None` now loads every present channel, the same as `RawDataset`.
+
+### Removed
+- **Deprecated profile field `torch_dtype`** -- it was the old spelling of
+  `cast_dtype`, a historical misnomer (it never touched torch, always resolving to
+  a NumPy dtype). Every in-repo profile already uses `cast_dtype`; the back-compat
+  shim and its warning are gone. Rename any remaining `torch_dtype` to `cast_dtype`.
 
 ### Fixed
 - **`timestamps_from` is honored on the whole asynchronous family** -- a channel
