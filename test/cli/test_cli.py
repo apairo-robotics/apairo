@@ -105,6 +105,48 @@ def test_status_single_sequence_json(raw_root, capsys):
     assert data["events"] == 8
 
 
+def test_status_homogeneous_root_has_no_exceptional(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert sorted(data["common"]) == ["imu", "lidar"]  # both in every sequence
+    assert data["exceptional"] == {}
+    assert data["missing"] == {"seq_a": [], "seq_b": []}
+
+
+def _add_channel(seq_dir, name, n):
+    (seq_dir / name).mkdir()
+    for i in range(n):
+        np.save(seq_dir / name / f"{i:06d}.npy", np.random.rand(2))
+    np.savetxt(seq_dir / name / "timestamps.txt", np.linspace(0, 1, n))
+
+
+def test_status_heterogeneous_root_reports_coverage(raw_root, capsys):
+    # Only seq_a carries an extra `trav` channel -- the eval-labels scenario.
+    _add_channel(raw_root / "seq_a", "trav", 3)
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root), "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert sorted(data["common"]) == ["imu", "lidar"]  # in every sequence
+    assert "trav" not in data["common"]
+    assert data["exceptional"]["trav"] == {
+        "kind": "raw", "loader": "npys", "seqs": ["seq_a"], "coverage": "1/2",
+    }
+    assert data["missing"] == {"seq_a": [], "seq_b": ["trav"]}
+
+
+def test_status_missing_flag_text(raw_root, capsys):
+    _add_channel(raw_root / "seq_a", "trav", 3)
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    _run(["status", str(raw_root), "--missing"])
+    out = capsys.readouterr().out
+    assert "exceptional" in out and "trav (npys)" in out and "1/2" in out
+    assert "missing" in out and "seq_b" in out
+
+
 def test_status_not_a_dataset(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

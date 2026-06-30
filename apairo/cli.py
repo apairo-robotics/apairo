@@ -6,7 +6,9 @@ familiar terminal/git verbs:
 * ``apairo init``   -- write the ``.apairo`` sidecar(s) by scanning a directory
                        (sequence -> ``channels.yaml``; root -> ``dataset.yaml``).
 * ``apairo status`` -- report what a dataset directory contains: sequences,
-                       tracked channels, channels detected on disk but not yet
+                       tracked channels, channel coverage across sequences
+                       (common vs exceptional; ``--missing`` for the per-sequence
+                       breakdown), channels detected on disk but not yet
                        registered ("untracked"), event count, and config issues.
 
 * ``apairo check``  -- validate the ``.apairo`` schema (channels, manifest,
@@ -322,6 +324,7 @@ def _build_status(path: Path) -> Optional[dict]:
     preprocess: dict = {}
     tf: dict = {}
     aliases: dict = {}
+    present: dict[str, set[str]] = {}  # non-transform channel -> sequences declaring it
     untracked: set[str] = set()
     issues: list[str] = []
     calibration: set[str] = set()
@@ -332,6 +335,7 @@ def _build_status(path: Path) -> Optional[dict]:
                 tf[ch] = d["loader"]
             else:
                 (raw if d["kind"] == "raw" else preprocess)[ch] = d["loader"]
+                present.setdefault(ch, set()).add(name)
             if d.get("alias"):
                 aliases[ch] = d["alias"]
         untracked.update(f"{name}/{u}" for u in info["untracked"])
@@ -339,6 +343,30 @@ def _build_status(path: Path) -> Optional[dict]:
         events += info["events"]
     for d in seq_dirs:
         calibration.update(read_calibration(d))
+
+    # Channel coverage across sequences. ``common`` = present in every sequence
+    # (the strict intersection the flat root loads); ``exceptional`` = present in
+    # a subset; ``missing`` = per sequence, the channels it lacks vs the union.
+    # One presence map, read both ways -- by channel (common/exceptional) and by
+    # sequence (missing).
+    seq_set = set(per)
+    n = len(per)
+    common = sorted(ch for ch, seqs in present.items() if seqs == seq_set)
+    exceptional = {
+        ch: {
+            "kind": "preprocess" if ch in preprocess else "raw",
+            "loader": (preprocess if ch in preprocess else raw)[ch],
+            "seqs": sorted(present[ch]),
+            "coverage": f"{len(present[ch])}/{n}",
+        }
+        for ch in sorted(present)
+        if present[ch] != seq_set
+    }
+    missing = {
+        name: sorted(ch for ch, seqs in present.items() if name not in seqs)
+        for name in per
+    }
+
     manifest = read_manifest(path)
     return {
         "name": manifest.get("name", path.name),
@@ -349,6 +377,9 @@ def _build_status(path: Path) -> Optional[dict]:
         "preprocess": preprocess,
         "tf": tf,
         "aliases": aliases,
+        "common": common,
+        "exceptional": exceptional,
+        "missing": missing,
         "untracked": sorted(untracked),
         "calibration": sorted(calibration),
         "events": events,
@@ -401,7 +432,33 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         print(line(r))
 
 
-def _print_status(s: dict, show_tf: bool = False) -> None:
+def _print_exceptional(exceptional: dict) -> None:
+    """Channels present in only some sequences -- the negative space of `common`.
+    Shown by default (when any exist) so a heterogeneous root reads at a glance."""
+    if not exceptional:
+        return
+    items = sorted(exceptional.items())
+    w_ch = max(len(f"{ch} ({c['loader']})") for ch, c in items)
+    w_cov = max(len(c["coverage"]) for _, c in items)
+    for i, (ch, c) in enumerate(items):
+        label = "exceptional" if i == 0 else ""
+        chan = f"{ch} ({c['loader']})".ljust(w_ch)
+        print(f"{label:<12}{chan}  {c['coverage'].ljust(w_cov)}  [{', '.join(c['seqs'])}]")
+
+
+def _print_missing(missing: dict) -> None:
+    """Per-sequence breakdown of which channels a sequence lacks vs the union."""
+    lacking = sorted((seq, chans) for seq, chans in missing.items() if chans)
+    if not lacking:
+        print("missing     none -- every sequence has every channel")
+        return
+    w = max(len(seq) for seq, _ in lacking)
+    for i, (seq, chans) in enumerate(lacking):
+        label = "missing" if i == 0 else ""
+        print(f"{label:<12}{seq.ljust(w)}  {', '.join(chans)}")
+
+
+def _print_status(s: dict, show_tf: bool = False, show_missing: bool = False) -> None:
     cls = s.get("class", "RawDataset")
     if s["kind"] == "root":
         print(f"{cls} - {s['name']}   (root, {len(s['sequences'])} sequences)")
@@ -409,6 +466,7 @@ def _print_status(s: dict, show_tf: bool = False) -> None:
         print(f"sequences   {', '.join(s['sequences'])}")
         print(f"raw         {_fmt_channels(s['raw'])}")
         print(f"preprocess  {_fmt_channels(s['preprocess'])}")
+        _print_exceptional(s.get("exceptional") or {})
         if s.get("aliases"):
             shown = ", ".join(f"{real} as {alias}" for real, alias in sorted(s["aliases"].items()))
             print(f"aliases     {shown}")
@@ -417,6 +475,8 @@ def _print_status(s: dict, show_tf: bool = False) -> None:
         n_tf = len(s.get("tf", {}))
         if show_tf and s.get("tf"):
             print(f"tf          {_fmt_channels(s['tf'])}")
+        if show_missing:
+            _print_missing(s.get("missing") or {})
     else:
         print(f"{cls} - {s['name']}   (sequence)")
         print(_BAR)
@@ -469,7 +529,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(status, indent=2, sort_keys=True))
     else:
-        _print_status(status, show_tf=args.show_tf)
+        _print_status(status, show_tf=args.show_tf, show_missing=args.missing)
     return 0
 
 
@@ -757,6 +817,9 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_status.add_argument("--show-tf", dest="show_tf", action="store_true",
                           help="include the transform layer: static calibration and "
                                "dynamic tf channels (hidden by default)")
+    p_status.add_argument("--missing", action="store_true",
+                          help="(root) per-sequence breakdown of which channels each "
+                               "sequence lacks vs the union of all channels")
 
     p_check = sub.add_parser(
         "check",

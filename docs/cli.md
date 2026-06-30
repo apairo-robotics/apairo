@@ -114,7 +114,7 @@ Report what a dataset directory contains, without loading any heavy data (frame
 counts come from each channel's `timestamps.txt`).
 
 ```
-apairo status [PATH] [-s ID] [--json] [--show-tf]
+apairo status [PATH] [-s ID] [--json] [--show-tf] [--missing]
 ```
 
 It distinguishes **tracked** channels (declared in `.apairo`) from **untracked**
@@ -132,6 +132,7 @@ profile-unaware generic reading.
 | `-s, --sequence ID` | Per-channel detail for one sequence, addressed by id from the root |
 | `--json` | Machine-readable output (same information as the table) |
 | `--show-tf` | Include the transform layer: static calibration + dynamic `tf` channels (hidden by default) |
+| `--missing` | (root) per-sequence breakdown of which channels each sequence lacks vs the union of all channels |
 
 ### On a dataset root - summary
 
@@ -168,6 +169,44 @@ preprocess  trav_gt (npys)
 events      18
 issues      none
 ```
+
+### Channel coverage across sequences
+
+Sequences in a generic root carry their **own** `.apairo/channels.yaml`, so they
+need not all hold the same channels (e.g. one `eval` sequence with extra
+ground-truth labels). The root summary makes this legible: channels present in
+**every** sequence are the `raw`/`preprocess` union, and any channel present in
+only a **subset** is listed under `exceptional` with its coverage and the
+sequences that have it. A homogeneous root shows no `exceptional` line.
+
+```
+RawDataset - my_dataset   (root, 3 sequences)
+----------------------------------------------------
+sequences   eval, seq_a, seq_b
+raw         imu (npy), lidar (npys)
+preprocess  -
+exceptional trav (npys)  1/3  [eval]
+events      32
+issues      none
+```
+
+Pass `--missing` for the inverse view -- per sequence, the channels it lacks
+relative to the union (sequences that have everything are omitted):
+
+```bash
+apairo status /data/my_dataset --missing
+```
+
+```
+...
+exceptional trav (npys)  1/3  [eval]
+missing     seq_a  trav
+            seq_b  trav
+events      32
+```
+
+`--json` always carries the full picture under the `common`, `exceptional`, and
+`missing` keys, whether or not `--missing` is passed.
 
 ### On a single sequence - per-channel detail
 
