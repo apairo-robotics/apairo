@@ -4,7 +4,7 @@ from typing import List, Dict, Optional, Tuple
 import numpy as np
 
 from apairo.utils.timestamps import get_end_of_time
-from apairo.loader import str_to_loader, loads_timestamps, load_profile
+from apairo.loader import str_to_loader, loads_timestamps, load_timestamps, load_profile
 from apairo.utils.files import get_files
 from apairo.core import AbstractDataset, AbstractLoader
 from apairo.core.sample import Sample
@@ -309,7 +309,7 @@ class AsyncLayoutDataset(AbstractDataset):
         for key in self._keys:
             ts_path = Path(self._files[key]) / "timestamps.txt"
             if ts_path.exists():
-                timestamps[key] = np.loadtxt(ts_path)
+                timestamps[key] = load_timestamps(ts_path)
             elif key in self._timestamp_aliases:
                 src = self._timestamp_aliases[key]
                 if src not in timestamps:
@@ -319,7 +319,7 @@ class AsyncLayoutDataset(AbstractDataset):
                             f"'{key}' shares timestamps with '{src}' (timestamps_from), "
                             f"but '{src}' has no timestamps.txt."
                         )
-                    timestamps[src] = np.loadtxt(src_path)
+                    timestamps[src] = load_timestamps(src_path)
                 timestamps[key] = timestamps[src]
             else:
                 fallback.append(key)

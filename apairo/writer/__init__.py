@@ -11,4 +11,14 @@ WRITERS: dict[str, type] = {
     "img": TarImageWriter,
 }
 
-__all__ = ["NPYWriter", "BINWriter", "ZarrWriter", "TarImageWriter", "WRITERS"]
+# Imported last: channel_writer pulls the per-frame writer classes defined above.
+from .channel_writer import ChannelWriter  # noqa: E402
+
+__all__ = [
+    "NPYWriter",
+    "BINWriter",
+    "ZarrWriter",
+    "TarImageWriter",
+    "WRITERS",
+    "ChannelWriter",
+]

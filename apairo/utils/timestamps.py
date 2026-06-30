@@ -2,7 +2,9 @@ import numpy as np
 
 
 def load_timestamps(file):
-    return np.loadtxt(file)
+    # atleast_1d: a single-frame channel's timestamps.txt is one line, which
+    # np.loadtxt returns as a 0-d scalar -- callers index/iterate it as a 1-d array.
+    return np.atleast_1d(np.loadtxt(file))
 
 
 def get_frequency(timestamps: np.ndarray) -> float:

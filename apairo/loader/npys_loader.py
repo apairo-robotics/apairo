@@ -6,6 +6,7 @@ from typing import List, Optional
 import numpy as np
 
 from apairo.core import AbstractLoader
+from apairo.core.naming import is_frame_file
 
 
 class NPYSLoader(AbstractLoader):
@@ -35,9 +36,7 @@ class NPYSLoader(AbstractLoader):
             self.files = list(files)
         else:
             self.files = sorted(
-                f
-                for f in os.listdir(directory)
-                if f.endswith(".npy") and "_" not in f
+                f for f in os.listdir(directory) if is_frame_file(f)
             )
         if not self.files:
             raise FileNotFoundError(f"No .npy frames found in {directory}")

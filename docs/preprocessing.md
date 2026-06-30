@@ -125,3 +125,47 @@ Output files are placed using `dataset.derived_path(idx, output_key, ext)`. For 
 | `Rellis-3D/00000/os1_cloud_node_kitti_bin/000000.bin` | `Rellis-3D/00000/trav_label/000000.npy` |
 
 The placement is consistent with each dataset's native structure, so derived files sit naturally alongside raw data.
+
+---
+
+## ChannelWriter -- channels produced *outside* apairo
+
+`run_preprocess` is the path for a **deterministic** derived channel: a
+`process(sample)` function apairo calls per frame. Some channels don't fit that
+shape -- they are produced by an **external tool** (a labeling/annotation app, a
+one-off script) that already *holds* the data, often for only a **few frames**
+(e.g. ground-truth labels used only at evaluation). For those, use
+`ChannelWriter`.
+
+It owns the three things that make a channel loadable, so an external tool never
+re-implements -- and drifts from -- the on-disk format:
+
+1. the **frame-naming policy** the loader reads back (a frame stem must not
+   contain `_`, which is reserved for suffixed sub-channel variants like
+   `000000_intensity.npy`);
+2. a `timestamps.txt` kept in the frame order the loader sorts to;
+3. **registration** in `.apairo/channels.yaml` on `close()`.
+
+```python
+import apairo
+
+# A labeling tool wrote per-point ground truth for one lidar frame (001813).
+with apairo.ChannelWriter(seq_dir, "ground_truth", loader="npys",
+                          timestamps_from="ouster_points",
+                          sources=["ouster_points"]) as w:
+    w.add(labels, stem="001813", timestamp=t)   # -> seq/ground_truth/001813.npy
+# channels.yaml now declares ground_truth (kind: preprocess); it loads like any
+# other channel and synchronizes onto its source by timestamp.
+```
+
+- **Per-frame loaders only** (`npys`, `bin`); the stacked `npy` and `img`/`zarr`
+  are out of scope. `npys` preserves any dtype (use it for integer labels).
+- The `timestamp` is the source frame's timestamp -- alignment in an async
+  dataset is by `timestamps.txt`, not by filename, so the stem is free (it just
+  must not contain `_`). Mirroring the source stem (`001813`) keeps it legible.
+- Re-opening a writer on an existing channel **resumes** it: previously written
+  frames are picked up, so you can annotate incrementally across runs.
+- A channel may hold a single frame; it loads and synchronizes the same way.
+
+`ChannelWriter` writes the format; *which* frames are train vs eval stays a view
+concern (`filter` / a frozen index file), never baked into the layout.

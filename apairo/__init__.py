@@ -36,7 +36,7 @@ from apairo.core.config import (
     verify_config,
     verify_manifest,
 )
-from apairo.writer import WRITERS
+from apairo.writer import WRITERS, ChannelWriter
 from apairo.loader import DERIVED_LOADERS
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
@@ -79,6 +79,7 @@ __all__ = [
     "verify_manifest",
     "verify_calibration",
     "WRITERS",
+    "ChannelWriter",
     "DERIVED_LOADERS",
     "__version__",
 ]
