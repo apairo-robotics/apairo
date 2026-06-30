@@ -166,6 +166,15 @@ tensor = DERIVED_LOADERS["npy"](Path("/data/output/000000.npy"))
 
 ---
 
+### FrameRef
+
+Returned by `AbstractDataset.frame_info(idx)` -- where a global frame index comes
+from `(sequence, channel, row)`.
+
+::: apairo.core.abstract_dataset.FrameRef
+
+---
+
 ### ModalitySpec
 
 ::: apairo.core.profiled_dataset.ModalitySpec

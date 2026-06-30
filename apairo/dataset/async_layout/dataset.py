@@ -6,7 +6,7 @@ import numpy as np
 from apairo.utils.timestamps import get_end_of_time
 from apairo.loader import str_to_loader, loads_timestamps, load_timestamps, load_profile
 from apairo.utils.files import get_files
-from apairo.core import AbstractDataset, AbstractLoader
+from apairo.core import AbstractDataset, AbstractLoader, FrameRef
 from apairo.core.naming import suffixed_frame_files
 from apairo.core.sample import Sample
 from apairo.core.config import (
@@ -403,4 +403,40 @@ class AsyncLayoutDataset(AbstractDataset):
             data={key: self.loaders[key][frame]},
             timestamp=float(self.timestamps[key][frame]),
         )
+
+    # ------------------------------------------------------ frame provenance
+
+    def _sequence_name(self) -> Optional[str]:
+        """This (single) sequence's directory name, or ``None`` if unknown."""
+        d = getattr(self, "_sequence_dir", None)
+        return d.name if d is not None else None
+
+    def frame_info(self, idx: int) -> FrameRef:
+        """Channel + row each interleaved event came from. See
+        :meth:`AbstractDataset.frame_info`."""
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        return FrameRef(
+            sequence=self._sequence_name(),
+            channel=self._keys[self._tl_key_idxs[idx]],
+            row=int(self._tl_frame_idxs[idx]),
+        )
+
+    @property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence id per global event -- the sequence directory name (a single
+        async dataset is one sequence). Object array of shape ``(len(self),)``."""
+        return np.full(len(self), self._sequence_name(), dtype=object)
+
+    @property
+    def frame_stems(self) -> np.ndarray:
+        """Filename stem backing each global event: the per-frame data file's
+        stem, or the zero-padded row for stacked (single-file) channels."""
+        result = np.empty(len(self), dtype=object)
+        for i in range(len(self)):
+            key = self._keys[self._tl_key_idxs[i]]
+            row = int(self._tl_frame_idxs[i])
+            files = getattr(self.loaders[key], "files", None)
+            result[i] = Path(files[row]).stem if files else f"{row:06d}"
+        return result
 

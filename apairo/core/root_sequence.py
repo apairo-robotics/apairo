@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Callable, List
 
 import numpy as np
 
+from apairo.core.abstract_dataset import FrameRef
 from apairo.core.config import Calibration, read_calibration
 
 if TYPE_CHECKING:
@@ -205,3 +206,42 @@ class RootSequenceMixin:
         seq_idx = int(np.searchsorted(self._cumulative_lengths[1:], idx, side="right"))
         local_idx = idx - int(self._cumulative_lengths[seq_idx])
         return self._sequences[seq_idx]._load(local_idx)
+
+    # ------------------------------------------------------ frame provenance
+
+    def frame_info(self, idx: int) -> FrameRef:
+        """Channel + row each event came from, plus the sub-sequence it belongs
+        to (root datasets). See :meth:`AbstractDataset.frame_info`."""
+        if not self._is_root:
+            return super().frame_info(idx)
+        if not hasattr(self, "_cumulative_lengths"):
+            raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        seq_idx = int(np.searchsorted(self._cumulative_lengths[1:], idx, side="right"))
+        local_idx = idx - int(self._cumulative_lengths[seq_idx])
+        return self._sequences[seq_idx].frame_info(local_idx)._replace(
+            sequence=self.sequence_ids[seq_idx]
+        )
+
+    @property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence id per global frame index (object array). On a root, the
+        sub-sequence each frame belongs to; on a single sequence, delegated."""
+        if not self._is_root:
+            return super().frame_sequence_ids
+        result = np.empty(len(self), dtype=object)
+        for seq_idx in range(len(self._sequences)):
+            a = int(self._cumulative_lengths[seq_idx])
+            b = int(self._cumulative_lengths[seq_idx + 1])
+            result[a:b] = self.sequence_ids[seq_idx]
+        return result
+
+    @property
+    def frame_stems(self) -> np.ndarray:
+        """Filename stem per global frame index, concatenated over sequences."""
+        if not self._is_root:
+            return super().frame_stems
+        if not self._sequences:
+            return np.empty(0, dtype=object)
+        return np.concatenate([s.frame_stems for s in self._sequences])

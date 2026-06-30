@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, ClassVar, Dict, FrozenSet, Optional
+from typing import TYPE_CHECKING, Callable, ClassVar, Dict, FrozenSet, NamedTuple, Optional
 import numpy as np
 
 if TYPE_CHECKING:
@@ -10,6 +10,26 @@ from .utils.typing import _Key
 from .utils.exceptions import KeysEmptyError, KeysDuplicateError
 from .sample import Sample
 from .config import Calibration, read_calibration
+
+
+class FrameRef(NamedTuple):
+    """Where a global frame index comes from -- for layout-aware tooling.
+
+    Returned by :meth:`AbstractDataset.frame_info`. Lets a visualizer or splitter
+    map a flat index back to its origin without reaching into private timeline
+    state.
+
+    Attributes:
+        sequence: Sub-sequence the frame belongs to (``None`` for a single,
+            unnamed sequence).
+        channel: Channel that produced the event -- asynchronous datasets
+            interleave channels, so one event is one channel. ``None`` for a
+            synchronous frame, which is *all* channels at the same row.
+        row: Frame index within that channel/sequence.
+    """
+    sequence: Optional[str]
+    channel: Optional[str]
+    row: int
 
 
 class AbstractDataset(ABC):
@@ -448,6 +468,23 @@ class AbstractDataset(ABC):
 
     def __getitem__(self, idx: int) -> "Sample":
         return self._apply_transforms(self._load(idx))
+
+    def frame_info(self, idx: int) -> "FrameRef":
+        """Provenance of global frame *idx* as ``FrameRef(sequence, channel, row)``.
+
+        Lets layout-aware tooling (e.g. a visualizer) map a flat index back to the
+        channel and frame-within-channel it came from, instead of reaching into
+        private timeline state. Read-only.
+
+        Default (synchronous datasets): a frame is *all* channels at row ``idx``
+        of its sequence, so ``channel`` is ``None`` and ``row`` is ``idx``. The
+        asynchronous family overrides this with the single channel + row each
+        interleaved event came from."""
+        try:
+            sequence = self.frame_sequence_ids[idx]
+        except (AttributeError, NotImplementedError, RuntimeError):
+            sequence = None
+        return FrameRef(sequence=sequence, channel=None, row=int(idx))
 
     @abstractmethod
     def __len__(self) -> int: ...

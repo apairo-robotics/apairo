@@ -48,6 +48,10 @@ class ChannelView(AbstractDataset):
     def frame_stems(self) -> "np.ndarray":
         return self._parent.frame_stems
 
+    def frame_info(self, idx: int):
+        """Provenance of frame *idx* -- unchanged from the parent (same frames)."""
+        return self._parent.frame_info(idx)
+
     def _load(self, idx: int) -> "Sample":
         from apairo.core.sample import Sample
         sample = self._parent[idx]

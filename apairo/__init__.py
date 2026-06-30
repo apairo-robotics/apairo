@@ -4,6 +4,7 @@ import logging
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 from apairo.core.sample import Sample
+from apairo.core.abstract_dataset import FrameRef
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.preprocess import FramePreprocessor, SequencePreprocessor
@@ -48,6 +49,7 @@ except PackageNotFoundError:  # running from a source tree with no installed dis
 
 __all__ = [
     "Sample",
+    "FrameRef",
     "SynchronousDataset",
     "ConfigurableDataset",
     "FramePreprocessor",

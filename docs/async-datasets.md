@@ -19,6 +19,29 @@ This is different from synchronous datasets where all requested modalities are a
 
 If you want complete multi-channel frames instead of raw events, resample the dataset onto a reference clock with [`synchronize()`](#synchronizing-async-sync) -- the result behaves exactly like a synchronous dataset.
 
+### Frame provenance — `frame_info`
+
+`sample.data` tells you *which* channel event `i` is, but not *which frame of that channel* it is, nor (on a root) which sequence. `frame_info(i)` answers all three -- the public accessor for tooling that maps a flat index back to its origin (a visualizer logging "lidar frame 1813", a splitter, an exporter), instead of reaching into private timeline state:
+
+```python
+ref = ds.frame_info(i)        # FrameRef(sequence, channel, row)
+ref.sequence                  # sub-sequence on a root, else None
+ref.channel                   # the channel that fired (one event = one channel)
+ref.row                       # frame index within that channel
+```
+
+- On a **synchronous** dataset a frame is *all* channels at the same row, so `channel` is `None` and `row` is the frame index.
+- The companion array properties cover the whole dataset at once: **`frame_sequence_ids`** (the sequence each frame belongs to) and **`frame_stems`** (the data-file stem backing each frame, or the zero-padded row for stacked channels). These also make a frozen, file-based split work on a generic `RawDataset` -- filter to a saved `(sequence, stem)` set, the same mechanism profiled datasets use.
+
+```python
+# Freeze an eval split to a set of (sequence, stem) pairs and reload it:
+keep = {(s, t) for s, t in zip(ds.frame_sequence_ids, ds.frame_stems) if (s, t) in eval_set}
+eval_ds = ds.filter([i for i, (s, t) in
+                     enumerate(zip(ds.frame_sequence_ids, ds.frame_stems)) if (s, t) in keep])
+```
+
+`frame_info` is read-only and delegates through `filter`/`select` views (the index is remapped for you).
+
 ---
 
 ## TartanKittiDataset
