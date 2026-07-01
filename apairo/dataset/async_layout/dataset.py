@@ -352,7 +352,29 @@ class AsyncLayoutDataset(AbstractDataset):
             )
         self.loaders: Dict[str, AbstractLoader] = loaders
         self.timestamps: Dict[str, np.ndarray] = self._collect_timestamps()
+        self._check_suffix_coverage()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
+
+    def _check_suffix_coverage(self) -> None:
+        """A suffixed sub-channel borrows the base channel's clock (shared
+        directory), so the timeline gives it one slot per base frame. If its
+        ``*_<suffix>.npy`` files don't cover every base frame, ``_load`` would
+        index past the loader -- fail here, at construction, with a clear message
+        instead of a cryptic ``IndexError`` later."""
+        for key in self._keys:
+            suffix = self._suffix_of.get(key)
+            if suffix is None:
+                continue
+            n_files = len(self.loaders[key])
+            n_clock = len(self.timestamps[key])
+            if n_files != n_clock:
+                shared = Path(self._files[key]).name
+                raise ValueError(
+                    f"Suffixed sub-channel '{key}' has {n_files} '*_{suffix}.npy' "
+                    f"file(s) in '{shared}/' but shares that channel's clock of "
+                    f"{n_clock} frame(s): a suffixed variant must cover every base "
+                    f"frame. Check for missing or extra '_{suffix}.npy' files."
+                )
 
     def _collect_timestamps(self) -> Dict[str, np.ndarray]:
         """Timestamps per loaded key: its own ``timestamps.txt`` when present,

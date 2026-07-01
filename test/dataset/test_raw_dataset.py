@@ -346,6 +346,19 @@ def test_remove_suffixed_channel_data_deletes_only_its_files(tmp_path):
     assert (seq / "lidar").is_dir()
 
 
+def test_suffixed_channel_partial_coverage_fails_fast(tmp_path):
+    # A suffixed sub-channel borrows the base clock; fewer variant files than
+    # base frames must raise at construction, not IndexError deep in _load.
+    seq = tmp_path / "seq_a"
+    _make_npys_channel(
+        seq, "lidar", [np.random.rand(4, 3) for _ in range(3)], [0.0, 0.1, 0.2]
+    )
+    _add_suffixed_files(seq / "lidar", "intensity", 2)  # 2 variants for 3 frames
+
+    with pytest.raises(ValueError, match="must cover every base frame"):
+        RawDataset(seq, keys=["lidar", "lidar_intensity"])
+
+
 def test_channel_dependents_flags_references(tmp_path):
     from apairo.core.config import (
         channel_dependents,
