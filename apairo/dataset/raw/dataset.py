@@ -51,7 +51,7 @@ from apairo.core.config import (
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
 from apairo.dataset.async_layout import AsyncLayoutDataset
-from apairo.dataset.async_layout.dataset import _detect_loader
+from apairo.dataset.async_layout.dataset import _detect_loader, _suffix_channel_entries
 from apairo.utils.files import get_files
 
 _MANIFEST_FILE = "dataset.yaml"
@@ -266,8 +266,11 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         """ConfigurableDataset hook: detect raw channels when .apairo is absent."""
         channels: dict = {}
         for key in sorted(get_files(str(sequence_dir))):
-            loader = _detect_loader(Path(sequence_dir) / key)
+            channel_dir = Path(sequence_dir) / key
+            loader = _detect_loader(channel_dir)
             if loader is None:
                 continue
             channels[key] = {"loader": loader, "kind": "raw"}
+            for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
+                channels[f"{key}_{suffix}"] = {"kind": "raw", **frag}
         return {"version": 1, "channels": channels}

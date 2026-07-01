@@ -7,6 +7,7 @@ from apairo.utils.timestamps import get_end_of_time
 from apairo.loader import str_to_loader, loads_timestamps, load_timestamps, load_profile
 from apairo.utils.files import get_files
 from apairo.core import AbstractDataset, AbstractLoader
+from apairo.core.naming import suffixed_frame_files
 from apairo.core.sample import Sample
 from apairo.core.config import (
     config_exists,
@@ -42,6 +43,25 @@ def _detect_loader(channel_dir: Path) -> str | None:
         # Multiple per-frame files → npys; single file → npy.
         return "npys" if len(npy_files) > 1 else "npy"
     return None
+
+
+def _suffix_channel_entries(channel_dir: Path, loader: str) -> Dict[str, dict]:
+    """Suffixed npy sub-channels found in *channel_dir*, keyed by suffix.
+
+    A directory holding ``000000.npy`` *and* ``000000_intensity.npy`` yields
+    ``{"intensity": {"loader": "npys", "directory": channel_dir.name, "suffix":
+    "intensity"}}`` -- one sibling channel entry per suffix present, sharing
+    *channel_dir* rather than owning a directory of its own. Empty (no fan-out)
+    for any loader other than ``"npys"``, or when no suffixed files exist.
+    """
+    if loader != "npys":
+        return {}
+    from apairo.utils import npy_analyser
+
+    return {
+        suffix: {"loader": "npys", "directory": channel_dir.name, "suffix": suffix}
+        for suffix in sorted(npy_analyser(channel_dir) - {""})
+    }
 
 
 class AsyncLayoutDataset(AbstractDataset):
@@ -106,6 +126,11 @@ class AsyncLayoutDataset(AbstractDataset):
             for k, v in channels.items()
             if v.get("timestamps_from")
         }
+        # A suffixed sub-channel (e.g. velodyne_0_intensity) has no directory of
+        # its own -- it reads a suffix-filtered subset of another channel's files.
+        self._suffix_of: Dict[str, str] = {
+            self._public(k): v["suffix"] for k, v in channels.items() if v.get("suffix")
+        }
 
         if dataset_profile is not None:
             self._profile: Dict[str, str] = load_profile(dataset_profile)
@@ -142,6 +167,16 @@ class AsyncLayoutDataset(AbstractDataset):
                     f"`apairo alias <channel> --remove` (see `apairo status`)."
                 )
             self._files[public] = path
+
+        # Suffixed sub-channels have no directory of their own on disk -- they
+        # share the directory of the channel named by their "directory" field.
+        for real, meta in channels.items():
+            if not meta.get("suffix"):
+                continue
+            public = self._public(real)
+            source_public = self._public(meta.get("directory", real))
+            if source_public in self._files:
+                self._files[public] = self._files[source_public]
 
         keys = [self._resolve_key(k) for k in keys]
         missing = set(keys) - set(self._files)
@@ -219,13 +254,24 @@ class AsyncLayoutDataset(AbstractDataset):
                     continue
                 if raw_keys is not None and channel_dir.name not in raw_keys:
                     continue
-                if channel_dir.name in existing:
-                    continue
                 loader = _detect_loader(channel_dir)
                 if loader is None:
                     continue
-                _register_raw_channel(directory, channel_dir.name, loader)
-                added += 1
+                if channel_dir.name not in existing:
+                    _register_raw_channel(directory, channel_dir.name, loader)
+                    added += 1
+                # A directory's base channel may already be registered while a
+                # suffix that only appeared later (e.g. *_intensity.npy) is not
+                # -- check independently so re-running merge picks it up.
+                for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
+                    key = f"{channel_dir.name}_{suffix}"
+                    if key in existing:
+                        continue
+                    _register_raw_channel(
+                        directory, key, frag["loader"],
+                        directory=frag["directory"], suffix=frag["suffix"],
+                    )
+                    added += 1
             if added == 0:
                 detail = f" (checked: {raw_keys})" if raw_keys else ""
                 raise ValueError(
@@ -252,6 +298,8 @@ class AsyncLayoutDataset(AbstractDataset):
                 "kind": "raw",
                 "loader": loader,
             }
+            for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
+                channels[f"{channel_dir.name}_{suffix}"] = {"kind": "raw", **frag}
 
         if not channels:
             detail = f" (checked: {raw_keys})" if raw_keys else ""
@@ -292,10 +340,17 @@ class AsyncLayoutDataset(AbstractDataset):
         self._init_timeline()
 
     def _init_loaders(self) -> None:
-        self.loaders: Dict[str, AbstractLoader] = {
-            key: str_to_loader[self._profile[key]](self._files[key])
-            for key in self._keys
-        }
+        loaders: Dict[str, AbstractLoader] = {}
+        for key in self._keys:
+            loader_cls = str_to_loader[self._profile[key]]
+            directory = self._files[key]
+            suffix = self._suffix_of.get(key)
+            loaders[key] = (
+                loader_cls(directory, files=suffixed_frame_files(directory, suffix))
+                if suffix
+                else loader_cls(directory)
+            )
+        self.loaders: Dict[str, AbstractLoader] = loaders
         self.timestamps: Dict[str, np.ndarray] = self._collect_timestamps()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
 

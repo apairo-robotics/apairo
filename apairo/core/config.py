@@ -24,7 +24,10 @@ SCHEMA_VERSION = 1
 
 _CHANNELS_TOP_FIELDS: frozenset[str] = frozenset({"version", "channels"})
 _CHANNEL_FIELDS: frozenset[str] = frozenset(
-    {"kind", "loader", "timestamps_from", "sources", "frame", "transform", "alias"}
+    {
+        "kind", "loader", "timestamps_from", "sources", "frame", "transform",
+        "alias", "directory", "suffix",
+    }
 )
 _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
 _TRANSFORM_FIELDS: frozenset[str] = frozenset({"parent", "child", "static", "format"})
@@ -161,6 +164,8 @@ def register_raw_channel(
     frame: Optional[str] = None,
     transform: Optional[dict] = None,
     alias: Optional[str] = None,
+    directory: Optional[str] = None,
+    suffix: Optional[str] = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -186,6 +191,15 @@ def register_raw_channel(
             the on-disk ``ouster_points`` directory as ``lidar``). The directory
             name stays the storage key; the alias is what ``keys=[...]`` and
             ``sample.data`` use. See :func:`set_alias`.
+        directory: On-disk subdirectory this channel's files actually live in,
+            when different from *key* -- used for a suffixed sub-channel that
+            shares another channel's directory (e.g. ``velodyne_0_intensity``
+            reading ``000000_intensity.npy`` out of ``velodyne_0/``). Defaults
+            to *key* itself.
+        suffix: When set, only frame files named ``<frame_stem>_<suffix>.npy``
+            inside *directory* are loaded for this channel (see
+            :func:`apairo.core.naming.suffixed_frame_files`). Pairs with
+            *directory*; only meaningful for the ``"npys"`` loader.
     """
     root_dir = Path(root_dir)
     config = (
@@ -201,6 +215,10 @@ def register_raw_channel(
         entry["transform"] = transform
     if alias is not None:
         entry["alias"] = alias
+    if directory is not None:
+        entry["directory"] = directory
+    if suffix is not None:
+        entry["suffix"] = suffix
     config["channels"][key] = entry
     write_config(root_dir, config)
 
@@ -315,9 +333,18 @@ def remove_channel(root_dir: str | Path, channel: str, *, data: bool = False) ->
     if data:
         import shutil
 
-        channel_dir = root_dir / channel
-        if channel_dir.is_dir():
-            shutil.rmtree(channel_dir)
+        directory = entry.get("directory")
+        suffix = entry.get("suffix")
+        if directory and suffix:
+            # A suffixed sub-channel shares its directory with another channel
+            # (e.g. velodyne_0_intensity <- velodyne_0/*_intensity.npy) -- only
+            # its own files are removed, never the shared directory.
+            for f in (root_dir / directory).glob(f"*_{suffix}.npy"):
+                f.unlink()
+        else:
+            channel_dir = root_dir / channel
+            if channel_dir.is_dir():
+                shutil.rmtree(channel_dir)
     return entry
 
 
@@ -539,9 +566,10 @@ def verify_config(root_dir: str | Path) -> list[str]:
             issues.append(f"Channel '{key}': entry is not a mapping")
             continue
 
-        if not (root_dir / key).is_dir():
+        storage_dir = root_dir / meta.get("directory", key)
+        if not storage_dir.is_dir():
             issues.append(
-                f"Channel '{key}': directory not found on disk ({root_dir / key})"
+                f"Channel '{key}': directory not found on disk ({storage_dir})"
             )
 
         issues += _unknown(meta, _CHANNEL_FIELDS, f"channel '{key}'")

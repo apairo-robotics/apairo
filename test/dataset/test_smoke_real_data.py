@@ -269,6 +269,22 @@ def test_tartan_calibration_resolves(tartan_seq):
     )
 
 
+def test_tartan_velodyne_intensity_auto_discovered(tartan_seq):
+    """velodyne_0/000000_intensity.npy is a suffixed sub-channel, auto-discovered
+    as velodyne_0_intensity -- sharing velodyne_0's directory and clock."""
+    ds = TartanKittiDataset(tartan_seq, keys=["velodyne_0", "velodyne_0_intensity"])
+    np.testing.assert_array_equal(
+        ds.timestamps["velodyne_0"], ds.timestamps["velodyne_0_intensity"]
+    )
+
+    sync = ds.synchronize(reference="velodyne_0", method="latest")
+    sample = sync[0]
+    expected = np.load(tartan_seq / "velodyne_0" / "000000_intensity.npy")
+    np.testing.assert_allclose(sample.data["velodyne_0_intensity"], expected)
+    assert sample.data["velodyne_0_intensity"].shape == (512,)
+    assert sample.data["velodyne_0"].shape == (512, 3)
+
+
 def test_tartan_synchronize_chain_shuffled_access(tartan_seq):
     ds = TartanKittiDataset(tartan_seq, keys=TARTAN_KEYS)
     view = (

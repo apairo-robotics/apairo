@@ -218,6 +218,8 @@ class ConfigurableDataset:
         loader: str,
         *,
         alias: Optional[str] = None,
+        directory: Optional[str] = None,
+        suffix: Optional[str] = None,
     ) -> None:
         """Declare a raw channel in ``sequence_dir/.apairo``.
 
@@ -232,8 +234,16 @@ class ConfigurableDataset:
             alias: Public name to expose the channel under at load time (the
                 directory keeps its real name). See
                 :func:`~apairo.core.config.set_alias`.
+            directory: On-disk subdirectory this channel's files live in, when
+                different from *key* (a suffixed sub-channel sharing another
+                channel's directory). Defaults to *key*.
+            suffix: Frame-file suffix to load from *directory* (e.g.
+                ``"intensity"`` for ``000000_intensity.npy``). Pairs with
+                *directory*.
         """
-        _register_raw_channel(sequence_dir, key, loader, alias=alias)
+        _register_raw_channel(
+            sequence_dir, key, loader, alias=alias, directory=directory, suffix=suffix
+        )
 
     @classmethod
     def verify(cls, sequence_dir: str | Path) -> bool:

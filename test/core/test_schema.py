@@ -52,6 +52,41 @@ def test_verify_config_transform_missing_child(tmp_path):
     assert any("transform is missing 'child'" in i for i in verify_config(tmp_path))
 
 
+def test_verify_config_suffixed_channel_resolves_directory(tmp_path):
+    # lidar_intensity has no directory of its own -- it shares lidar's.
+    (tmp_path / "lidar").mkdir()
+    write_config(
+        tmp_path,
+        {
+            "version": SCHEMA_VERSION,
+            "channels": {
+                "lidar": {"kind": "raw", "loader": "npys"},
+                "lidar_intensity": {
+                    "kind": "raw", "loader": "npys",
+                    "directory": "lidar", "suffix": "intensity",
+                },
+            },
+        },
+    )
+    assert verify_config(tmp_path) == []
+
+
+def test_verify_config_suffixed_channel_missing_directory(tmp_path):
+    write_config(
+        tmp_path,
+        {
+            "version": SCHEMA_VERSION,
+            "channels": {
+                "lidar_intensity": {
+                    "kind": "raw", "loader": "npys",
+                    "directory": "lidar", "suffix": "intensity",
+                },
+            },
+        },
+    )
+    assert any("directory not found" in i for i in verify_config(tmp_path))
+
+
 # ── dataset.yaml (manifest) -- optional ──────────────────────────────────────
 
 

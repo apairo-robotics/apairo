@@ -26,6 +26,20 @@ def is_frame_file(name: str, ext: str = ".npy") -> bool:
     return name.endswith(ext) and frame_stem_is_valid(Path(name).stem)
 
 
+def suffixed_frame_files(directory, suffix: str, ext: str = ".npy") -> list[str]:
+    """Frame-ordered files whose stem is ``<frame_stem>_<suffix>`` in *directory*.
+
+    The counterpart of :func:`is_frame_file` for a suffixed sub-channel: instead
+    of skipping ``000000_intensity.npy``, this lists exactly those files (for a
+    given *suffix*), sorted the same way the legacy default sorts unsuffixed
+    frames."""
+    tail = f"_{suffix}{ext}"
+    return sorted(
+        f for f in os.listdir(directory)
+        if f.endswith(tail) and frame_stem_is_valid(f[: -len(tail)])
+    )
+
+
 def require_frame_stem(stem: str) -> str:
     """Validate a frame stem the writer is about to emit; return it unchanged.
 

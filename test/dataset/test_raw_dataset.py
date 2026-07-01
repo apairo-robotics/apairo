@@ -266,6 +266,86 @@ def test_remove_channel_no_config_raises(tmp_path):
         remove_channel(tmp_path / "empty", "lidar")
 
 
+# ─────────────────────────── suffixed sub-channels ───────────────────────────
+
+def _add_suffixed_files(channel_dir, suffix, n):
+    for i in range(n):
+        np.save(channel_dir / f"{i:06d}_{suffix}.npy", np.random.rand(3))
+
+
+def test_bootstrap_discovers_suffixed_channel(tmp_path):
+    from apairo.core.config import read_config
+
+    seq = tmp_path / "seq_a"
+    _make_npys_channel(
+        seq, "lidar", [np.random.rand(4, 3) for _ in range(3)], [0.0, 0.1, 0.2]
+    )
+    _add_suffixed_files(seq / "lidar", "intensity", 3)
+
+    ds = RawDataset(seq, keys=["lidar", "lidar_intensity"])
+    assert set(ds.keys) == {"lidar", "lidar_intensity"}
+
+    entry = read_config(seq)["channels"]["lidar_intensity"]
+    assert entry["directory"] == "lidar"
+    assert entry["suffix"] == "intensity"
+
+    sync = ds.synchronize(reference="lidar")
+    expected = np.load(seq / "lidar" / "000000_intensity.npy")
+    np.testing.assert_allclose(sync[0].data["lidar_intensity"], expected)
+
+
+def test_suffixed_channel_shares_source_timestamps(tmp_path):
+    seq = tmp_path / "seq_a"
+    _make_npys_channel(
+        seq, "lidar", [np.random.rand(4, 3) for _ in range(3)], [0.0, 0.1, 0.2]
+    )
+    _add_suffixed_files(seq / "lidar", "intensity", 3)
+
+    ds = RawDataset(seq, keys=["lidar", "lidar_intensity"])
+    np.testing.assert_array_equal(
+        ds.timestamps["lidar"], ds.timestamps["lidar_intensity"]
+    )
+
+
+def test_merge_picks_up_suffix_added_after_first_init(tmp_path):
+    from apairo.core.config import read_config
+    from apairo.dataset.async_layout.dataset import AsyncLayoutDataset
+
+    seq = tmp_path / "seq_a"
+    _make_npys_channel(
+        seq, "lidar", [np.random.rand(4, 3) for _ in range(3)], [0.0, 0.1, 0.2]
+    )
+    AsyncLayoutDataset.init(seq)
+    assert "lidar_intensity" not in read_config(seq)["channels"]
+
+    _add_suffixed_files(seq / "lidar", "intensity", 3)
+    AsyncLayoutDataset.init(seq, merge=True)
+
+    channels = read_config(seq)["channels"]
+    assert channels["lidar_intensity"] == {
+        "kind": "raw", "loader": "npys", "directory": "lidar", "suffix": "intensity",
+    }
+    assert channels["lidar"] == {"kind": "raw", "loader": "npys"}  # untouched
+
+
+def test_remove_suffixed_channel_data_deletes_only_its_files(tmp_path):
+    from apairo.core.config import read_config, remove_channel
+
+    seq = tmp_path / "seq_a"
+    _make_npys_channel(
+        seq, "lidar", [np.random.rand(4, 3) for _ in range(3)], [0.0, 0.1, 0.2]
+    )
+    _add_suffixed_files(seq / "lidar", "intensity", 3)
+    RawDataset(seq, keys=["lidar_intensity"])  # bootstraps .apairo
+
+    remove_channel(seq, "lidar_intensity", data=True)
+
+    assert "lidar_intensity" not in read_config(seq)["channels"]
+    assert not list((seq / "lidar").glob("*_intensity.npy"))
+    assert (seq / "lidar" / "000000.npy").exists()  # base channel untouched
+    assert (seq / "lidar").is_dir()
+
+
 def test_channel_dependents_flags_references(tmp_path):
     from apairo.core.config import (
         channel_dependents,
