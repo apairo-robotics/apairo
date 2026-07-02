@@ -154,16 +154,18 @@ def test_alias_exposes_channel_under_public_name(tmp_path):
     assert set(ds[0].data) <= {"points", "imu"}   # sample exposes the alias
 
 
-def test_alias_request_by_real_name_still_resolves(tmp_path):
+def test_alias_request_by_real_name_speaks_real_name(tmp_path):
     from apairo.core.config import set_alias
 
     seq = tmp_path / "seq_a"
     _make_sequence(seq, n_lidar=3)
     set_alias(seq, "lidar", "points")
 
-    # asking by the on-disk name works, but the channel is exposed as the alias
+    # asking by the on-disk name works, and the whole downstream speaks that
+    # name -- an explicit request is immune to aliases added on a shared dataset
     ds = RawDataset(seq, keys=["lidar"])
-    assert ds.keys == ["points"]
+    assert ds.keys == ["lidar"]
+    assert "lidar" in ds.timestamps and "points" not in ds.timestamps
 
 
 def test_alias_default_keys_use_public_names(tmp_path):
@@ -204,6 +206,17 @@ def test_set_alias_rejects_collision(tmp_path):
     with pytest.raises(ValueError):
         set_alias(seq, "imu", "lidar")     # shadows an existing channel name
     set_alias(seq, "lidar", "y")           # re-aliasing the same channel is fine
+
+
+def test_register_raw_channel_rejects_colliding_alias(tmp_path):
+    # register_raw_channel(alias=...) goes through the same guard as set_alias:
+    # an alias shadowing another channel's name would make requests ambiguous.
+    from apairo.core.config import register_raw_channel
+
+    seq = tmp_path / "seq_a"
+    _make_sequence(seq, n_lidar=3)         # channels: lidar, imu
+    with pytest.raises(ValueError, match="channel directory name"):
+        register_raw_channel(seq, "lidar", "npys", alias="imu")
 
 
 def test_set_alias_force_reassigns(tmp_path):

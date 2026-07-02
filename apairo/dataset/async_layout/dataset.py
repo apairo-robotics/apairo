@@ -121,6 +121,16 @@ class AsyncLayoutDataset(AbstractDataset):
         self._alias_of: Dict[str, str] = {
             k: v["alias"] for k, v in channels.items() if v.get("alias")
         }
+        # Honour the request's language: a channel explicitly asked for by its
+        # real (directory) name is exposed under that name, one asked for by its
+        # alias under the alias. Rewriting the alias table up front keeps every
+        # table below in the request's vocabulary.
+        if keys is not None:
+            to_real = {alias: real for real, alias in self._alias_of.items()}
+            for k in keys:
+                real = to_real.get(k, k)
+                if real in self._alias_of:
+                    self._alias_of[real] = k
         self._timestamp_aliases: Dict[str, str] = {
             self._public(k): self._resolve_key(v["timestamps_from"])
             for k, v in channels.items()

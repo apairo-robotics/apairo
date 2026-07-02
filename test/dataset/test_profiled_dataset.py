@@ -523,15 +523,18 @@ def test_profiled_alias_request_by_alias(goose_root):
     assert ds.keys == ["points", "labels"]
 
 
-def test_profiled_alias_request_by_real_name_still_resolves(goose_root):
+def test_profiled_alias_request_by_real_name_speaks_real_name(goose_root):
     from apairo.core.config import set_alias
 
     _GooseDS(goose_root, keys=["lidar"])
     set_alias(goose_root, "lidar", "points")
 
-    # Asking by the on-disk/profile name works, but the channel is exposed as the alias.
+    # Asking by the on-disk/profile name works, and the channel stays exposed
+    # under that name -- the dataset speaks the request's language, so a script
+    # written against real names survives an alias added later.
     ds = _GooseDS(goose_root, keys=["lidar"])
-    assert set(ds[0].data) == {"points"}
+    assert ds.keys == ["lidar"]
+    assert set(ds[0].data) == {"lidar"}
 
 
 def test_profiled_alias_default_keys_use_public_name(goose_root):
@@ -553,6 +556,21 @@ def test_profiled_alias_survives_split(goose_root):
     ds = _GooseDS(goose_root, keys=["points", "labels"])
     ds_train = ds.split("train")  # round-trips keys (aliases) through the constructor
     assert set(ds_train[0].data) == {"points", "labels"}
+
+
+def test_profiled_alias_shadowing_channel_name_blocks_load(goose_root):
+    # set_alias refuses such an alias; a hand-edited channels.yaml can still
+    # carry one, so the constructor fails fast instead of resolving requests
+    # for the shadowed channel to the wrong data.
+    from apairo.core.config import read_config, write_config
+
+    _GooseDS(goose_root, keys=["lidar"])  # bootstraps .apairo/channels.yaml
+    config = read_config(goose_root)
+    config["channels"]["lidar"]["alias"] = "labels"  # shadows the labels channel
+    write_config(goose_root, config)
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        _GooseDS(goose_root, keys=["labels"])
 
 
 # ──────────────── remove_channel cascades per-sequence (profiled) ─────────────

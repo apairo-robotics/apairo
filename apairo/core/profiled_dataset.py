@@ -525,20 +525,31 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         self._alias_of: dict[str, str] = {
             k: v["alias"] for k, v in channels.items() if v.get("alias")
         }
+        for real, alias in self._alias_of.items():
+            if alias in channels and alias != real:
+                raise ValueError(
+                    f"Channel '{real}' is aliased as '{alias}', which is also a "
+                    f"channel name in '{self._root}' -- requests for '{alias}' "
+                    f"would be ambiguous. Clear it with "
+                    f"`apairo alias {real} --remove` or pick another alias."
+                )
         to_real = {alias: real for real, alias in self._alias_of.items()}
 
         if keys is None:
             keys = [
-                k
+                self._alias_of.get(k, k)
                 for k, v in channels.items()
                 if v.get("kind", "raw") == "raw" and not self._modalities[k].optional
             ]
 
         # Normalize each requested key (alias *or* real name) to its real
         # channel name, and remember the public name it is exposed under so the
-        # loaders and ``sample.data`` speak the request's language.
-        keys = [to_real.get(k, k) for k in keys]
-        self._public_of: dict[str, str] = {k: self._alias_of.get(k, k) for k in keys}
+        # loaders and ``sample.data`` speak the request's language: ask for the
+        # alias and everything downstream says the alias; ask for the real name
+        # and it says the real name. Default keys speak the alias.
+        real_keys = [to_real.get(k, k) for k in keys]
+        self._public_of: dict[str, str] = dict(zip(real_keys, keys))
+        keys = real_keys
 
         # Classify each requested key.
         raw_keys: list[str] = []

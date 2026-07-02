@@ -190,7 +190,8 @@ def register_raw_channel(
         alias: Public name the channel is exposed under when loaded (e.g. expose
             the on-disk ``ouster_points`` directory as ``lidar``). The directory
             name stays the storage key; the alias is what ``keys=[...]`` and
-            ``sample.data`` use. See :func:`set_alias`.
+            ``sample.data`` use. Raises ValueError if it collides with another
+            channel's name or alias (same guard as :func:`set_alias`).
         directory: On-disk subdirectory this channel's files actually live in,
             when different from *key* -- used for a suffixed sub-channel that
             shares another channel's directory (e.g. ``velodyne_0_intensity``
@@ -214,6 +215,9 @@ def register_raw_channel(
     if transform is not None:
         entry["transform"] = transform
     if alias is not None:
+        clash = _alias_conflict(config["channels"], key, alias)
+        if clash:
+            raise ValueError(f"Cannot register '{key}' with alias '{alias}': {clash}.")
         entry["alias"] = alias
     if directory is not None:
         entry["directory"] = directory
