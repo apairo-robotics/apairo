@@ -101,7 +101,7 @@ def test_rellis_derived_channel_split(rellis_root):
         timestamps_from = "lidar"
         sources = ["labels"]
 
-        def process(self, sample):
+        def __call__(self, sample):
             return (sample.data["labels"] > 0).astype(np.uint8)
 
     Rellis3DDataset(rellis_root, keys=["lidar", "labels"]).run_preprocess(TravLabel())
@@ -166,7 +166,7 @@ def test_sequence_preprocessor_per_frame_multi_sequence(rellis_root):
         timestamps_from = "lidar"
         sources = ["lidar"]
 
-        def process(self, frames):
+        def __call__(self, frames):
             return np.arange(len(list(frames)), dtype=np.int64)
 
     Rellis3DDataset(rellis_root, keys=["lidar"]).run_preprocess(PositionInSequence())
@@ -195,7 +195,7 @@ def test_sequence_preprocessor_stacked_multi_sequence(rellis_root):
         timestamps_from = "lidar"
         sources = ["lidar"]
 
-        def process(self, frames):
+        def __call__(self, frames):
             n = len(list(frames))
             return np.stack([np.eye(4) * i for i in range(n)])
 

@@ -35,7 +35,7 @@ class TravLabel(FramePreprocessor):
     timestamps_from = "lidar"
     sources         = ["labels"]
 
-    def process(self, sample) -> np.ndarray:
+    def __call__(self, sample) -> np.ndarray:
         return np.isin(sample.data["labels"], _TRAVERSABLE_IDS).astype(np.uint8)
 
 

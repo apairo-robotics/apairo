@@ -137,7 +137,23 @@ class AbstractDataset(ABC):
 
             ds.transform(range_filter)
 
-        Both forms compose in registration order and return ``self`` for chaining.
+        **Preprocessor** -- ``transform(preprocessor)``
+
+        A :class:`~apairo.core.preprocessor.FramePreprocessor` runs lazily:
+        its result is published under its declared ``output_key`` (override
+        with ``output=``) at access time, nothing is written to disk.  This
+        is how to preview a preprocess before materializing it::
+
+            p = TravLabel()
+            preview = ds.transform(p)        # lazy, nothing written
+            preview[42].data["trav_label"]   # inspect, iterate on p
+            ds.run_preprocess(p)             # materialize once satisfied
+
+        A :class:`~apairo.core.preprocessor.SequencePreprocessor` is rejected:
+        it needs the full sequence at once, materialization is the point.
+
+        All forms compose in registration order and return ``self`` for
+        chaining.
 
         .. warning::
             Transforms are registered **in place**: the return value is the
@@ -146,14 +162,47 @@ class AbstractDataset(ABC):
             independent variants, branch first (e.g. ``ds.filter(...)`` or
             ``ds.select(ds.keys)``) and register transforms on each branch.
         """
+        drop_key = output
         if fn is None:
-            if not callable(key_or_fn):
+            from apairo.core.preprocessor import (
+                FramePreprocessor,
+                Preprocessor,
+                SequencePreprocessor,
+            )
+
+            if isinstance(key_or_fn, type) and issubclass(key_or_fn, Preprocessor):
                 raise TypeError(
-                    f"transform(fn) expects a callable sample->sample; got "
-                    f"{key_or_fn!r}. For a per-channel transform use "
-                    f"transform(key, fn)."
+                    f"transform() expects a preprocessor instance, not the "
+                    f"class -- did you mean transform({key_or_fn.__name__}())?"
                 )
-            step = key_or_fn
+            if isinstance(key_or_fn, SequencePreprocessor):
+                raise TypeError(
+                    f"{type(key_or_fn).__name__} is a SequencePreprocessor: "
+                    f"it needs the full sequence at once and cannot run "
+                    f"lazily. Materialize it with run_preprocess() instead."
+                )
+            if isinstance(key_or_fn, FramePreprocessor):
+                out = output if output is not None else key_or_fn.output_key
+                drop_key = out
+
+                def step(sample: Sample, _p=key_or_fn, _out=out) -> Sample:
+                    missing = [k for k in _p.input_keys if k not in sample.data]
+                    if missing:
+                        raise KeyError(
+                            f"{type(_p).__name__} needs input channels "
+                            f"{missing} absent from the sample (available: "
+                            f"{sorted(sample.data)})."
+                        )
+                    sample.data[_out] = _p(sample)
+                    return sample
+            elif not callable(key_or_fn):
+                raise TypeError(
+                    f"transform(fn) expects a callable sample->sample or a "
+                    f"FramePreprocessor; got {key_or_fn!r}. For a "
+                    f"per-channel transform use transform(key, fn)."
+                )
+            else:
+                step = key_or_fn
         else:
             key = key_or_fn
             if not isinstance(key, str) or not callable(fn):
@@ -171,10 +220,10 @@ class AbstractDataset(ABC):
             self._pipeline: list[Callable] = []
         self._pipeline.append(step)
 
-        if output is not None and not keep:
+        if drop_key is not None and not keep:
             if not hasattr(self, "_drop_keys"):
                 self._drop_keys: set[str] = set()
-            self._drop_keys.add(output)
+            self._drop_keys.add(drop_key)
 
         return self
 

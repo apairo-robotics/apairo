@@ -110,7 +110,7 @@ def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:
 
     for idx, sample in enumerate(dataset):
         logger.debug("[%d/%d]", idx + 1, n)
-        result = _to_numpy(preprocessor.process(sample))
+        result = _to_numpy(preprocessor(sample))
         path = dataset.derived_path(idx, preprocessor.output_key, ext)
         writer.write(result, path)
 
@@ -131,7 +131,7 @@ def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None
 def _run_sequence_stacked(preprocessor: SequencePreprocessor, dataset, ext: str) -> None:
     """Stacked output (output_loader="npy"): one {key}.{ext} file per sequence.
 
-    ``process()`` runs once per sequence and the result is written to that
+    The preprocessor runs once per sequence and the result is written to that
     sequence's channel directory (``<seq>/<key>/<key>.ext``) via ``derived_path``,
     so a multi-sequence ProfiledDataset finds one stacked file per sequence.  For
     a single-sequence dataset (a single mission, an async sequence) this is the
@@ -145,7 +145,7 @@ def _run_sequence_stacked(preprocessor: SequencePreprocessor, dataset, ext: str)
         if not indices:
             continue
         frames = [dataset[i] for i in indices]
-        result = _to_numpy(preprocessor.process(iter(frames)))
+        result = _to_numpy(preprocessor(iter(frames)))
         out = (
             dataset.derived_path(indices[0], preprocessor.output_key, ext).parent
             / f"{preprocessor.output_key}.{ext}"
@@ -162,7 +162,7 @@ def _run_sequence_per_frame(
 ) -> None:
     """Per-frame output (output_loader="npys") from a sequence-level computation.
 
-    ``process()`` runs once per sequence -- so it never crosses a sequence
+    The preprocessor runs once per sequence -- so it never crosses a sequence
     boundary -- and its rows are written one file per frame via ``derived_path``,
     the same on-disk layout a FramePreprocessor produces.  That is what lets a
     multi-sequence ProfiledDataset (e.g. Rellis) load the result back: a single
@@ -175,10 +175,10 @@ def _run_sequence_per_frame(
 
     for indices in groups.values():
         frames = [dataset[i] for i in indices]
-        result = _to_numpy(preprocessor.process(iter(frames)))
+        result = _to_numpy(preprocessor(iter(frames)))
         if len(result) != len(indices):
             raise ValueError(
-                f"{preprocessor.__class__.__name__}.process returned {len(result)} "
+                f"{preprocessor.__class__.__name__} returned {len(result)} "
                 f"rows for a {len(indices)}-frame sequence; a per-frame "
                 f"(output_loader='npys') sequence preprocessor must return one row "
                 f"per input frame."

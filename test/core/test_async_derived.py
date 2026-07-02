@@ -15,7 +15,7 @@ class _Identity(FramePreprocessor):
     timestamps_from = "velodyne_0"
     sources = ["velodyne_0"]
 
-    def process(self, sample: Sample) -> np.ndarray:
+    def __call__(self, sample: Sample) -> np.ndarray:
         return sample.data["velodyne_0"]
 
 

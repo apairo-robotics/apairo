@@ -105,7 +105,7 @@ class _Norm(ap.FramePreprocessor):
     input_keys = ["lidar"]
     timestamps_from = "lidar"
 
-    def process(self, sample):
+    def __call__(self, sample):
         return np.linalg.norm(sample.data["lidar"][:, :3], axis=1).astype(np.float32)
 
 

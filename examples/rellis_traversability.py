@@ -43,7 +43,7 @@ class TraversabilityFromLabels(FramePreprocessor):
     timestamps_from = "lidar"
     sources         = ["labels"]
 
-    def process(self, sample: Sample) -> np.ndarray:
+    def __call__(self, sample: Sample) -> np.ndarray:
         return np.isin(sample.data["labels"], list(TRAVERSABLE)).astype(np.uint8)
 
 

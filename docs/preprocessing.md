@@ -23,7 +23,7 @@ class TraversabilityLabel(FramePreprocessor):
     timestamps_from = "labels"       # inherit timestamps, no timestamps.txt written
     sources         = ["labels"]     # provenance metadata in .apairo
 
-    def process(self, sample: Sample) -> np.ndarray:
+    def __call__(self, sample: Sample) -> np.ndarray:
         labels = sample.data["labels"]          # np.ndarray (N,)
         traversable_ids = {1, 2, 5, 9}
         mask = np.zeros(len(labels), dtype=bool)
@@ -43,6 +43,23 @@ sample = ds[0]
 print(sample.data["trav_label"].shape)   # torch.Size([N])
 ```
 
+### Preview before materializing
+
+A `FramePreprocessor` is a callable on a `Sample` — the same protocol as a
+transform. Pass it to `transform()` to run it lazily: the result is published
+under its `output_key` at access time, nothing is written to disk. Iterate on
+the implementation, visualize a few frames, then materialize the same object:
+
+```python
+p = TraversabilityLabel()
+preview = ds.transform(p)             # lazy, nothing written
+preview[42].data["trav_label"]        # computed on access — inspect, plot
+ds.run_preprocess(p)                  # once satisfied, persist + register
+```
+
+(A `SequencePreprocessor` cannot run lazily — it needs the full sequence at
+once, which is exactly why materialization exists.)
+
 ---
 
 ## SequencePreprocessor
@@ -56,7 +73,7 @@ class GICPPoses(SequencePreprocessor):
     input_keys    = ["velodyne_0"]
     sources       = ["velodyne_0"]  # has its own timestamps.txt in output
 
-    def process(self, frames) -> np.ndarray:
+    def __call__(self, frames) -> np.ndarray:
         poses = []
         for sample in frames:
             pts = sample.data["velodyne_0"]
@@ -131,7 +148,7 @@ The placement is consistent with each dataset's native structure, so derived fil
 ## ChannelWriter -- channels produced *outside* apairo
 
 `run_preprocess` is the path for a **deterministic** derived channel: a
-`process(sample)` function apairo calls per frame. Some channels don't fit that
+callable apairo runs per frame. Some channels don't fit that
 shape -- they are produced by an **external tool** (a labeling/annotation app, a
 one-off script) that already *holds* the data, often for only a **few frames**
 (e.g. ground-truth labels used only at evaluation). For those, use

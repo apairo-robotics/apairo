@@ -8,6 +8,16 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`ds.transform(preprocessor)` -- lazy preview of a preprocess.** A
+  `FramePreprocessor` is now a callable on a `Sample` (same protocol as
+  transforms and `Interpolator`), so the same instance runs in both worlds:
+  lazily in a pipeline (result published under its `output_key` at access
+  time, nothing written -- iterate and visualize before committing) and
+  materialized via `run_preprocess` once satisfied. `output=` overrides the
+  published key; `keep=False` drops it from the final sample. A
+  `SequencePreprocessor` is rejected with a pointer to `run_preprocess`
+  (global context cannot run lazily). A missing declared input raises a
+  clear `KeyError` instead of failing downstream.
 - **`method="next"` matching strategy for `synchronize()`** -- first event with
   `t >= t_ref`, the forward counterpart of `"previous"`. The three built-in
   strategies now name their temporal direction: `"previous"` (past only),
@@ -24,6 +34,13 @@ All notable changes to apairo are documented here. The format is based on
   counterpart to the stateful `AccumulateFrames` transform -- correct under
   `split`, shuffling and multi-worker `DataLoader`. Exposed as the chainable
   `AbstractDataset.window(...)` and the `WindowView` class.
+
+### Deprecated
+- **`Preprocessor.process()` in favour of `__call__`.** Subclasses should
+  implement `__call__`; a legacy `process` is aliased to `__call__` with a
+  `DeprecationWarning` at class definition, and calling `.process(...)` on a
+  new-style instance warns and delegates. The runner now invokes the
+  instance directly.
 
 ### Changed
 - **`synchronize(method="latest")` renamed to `method="previous"`.** The old

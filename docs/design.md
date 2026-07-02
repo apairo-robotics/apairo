@@ -75,8 +75,8 @@ execution context** — not by concept:
 - **`apairo_rr`** — visualization via rerun.
 
 The contracts crossing these boundaries are deliberately tiny: a
-transform is a callable on an array or a `Sample`; a preprocessor is one
-`process()` method plus declarative I/O attributes; a synchronization
+transform is a callable on an array or a `Sample`; a preprocessor is a
+callable on a `Sample` plus declarative I/O attributes; a synchronization
 strategy is a callable on timestamp arrays; an interpolator is one
 `__call__(t, t0, v0, t1, v1)`. Small contracts are what let collections
 grow without the core changing.

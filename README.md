@@ -95,7 +95,7 @@ import numpy as np
 class TravLabel(FramePreprocessor):
     output_key = "trav_gt";  output_loader = "npys"
     input_keys = ["labels"]; timestamps_from = "lidar"; sources = ["labels"]
-    def process(self, sample): return (sample.data["labels"] < 10).astype(np.uint8)
+    def __call__(self, sample): return (sample.data["labels"] < 10).astype(np.uint8)
 
 ds = Rellis3DDataset(root, keys=["lidar", "labels"])
 ds.run_preprocess(TravLabel())
@@ -135,7 +135,7 @@ class TravLabel(FramePreprocessor):
     timestamps_from = "labels"
     sources         = ["labels"]
 
-    def process(self, sample) -> np.ndarray:
+    def __call__(self, sample) -> np.ndarray:
         return (sample.data["labels"] < 10).astype(np.uint8)
 
 ds = apairo.Goose3DDataset("/data/goose", keys=["lidar", "labels"])

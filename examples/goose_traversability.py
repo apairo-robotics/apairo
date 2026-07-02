@@ -47,7 +47,7 @@ class TraversabilityPreprocessor(FramePreprocessor):
             cfg = yaml.safe_load(f)
         self._traversable: set[int] = set(cfg.get('traversable_map') or TRAVERSABLE_LABELS)
 
-    def process(self, sample: Sample) -> np.ndarray:
+    def __call__(self, sample: Sample) -> np.ndarray:
         labels: np.ndarray = sample.data["labels"]  # (N,)
         mask = np.zeros(len(labels), dtype=bool)
         for lbl in self._traversable:

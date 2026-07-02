@@ -22,7 +22,7 @@ class TravLabel(FramePreprocessor):
     timestamps_from = "velodyne_0"  # no own timestamps.txt needed
     sources = ["velodyne_0"]
 
-    def process(self, sample: Sample) -> np.ndarray:
+    def __call__(self, sample: Sample) -> np.ndarray:
         pts = sample.data["velodyne_0"]  # (N, 4)
         # Replace with your actual model / heuristic:
         return np.zeros(len(pts), dtype=np.float32)
@@ -39,7 +39,7 @@ class GICPPoses(SequencePreprocessor):
     input_keys = ["velodyne_0"]
     sources = ["velodyne_0"]
 
-    def process(self, frames):
+    def __call__(self, frames):
         poses = []
         for sample in frames:
             # Replace with your actual ICP call:

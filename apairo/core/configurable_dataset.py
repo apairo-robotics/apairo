@@ -140,6 +140,10 @@ class ConfigurableDataset:
     Extra keyword arguments are forwarded to the dataset constructor (class form)
     or ignored (instance form, since the instance is already configured).
     ``overwrite=True`` recomputes even if the output already exists.
+
+    To preview a :class:`~apairo.core.preprocessor.FramePreprocessor` without
+    writing anything, run the same instance lazily first:
+    ``ds.transform(preprocessor)``.
     """
 
     @classmethod

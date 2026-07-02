@@ -41,7 +41,20 @@ def range_filter(sample):
 ds.transform(range_filter)
 ```
 
-Both forms return `self` and compose **in registration order**:
+### Preprocessor form
+
+```python
+ds.transform(preprocessor)   # a FramePreprocessor instance
+```
+
+A `FramePreprocessor` is a callable on a `Sample`, so it plugs into the
+pipeline directly: its result is published under its declared `output_key`
+(override with `output=`) at access time, nothing is written to disk. This is
+the lazy preview of a preprocess — see
+[Preprocessing](preprocessing.md#preview-before-materializing). A
+`SequencePreprocessor` is rejected (it needs the full sequence at once).
+
+All forms return `self` and compose **in registration order**:
 
 ```python
 ds.transform("lidar", Normalize())   # step 1
