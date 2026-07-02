@@ -29,5 +29,5 @@ class NaiveLoader:
 def latest_match(ref_ts: np.ndarray, other_ts: np.ndarray) -> np.ndarray:
     """Index into *other* of the last event with t <= each reference tick.
 
-    The same zero-order-hold matching apairo's ``method="latest"`` does."""
+    The same zero-order-hold matching apairo's ``method="previous"`` does."""
     return np.searchsorted(other_ts, ref_ts, side="right") - 1

@@ -68,7 +68,7 @@ def measure(n: int) -> dict:
     lidar_ts = np.loadtxt(root / "lidar" / "timestamps.txt")
     pose_ts = np.loadtxt(root / "pose" / "timestamps.txt")
 
-    sync = ds.synchronize(reference=REF, method="latest")
+    sync = ds.synchronize(reference=REF, method="previous")
     keep = np.arange(0, len(sync), 2)
     access_ap, access_base = _access_tax(root, POINTS)
 
@@ -77,7 +77,7 @@ def measure(n: int) -> dict:
         "access_ap": access_ap,
         "access_base": access_base,
         # synchronize: apairo build vs a bare searchsorted align
-        "sync_ap": _ms(lambda: ds.synchronize(reference=REF, method="latest")),
+        "sync_ap": _ms(lambda: ds.synchronize(reference=REF, method="previous")),
         "sync_base": _ms(lambda: latest_match(lidar_ts, pose_ts)),
         # a lazy view over the whole dataset: cheap to build, tiny in memory
         "view_ms": _ms(lambda: sync.filter(keep)),

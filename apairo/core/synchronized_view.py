@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Callable, Literal, Union
 
 import numpy as np
@@ -16,7 +17,10 @@ SyncMethod = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
 # What a single channel can be synchronized with: a built-in matching mode,
 # a custom matching callable, or a value-level interpolator.
-ChannelStrategy = Union[Literal["latest", "nearest"], SyncMethod, Interpolator]
+# "latest" is a deprecated alias for "previous".
+ChannelStrategy = Union[
+    Literal["previous", "next", "nearest", "latest"], SyncMethod, Interpolator
+]
 
 
 class SynchronizedView(AbstractDataset):
@@ -54,10 +58,14 @@ class SynchronizedView(AbstractDataset):
               :func:`~apairo.utils.timestamps.clock_from_distance`).
         method: Strategy applied to every channel, or a dict mapping channel
             names to per-channel strategies (unlisted channels default to
-            ``"latest"``).  A strategy is one of:
+            ``"previous"``).  A strategy is one of:
 
-            * ``"latest"`` -- last event with ``t <= t_ref`` (zero-order hold);
-            * ``"nearest"`` -- event closest in time to ``t_ref``;
+            * ``"previous"`` -- last event with ``t <= t_ref`` (zero-order
+              hold, never looks into the future; ``"latest"`` is a
+              deprecated alias);
+            * ``"next"`` -- first event with ``t >= t_ref``;
+            * ``"nearest"`` -- event closest in time to ``t_ref``, either
+              side (ties favour the earlier event);
             * a **callable** ``(channel_ts, ref_ts) -> indices`` returning,
               for each reference tick, the event index to use (negative = no
               match, the frame is dropped);
@@ -75,7 +83,7 @@ class SynchronizedView(AbstractDataset):
         ds = TartanKittiDataset(seq, keys=["velodyne_0", "gicp_poses"])
         ds_sync = ds.synchronize(
             reference="velodyne_0",
-            method={"gicp_poses": Se3Interp()},   # velodyne_0 -> "latest"
+            method={"gicp_poses": Se3Interp()},   # velodyne_0 -> "previous"
             tolerance=0.05,
         )
 
@@ -89,7 +97,7 @@ class SynchronizedView(AbstractDataset):
         self,
         parent: AbstractDataset,
         reference: str | np.ndarray | None = None,
-        method: ChannelStrategy | dict[str, ChannelStrategy] = "latest",
+        method: ChannelStrategy | dict[str, ChannelStrategy] = "previous",
         tolerance: float | None = None,
     ) -> None:
         parent_ts = getattr(parent, "timestamps", None)
@@ -146,18 +154,30 @@ class SynchronizedView(AbstractDataset):
                     f"method maps unknown channels {sorted(unknown)}; "
                     f"dataset keys are {keys}."
                 )
-            strategies = {k: method.get(k, "latest") for k in keys}
+            strategies = {k: method.get(k, "previous") for k in keys}
         else:
             strategies = {k: method for k in keys}
+
+        if any(s == "latest" for s in strategies.values()):
+            warnings.warn(
+                "method='latest' is deprecated, use 'previous' (same "
+                "semantics: last event with t <= t_ref).",
+                DeprecationWarning,
+                stacklevel=4,  # _resolve_strategies <- __init__ <- synchronize()
+            )
+            strategies = {
+                k: ("previous" if s == "latest" else s)
+                for k, s in strategies.items()
+            }
 
         for key, strat in strategies.items():
             if isinstance(strat, Interpolator) or callable(strat):
                 continue
-            if strat not in ("latest", "nearest"):
+            if strat not in ("previous", "next", "nearest"):
                 raise ValueError(
-                    f"Strategy for {key!r} must be 'latest', 'nearest', a "
-                    f"callable (channel_ts, ref_ts) -> indices, or an "
-                    f"Interpolator, got {strat!r}"
+                    f"Strategy for {key!r} must be 'previous', 'next', "
+                    f"'nearest', a callable (channel_ts, ref_ts) -> indices, "
+                    f"or an Interpolator, got {strat!r}"
                 )
         return strategies
 
@@ -229,10 +249,14 @@ class SynchronizedView(AbstractDataset):
                     f"negative = no match)."
                 )
             valid = (idx >= 0) & (idx < len(ts))
-        elif strat == "latest":
+        elif strat == "previous":
             idx = latest
             valid = latest >= 0
-        else:  # nearest
+        elif strat == "next":
+            # first event with t >= t_ref; len(ts) when none remains
+            idx = np.searchsorted(ts, ref_ts, side="left")
+            valid = idx < len(ts)
+        else:  # nearest -- either side; ties favour the earlier event
             prev = np.clip(latest, 0, len(ts) - 1)
             nxt = np.clip(right, 0, len(ts) - 1)
             idx = np.where(

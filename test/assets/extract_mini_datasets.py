@@ -110,7 +110,7 @@ def extract_tartan() -> None:
     np.savetxt(vel_dst / "timestamps.txt", vel_ts[k0:k1], fmt="%.18e")
 
     # cmd / multisense_imu: single stacked npy, rows cut to the same window
-    # (with margin before t0 so method="latest" has an event for frame 0)
+    # (with margin before t0 so method="previous" has an event for frame 0)
     for channel, stacked in [("cmd", "twist.npy"), ("multisense_imu", "imu.npy")]:
         ts = np.loadtxt(TARTAN_SRC / channel / "timestamps.txt")
         rows = np.load(TARTAN_SRC / channel / stacked)

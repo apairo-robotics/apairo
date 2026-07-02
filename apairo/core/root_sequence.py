@@ -140,7 +140,7 @@ class RootSequenceMixin:
                 return SequenceView(seq, range(len(seq)), seq_id)
         raise KeyError(f"Sequence '{seq_id}' not found. Available: {self.sequence_ids}")
 
-    def synchronize(self, reference=None, method="latest", tolerance=None):
+    def synchronize(self, reference=None, method="previous", tolerance=None):
         """Resample onto a reference clock -- see :meth:`AbstractDataset.synchronize`.
 
         On a root dataset each sequence is synchronized independently (clocks are

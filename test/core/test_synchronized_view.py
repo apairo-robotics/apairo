@@ -50,15 +50,29 @@ def test_default_reference_is_lowest_frequency(async_ds):
     assert len(view) == 4
 
 
-def test_latest_matches_last_event_before_ref(async_ds):
-    view = async_ds.synchronize(reference="lidar", method="latest")
+def test_previous_matches_last_event_before_ref(async_ds):
+    view = async_ds.synchronize(reference="lidar", method="previous")
     np.testing.assert_array_equal(view.frame_indices["lidar"], [0, 1, 2, 3])
     np.testing.assert_array_equal(view.frame_indices["imu"], [0, 2, 4, 7])
+
+
+def test_next_matches_first_event_after_ref(async_ds):
+    view = async_ds.synchronize(reference="lidar", method="next")
+    np.testing.assert_array_equal(view.frame_indices["lidar"], [0, 1, 2, 3])
+    np.testing.assert_array_equal(view.frame_indices["imu"], [0, 3, 5, 7])
 
 
 def test_nearest_matches_closest_event(async_ds):
     view = async_ds.synchronize(reference="lidar", method="nearest")
     np.testing.assert_array_equal(view.frame_indices["imu"], [0, 2, 5, 7])
+
+
+def test_latest_is_deprecated_alias_for_previous(async_ds):
+    with pytest.warns(DeprecationWarning, match="'previous'"):
+        view = async_ds.synchronize(reference="lidar", method="latest")
+    np.testing.assert_array_equal(view.frame_indices["imu"], [0, 2, 4, 7])
+    with pytest.warns(DeprecationWarning, match="'previous'"):
+        async_ds.synchronize(reference="lidar", method={"imu": "latest"})
 
 
 def test_samples_are_complete_and_timestamped(async_ds):
@@ -85,14 +99,24 @@ def test_tolerance_drops_unmatched_frames(async_ds):
     np.testing.assert_array_equal(view.frame_indices["lidar"], [0, 1, 3])
 
 
-def test_latest_drops_frames_before_first_event(tmp_path):
-    # imu starts after the first lidar frame -> frame 0 has no latest match
+def test_previous_drops_frames_before_first_event(tmp_path):
+    # imu starts after the first lidar frame -> frame 0 has no previous match
     ds = _make_async_dataset(
         tmp_path, np.linspace(0, 1, 4), np.linspace(0.1, 1, 8)
     )
-    view = ds.synchronize(reference="lidar", method="latest")
+    view = ds.synchronize(reference="lidar", method="previous")
     assert len(view) == 3
     np.testing.assert_array_equal(view.frame_indices["lidar"], [1, 2, 3])
+
+
+def test_next_drops_frames_after_last_event(tmp_path):
+    # imu stops before the last lidar frame -> frame 3 has no next match
+    ds = _make_async_dataset(
+        tmp_path, np.linspace(0, 1, 4), np.linspace(0.0, 0.9, 8)
+    )
+    view = ds.synchronize(reference="lidar", method="next")
+    assert len(view) == 3
+    np.testing.assert_array_equal(view.frame_indices["lidar"], [0, 1, 2])
 
 
 def test_reference_override(async_ds):
@@ -103,10 +127,13 @@ def test_reference_override(async_ds):
 
 
 def test_time_offsets(async_ds):
-    view = async_ds.synchronize(reference="lidar", method="latest")
+    view = async_ds.synchronize(reference="lidar", method="previous")
     offsets = view.time_offsets("imu")
-    assert (offsets <= 0).all()  # latest events are never in the future
+    assert (offsets <= 0).all()  # previous events are never in the future
     np.testing.assert_allclose(view.time_offsets("lidar"), 0.0)
+
+    view = async_ds.synchronize(reference="lidar", method="next")
+    assert (view.time_offsets("imu") >= 0).all()  # next events never precede
 
 
 def test_chaining_filter_transform_cache(async_ds):
@@ -168,7 +195,7 @@ def test_external_clock_fixed_rate(async_ds):
 
 
 def test_external_clock_drops_ticks_before_first_event(async_ds):
-    # ticks before t=0 have no "latest" event in any channel
+    # ticks before t=0 have no "previous" event in any channel
     clock = np.array([-1.0, -0.5, 0.0, 0.5, 1.0])
     view = async_ds.synchronize(reference=clock)
     assert len(view) == 3
@@ -261,7 +288,7 @@ def test_interpolated_channel_value(async_ds):
     np.testing.assert_allclose(
         view[1].data["imu"], np.full(2, 2 + 1 / 3), rtol=1e-6  # data is float32
     )
-    # the lidar channel (unlisted) defaults to "latest" -- raw events
+    # the lidar channel (unlisted) defaults to "previous" -- raw events
     np.testing.assert_array_equal(view[1].data["lidar"], np.full(2, 1))
 
 

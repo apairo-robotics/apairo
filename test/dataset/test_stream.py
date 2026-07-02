@@ -35,7 +35,7 @@ def test_items_are_passed_through_untouched(streams):
 
 def test_synchronize(streams):
     ds = StreamDataset(streams)
-    view = ds.synchronize(reference="lidar", method="latest")
+    view = ds.synchronize(reference="lidar", method="previous")
     assert view.is_synchronous
     assert len(view) == 2                          # tick 0.0 has no cmd yet
     s = view[0]

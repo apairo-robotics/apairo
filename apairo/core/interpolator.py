@@ -9,7 +9,8 @@ class Interpolator(ABC):
     bracketing events.
 
     This is the *value-level* counterpart of the index-level matching
-    strategies (``"latest"``, ``"nearest"``): instead of picking an existing
+    strategies (``"previous"``, ``"next"``, ``"nearest"``): instead of
+    picking an existing
     event, an interpolator builds a new value at ``t_ref``.  Use it for
     continuous signals -- poses, IMU, commands -- never for data that cannot
     be blended (point clouds, images).

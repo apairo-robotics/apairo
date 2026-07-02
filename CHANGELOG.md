@@ -8,6 +8,11 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`method="next"` matching strategy for `synchronize()`** -- first event with
+  `t >= t_ref`, the forward counterpart of `"previous"`. The three built-in
+  strategies now name their temporal direction: `"previous"` (past only),
+  `"next"` (future only), `"nearest"` (either side, ties favour the earlier
+  event).
 - **`ds.window(size, stride=1, reduce=, boundary="clip")` -- temporal windowing
   as a lazy view.** Groups each frame with its `size - 1` causal neighbours
   (spaced `stride`), ordered oldest -> newest, and reduces them to one sample via
@@ -19,6 +24,14 @@ All notable changes to apairo are documented here. The format is based on
   counterpart to the stateful `AccumulateFrames` transform -- correct under
   `split`, shuffling and multi-worker `DataLoader`. Exposed as the chainable
   `AbstractDataset.window(...)` and the `WindowView` class.
+
+### Changed
+- **`synchronize(method="latest")` renamed to `method="previous"`.** The old
+  name did not say which direction the match looks in ("latest" relative to
+  what?); the new vocabulary follows `pandas.merge_asof`'s
+  backward/forward/nearest convention. `"latest"` still works as a deprecated
+  alias and emits a `DeprecationWarning`. The semantics are unchanged: last
+  event with `t <= t_ref` (zero-order hold).
 
 ## [0.4.0] - 2026-06-25
 

@@ -211,7 +211,7 @@ ds = apairo.TartanKittiDataset(seq_dir, keys=["velodyne_0", "image_left", "cmd"]
 
 ds_sync = ds.synchronize(
     reference="velodyne_0",   # default: lowest-frequency channel
-    method="latest",          # "latest" (zero-order hold) or "nearest"
+    method="previous",        # "previous" (zero-order hold), "next" or "nearest"
     tolerance=0.05,           # drop frames with no match within ±50 ms
 )
 

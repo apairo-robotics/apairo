@@ -239,7 +239,7 @@ def test_tartan_timeline_order_and_events(tartan_seq):
 
 def test_tartan_synchronize(tartan_seq):
     ds = TartanKittiDataset(tartan_seq, keys=TARTAN_KEYS)
-    sync = ds.synchronize(reference="velodyne_0", method="latest")
+    sync = ds.synchronize(reference="velodyne_0", method="previous")
     assert sync.is_synchronous
     assert len(sync) == 8  # every channel has an event before frame 0
 
@@ -277,7 +277,7 @@ def test_tartan_velodyne_intensity_auto_discovered(tartan_seq):
         ds.timestamps["velodyne_0"], ds.timestamps["velodyne_0_intensity"]
     )
 
-    sync = ds.synchronize(reference="velodyne_0", method="latest")
+    sync = ds.synchronize(reference="velodyne_0", method="previous")
     sample = sync[0]
     expected = np.load(tartan_seq / "velodyne_0" / "000000_intensity.npy")
     np.testing.assert_allclose(sample.data["velodyne_0_intensity"], expected)

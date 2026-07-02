@@ -401,7 +401,7 @@ class AbstractDataset(ABC):
     def synchronize(
         self,
         reference: "str | np.ndarray | None" = None,
-        method: "ChannelStrategy | Dict[str, ChannelStrategy]" = "latest",
+        method: "ChannelStrategy | Dict[str, ChannelStrategy]" = "previous",
         tolerance: float | None = None,
     ) -> "AbstractDataset":
         """Resample this asynchronous dataset onto a single reference clock.
@@ -433,7 +433,7 @@ class AbstractDataset(ABC):
 
             ds_sync = ds.synchronize(
                 reference="velodyne_0",
-                method={"gicp_poses": Se3Interp()},   # others -> "latest"
+                method={"gicp_poses": Se3Interp()},   # others -> "previous"
             )
 
         Args:
@@ -441,11 +441,14 @@ class AbstractDataset(ABC):
                 lowest-frequency channel (so every frame sees fresh data); or
                 an ascending array of timestamps to use as an external clock.
             method: Strategy for every channel, or a dict of per-channel
-                strategies (unlisted channels default to ``"latest"``).
-                ``"latest"`` -- last event with ``t <= t_ref`` (zero-order
-                hold, online-style); ``"nearest"`` -- event closest in time;
-                a callable ``(channel_ts, ref_ts) -> indices`` implementing a
-                custom matching strategy (negative index = no match); or an
+                strategies (unlisted channels default to ``"previous"``).
+                ``"previous"`` -- last event with ``t <= t_ref`` (zero-order
+                hold, online-style; ``"latest"`` is a deprecated alias);
+                ``"next"`` -- first event with ``t >= t_ref``; ``"nearest"``
+                -- event closest in time, either side (ties favour the
+                earlier event); a callable ``(channel_ts, ref_ts) ->
+                indices`` implementing a custom matching strategy (negative
+                index = no match); or an
                 :class:`~apairo.core.interpolator.Interpolator` synthesizing
                 the value at ``t_ref`` from the two bracketing events.
             tolerance: Maximum ``|t - t_ref|`` in seconds.  Reference frames

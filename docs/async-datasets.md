@@ -259,7 +259,7 @@ ds = TartanKittiDataset(seq_dir, keys=["velodyne_0", "image_left", "cmd"])
 
 ds_sync = ds.synchronize(
     reference="velodyne_0",   # default: the lowest-frequency channel
-    method="latest",          # "latest" (zero-order hold) or "nearest"
+    method="previous",        # "previous" (zero-order hold), "next" or "nearest"
     tolerance=0.05,           # drop frames with no match within ±50 ms
 )
 
@@ -268,10 +268,15 @@ sample.data.keys()    # all three channels, always
 sample.timestamp      # timestamp of the reference frame
 ```
 
-- **`method="latest"`** -- each channel contributes its last event with
-  `t <= t_ref` (what a live system would have seen at that instant).
+- **`method="previous"`** -- each channel contributes its last event with
+  `t <= t_ref` (what a live system would have seen at that instant;
+  `"latest"` is a deprecated alias).
+- **`method="next"`** -- each channel contributes its first event with
+  `t >= t_ref` (e.g. attach the result of a computation that lands after
+  the tick).
 - **`method="nearest"`** -- each channel contributes the event closest in
-  time, past or future (best alignment for offline training).
+  time, past or future, ties favouring the earlier event (best alignment
+  for offline training).
 - **`tolerance`** -- reference frames where any channel has no event within
   the window are dropped, so every sample is guaranteed fresh.
 
@@ -321,7 +326,7 @@ ds_sync = ds.synchronize(
     method={
         "gicp_poses": Se3Interp(),     # slerp rotation + lerp translation
         "cmd":        LinearInterp(),  # linear blend
-    },                                  # unlisted channels -> "latest"
+    },                                  # unlisted channels -> "previous"
     tolerance=0.5,
 )
 
@@ -350,7 +355,7 @@ streams = StreamDataset({
     "odom":  (odom_timestamps, odom_msgs),
 })
 
-frames = streams.synchronize(reference=clock, method="latest")
+frames = streams.synchronize(reference=clock, method="previous")
 frames[0].data   # {"image": msg, "lidar": msg, "odom": msg}
 ```
 

@@ -45,7 +45,7 @@ direct lineage of `filter`/`synchronize`. No satellite covers view persistence.
 ## Aggregating synchronize: N events per tick, not one
 
 Today the matcher is one event per reference tick (`idx.shape == ref_ts.shape`),
-so a fast channel under a slow clock is decimated — `"latest"` keeps 1 IMU
+so a fast channel under a slow clock is decimated — `"previous"` keeps 1 IMU
 sample of 20 between two lidar ticks and drops the rest. The natural extension is
 an *aggregating* match mode that returns, per tick, **all** events in the
 interval `(t_prev, t_ref]` (optionally capped: at most `n`, or within a window

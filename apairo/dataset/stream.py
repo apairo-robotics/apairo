@@ -23,7 +23,7 @@ class StreamDataset(AbstractDataset):
         })
 
         ds[0]                                  # one event, timestamp-ordered
-        frames = ds.synchronize(reference=clock, method="latest")
+        frames = ds.synchronize(reference=clock, method="previous")
 
     Items are stored as given -- they can be numpy arrays, ROS messages, or
     any Python objects; apairo never copies or converts them.

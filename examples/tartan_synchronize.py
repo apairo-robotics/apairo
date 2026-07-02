@@ -13,7 +13,7 @@ SEQ_DIR = os.environ.get("APAIRO_TARTAN_SEQ", "/data/tartan/2024-01-01_forest")
 ds = TartanKittiDataset(SEQ_DIR, keys=["velodyne_0", "multisense_imu", "cmd"])
 print("Timeline events     :", len(ds))
 
-ds_sync = ds.synchronize(reference="velodyne_0", method="latest", tolerance=0.1)
+ds_sync = ds.synchronize(reference="velodyne_0", method="previous", tolerance=0.1)
 print("Synchronized frames :", len(ds_sync))
 print("Reference channel   :", ds_sync.reference)
 
