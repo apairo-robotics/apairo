@@ -9,6 +9,7 @@ from apairo.core.abstract_dataset import AbstractDataset
 from apairo.core.interpolator import Interpolator
 
 if TYPE_CHECKING:
+    from apairo.core.abstract_dataset import FrameRef
     from apairo.core.sample import Sample
 
 # Matching strategy: (channel_timestamps, reference_timestamps) -> one event
