@@ -7,6 +7,32 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-06
+
+### Fixed
+- **`run_preprocess` on a multi-sequence `RawDataset`/`TartanKittiDataset` root.**
+  It crashed in `derived_path` with `AttributeError: _sequence_dir` (a root has
+  no single sequence dir). Each frame is now routed to the sub-sequence it
+  belongs to via a shared `_locate()` helper on `RootSequenceMixin`, so per-frame
+  outputs are written under the right `<sequence>/<key>/` directory, and the
+  derived channel is registered in *every* sequence's `channels.yaml` (a single
+  root-level registration was unloadable). Reloads at both the sequence and root
+  level. Single-sequence and profiled-root datasets are unchanged.
+- **`Sample.timestamp` contract corrected.** The docstring claimed
+  "synchronous datasets: timestamp is None", but a `synchronize()` result is
+  synchronous *and* carries the reference-clock tick (load-bearing:
+  `run_preprocess` reads `sample.timestamp` to emit `timestamps.txt`). The
+  contract is now stated per *clock*: async event -> its own timestamp;
+  synchronous clocked frame (`synchronize()`) -> the reference tick; synchronous
+  clockless frame (profiled dataset) -> `None`. No behaviour change.
+- **`SynchronizedView.frame_info` documented as composite.** On a synchronised
+  frame every channel is backed by a different source event, so `frame_info`
+  reports `channel=None` and `row` is the **view index**, not an on-disk row.
+  Per-channel provenance lives on `frame_indices`
+  (`frame_indices[reference][idx]` is the clock event the tick was resampled
+  onto). Behaviour unchanged; the previous fallback docstring implied a
+  non-existent single origin.
+
 ### Added
 - **`ds.transform(preprocessor)` -- lazy preview of a preprocess.** A
   `FramePreprocessor` is now a callable on a `Sample` (same protocol as
