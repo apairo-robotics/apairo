@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from apairo.core.config import CONFIG_DIR, write_config
+from apairo.core.preprocessor import FramePreprocessor
 from apairo.core.sample import Sample
 from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
@@ -451,6 +452,44 @@ def test_root_external_clock_rejected(root_dataset):
     ds = RawDataset(root)
     with pytest.raises(ValueError):
         ds.synchronize(reference=np.array([0.0, 0.1]))
+
+
+class _Doubler(FramePreprocessor):
+    output_key = "lidar_x2"
+    output_loader = "npys"
+    input_keys = ["lidar"]
+    timestamps_from = "lidar"
+    sources = ["lidar"]
+
+    def __call__(self, sample: Sample) -> np.ndarray:
+        return sample.data["lidar"] * 2
+
+
+def test_run_preprocess_on_root_writes_and_reloads_per_sequence(root_dataset):
+    """Regression: run_preprocess on a multi-sequence root used to crash in
+    derived_path (``self._sequence_dir`` is unset on a root). It must now route
+    each frame to its sub-sequence, write per-sequence files, and register the
+    derived channel in every sequence so it reloads (both per sequence and root).
+    """
+    root, len_a, len_b = root_dataset
+
+    RawDataset.run_preprocess(_Doubler(), root)
+
+    for seq, n_lidar in (("seq_a", 3), ("seq_b", 2)):
+        out = root / seq / "lidar_x2"
+        assert len(sorted(out.glob("*.npy"))) == n_lidar
+        assert (out / "timestamps.txt").exists()
+        src = RawDataset(root / seq, keys=["lidar"])
+        der = RawDataset(root / seq, keys=["lidar_x2"])
+        assert len(der) == n_lidar
+        for i in range(n_lidar):
+            np.testing.assert_allclose(
+                der[i].data["lidar_x2"], src[i].data["lidar"] * 2
+            )
+
+    # The derived channel reloads through the root too (available on every seq).
+    root_ds = RawDataset(root, keys=["lidar_x2"])
+    assert "lidar_x2" in root_ds.available
 
 
 # ─────────────────────────────── errors ──────────────────────────────────────

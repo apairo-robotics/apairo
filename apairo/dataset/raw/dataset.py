@@ -260,6 +260,11 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     # ------------------------------------------------------------------ helpers
 
     def derived_path(self, idx: int, key: str, ext: str) -> Path:
+        # On a root, route the global index to the sub-sequence it belongs to
+        # (each sub-sequence has its own ``_sequence_dir``); a root has none.
+        if self._is_root:
+            seq_idx, local_idx = self._locate(idx)
+            return self._sequences[seq_idx].derived_path(local_idx, key, ext)
         return self._sequence_dir / key / f"{idx:06d}.{ext}"
 
     def _bootstrap_config(self, sequence_dir: Path) -> dict:

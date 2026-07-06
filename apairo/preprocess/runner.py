@@ -94,13 +94,22 @@ def run(
         )
 
     logger.info("Done  ->  '%s' registered in %s", preprocessor.output_key, root_dir)
-    dataset_cls.register_channel(
-        root_dir,
-        preprocessor.output_key,
-        preprocessor.output_loader,
-        timestamps_from=preprocessor.timestamps_from,
-        sources=preprocessor.sources,
-    )
+    # Files land per sequence (derived_path routes each frame to its sub-sequence),
+    # so on a root the channel must be declared in *each* sequence's channels.yaml
+    # -- a single root-level registration would be unloadable. A single sequence
+    # (root_dir is the sequence dir) registers once, unchanged.
+    if getattr(dataset, "_is_root", False):
+        seq_dirs = [seq.root_dir for seq in dataset.sequences]
+    else:
+        seq_dirs = [root_dir]
+    for seq_dir in seq_dirs:
+        dataset_cls.register_channel(
+            seq_dir,
+            preprocessor.output_key,
+            preprocessor.output_loader,
+            timestamps_from=preprocessor.timestamps_from,
+            sources=preprocessor.sources,
+        )
 
 
 def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:

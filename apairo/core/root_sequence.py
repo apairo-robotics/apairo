@@ -75,6 +75,19 @@ class RootSequenceMixin:
         lengths = [len(s) for s in self._sequences]
         self._cumulative_lengths = np.array([0, *np.cumsum(lengths)], dtype=np.intp)
 
+    def _locate(self, idx: int) -> tuple[int, int]:
+        """Map a global frame index to ``(sequence index, local row)``.
+
+        Root datasets only. Shared by ``_load``, ``frame_info`` and
+        ``derived_path`` so the flat-index arithmetic lives in one place.
+        """
+        if not hasattr(self, "_cumulative_lengths"):
+            raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        seq_idx = int(np.searchsorted(self._cumulative_lengths[1:], idx, side="right"))
+        return seq_idx, idx - int(self._cumulative_lengths[seq_idx])
+
     # ------------------------------------------------------------ subclass hooks
 
     def _single_available(self) -> frozenset:
@@ -199,12 +212,7 @@ class RootSequenceMixin:
             return self._load(view._indices[local_idx])
         if not self._is_root:
             return super()._load(idx)
-        if not hasattr(self, "_cumulative_lengths"):
-            raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
-        if not 0 <= idx < len(self):
-            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        seq_idx = int(np.searchsorted(self._cumulative_lengths[1:], idx, side="right"))
-        local_idx = idx - int(self._cumulative_lengths[seq_idx])
+        seq_idx, local_idx = self._locate(idx)
         return self._sequences[seq_idx]._load(local_idx)
 
     # ------------------------------------------------------ frame provenance
@@ -214,12 +222,7 @@ class RootSequenceMixin:
         to (root datasets). See :meth:`AbstractDataset.frame_info`."""
         if not self._is_root:
             return super().frame_info(idx)
-        if not hasattr(self, "_cumulative_lengths"):
-            raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
-        if not 0 <= idx < len(self):
-            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        seq_idx = int(np.searchsorted(self._cumulative_lengths[1:], idx, side="right"))
-        local_idx = idx - int(self._cumulative_lengths[seq_idx])
+        seq_idx, local_idx = self._locate(idx)
         return self._sequences[seq_idx].frame_info(local_idx)._replace(
             sequence=self.sequence_ids[seq_idx]
         )
