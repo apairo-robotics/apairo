@@ -303,6 +303,21 @@ class SynchronizedView(AbstractDataset):
         ts = self._channel_ts[key]
         return ts[self._index_map[key]] - self._ref_timestamps
 
+    def frame_info(self, idx: int) -> "FrameRef":
+        """Provenance of synchronised frame *idx*.
+
+        A synchronised frame is *composite*: each channel is backed by its own
+        source event (see :attr:`frame_indices`), so there is no single origin
+        channel -- ``channel`` is ``None`` and ``row`` is the **view index**, not
+        an on-disk row (unlike a profiled dataset, where ``row`` addresses a file
+        on disk).
+
+        For real per-frame provenance use :attr:`frame_indices`;
+        ``frame_indices[self.reference][idx]`` is the reference-clock event this
+        tick was resampled onto.
+        """
+        return super().frame_info(idx)
+
     # ----------------------------------------------------------------- access
 
     def __len__(self) -> int:

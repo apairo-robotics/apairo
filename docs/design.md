@@ -30,9 +30,11 @@ transparently. Nothing else writes to disk.
 
 ## The data model
 
-- **`Sample`** — a dict of numpy arrays plus an optional timestamp.
-  Synchronous data: all requested channels, `timestamp=None`.
-  Asynchronous data: one event, one channel, `timestamp` set.
+- **`Sample`** — a dict of numpy arrays plus an optional timestamp. The
+  timestamp follows the frame's *clock*: an asynchronous event carries its own
+  timestamp; a synchronous frame resampled onto a reference clock (a
+  `synchronize()` result) carries that reference tick; a clockless synchronous
+  frame (a profiled dataset) carries `timestamp=None`.
 - **Synchronous datasets** (`ProfiledDataset` + YAML profiles) — index =
   frame. Random access, `DataLoader`-ready.
 - **Asynchronous datasets** (`AsyncLayoutDataset` layouts; `RawDataset`,
