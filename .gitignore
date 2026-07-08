@@ -27,3 +27,5 @@ Makefile
 
 # Benchmark plots are generated on demand (`bench.py --plot`), not committed
 benchmarks/*.png
+# Local cache written by examples/join_persisted_prior.py (disposable)
+examples/_cache/
