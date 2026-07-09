@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 cache/
 .cache/
+.coverage*
 
 data
 outputs
@@ -24,6 +25,9 @@ Makefile
 
 # Committed real-data fixtures for smoke tests (kept tiny on purpose)
 !test/assets/**
+# ...but never the bootstrap-generated sidecars: the fixtures stay bare so the
+# smoke tests keep exercising the bootstrap path
+test/assets/**/.apairo/
 
 # Benchmark plots are generated on demand (`bench.py --plot`), not committed
 benchmarks/*.png

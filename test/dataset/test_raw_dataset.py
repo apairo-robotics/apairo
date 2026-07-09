@@ -7,6 +7,10 @@ layout produced by ``apairo-extractor``.  These tests fabricate that layout on
 disk (npy / npys, plus a zarr channel to lock format-agnosticism) and exercise
 both the single-sequence and the multi-sequence (root) paths.
 """
+
+import logging
+import os
+
 import numpy as np
 import pytest
 import yaml
@@ -17,8 +21,8 @@ from apairo.core.sample import Sample
 from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
 
-
 # ─────────────────────────────── helpers ─────────────────────────────────────
+
 
 def _write_timestamps(channel_dir, ts):
     np.savetxt(channel_dir / "timestamps.txt", np.asarray(ts, dtype=float))
@@ -47,8 +51,7 @@ def _write_channels(seq_dir, channels):
         {
             "version": 1,
             "channels": {
-                k: {"loader": ldr, "kind": "raw"}
-                for k, ldr in channels.items()
+                k: {"loader": ldr, "kind": "raw"} for k, ldr in channels.items()
             },
         },
     )
@@ -93,6 +96,7 @@ def root_dataset(tmp_path):
 
 # ─────────────────────────────── single sequence ─────────────────────────────
 
+
 def test_single_sequence_loads_from_channels_yaml(tmp_path):
     seq = tmp_path / "seq_a"
     expected_len = _make_sequence(seq, n_lidar=3)
@@ -132,7 +136,9 @@ def test_timestamps_from_shares_source_clock(tmp_path):
     vox.mkdir()
     for i in range(3):
         np.save(vox / f"{i:06d}.npy", np.random.rand(2, 3))
-    RawDataset.register_channel(seq, "voxel", "npys", timestamps_from="lidar", sources=["lidar"])
+    RawDataset.register_channel(
+        seq, "voxel", "npys", timestamps_from="lidar", sources=["lidar"]
+    )
 
     ds = RawDataset(seq, keys=["voxel"])  # source "lidar" deliberately absent
     assert len(ds) == 3
@@ -142,17 +148,18 @@ def test_timestamps_from_shares_source_clock(tmp_path):
 
 # ───────────────────────────────── aliases ───────────────────────────────────
 
+
 def test_alias_exposes_channel_under_public_name(tmp_path):
     from apairo.core.config import set_alias
 
     seq = tmp_path / "seq_a"
-    _make_sequence(seq, n_lidar=3)        # channels: lidar, imu
-    set_alias(seq, "lidar", "points")     # rename the public name
+    _make_sequence(seq, n_lidar=3)  # channels: lidar, imu
+    set_alias(seq, "lidar", "points")  # rename the public name
 
     ds = RawDataset(seq, keys=["points", "imu"])  # request by alias
     assert set(ds.keys) == {"points", "imu"}
     assert "points" in ds.timestamps and "lidar" not in ds.timestamps
-    assert set(ds[0].data) <= {"points", "imu"}   # sample exposes the alias
+    assert set(ds[0].data) <= {"points", "imu"}  # sample exposes the alias
 
 
 def test_alias_request_by_real_name_speaks_real_name(tmp_path):
@@ -176,7 +183,7 @@ def test_alias_default_keys_use_public_names(tmp_path):
     _make_sequence(seq, n_lidar=3)
     set_alias(seq, "lidar", "points")
 
-    ds = RawDataset(seq)                   # keys=None -> all, by public name
+    ds = RawDataset(seq)  # keys=None -> all, by public name
     assert ds.available == frozenset({"points", "imu"})
 
 
@@ -191,7 +198,7 @@ def test_alias_propagates_through_root(tmp_path):
 
     ds = RawDataset(root, keys=["points"])
     assert ds.keys == ["points"]
-    assert len(ds) == 5                    # 3 + 2 lidar frames, exposed as points
+    assert len(ds) == 5  # 3 + 2 lidar frames, exposed as points
 
 
 def test_set_alias_rejects_collision(tmp_path):
@@ -200,13 +207,13 @@ def test_set_alias_rejects_collision(tmp_path):
     from apairo.core.config import set_alias
 
     seq = tmp_path / "seq_a"
-    _make_sequence(seq, n_lidar=3)         # channels: lidar, imu
+    _make_sequence(seq, n_lidar=3)  # channels: lidar, imu
     set_alias(seq, "lidar", "x")
     with pytest.raises(ValueError):
-        set_alias(seq, "imu", "x")         # duplicate of lidar's alias
+        set_alias(seq, "imu", "x")  # duplicate of lidar's alias
     with pytest.raises(ValueError):
-        set_alias(seq, "imu", "lidar")     # shadows an existing channel name
-    set_alias(seq, "lidar", "y")           # re-aliasing the same channel is fine
+        set_alias(seq, "imu", "lidar")  # shadows an existing channel name
+    set_alias(seq, "lidar", "y")  # re-aliasing the same channel is fine
 
 
 def test_register_raw_channel_rejects_colliding_alias(tmp_path):
@@ -215,7 +222,7 @@ def test_register_raw_channel_rejects_colliding_alias(tmp_path):
     from apairo.core.config import register_raw_channel
 
     seq = tmp_path / "seq_a"
-    _make_sequence(seq, n_lidar=3)         # channels: lidar, imu
+    _make_sequence(seq, n_lidar=3)  # channels: lidar, imu
     with pytest.raises(ValueError, match="channel directory name"):
         register_raw_channel(seq, "lidar", "npys", alias="imu")
 
@@ -226,7 +233,7 @@ def test_set_alias_force_reassigns(tmp_path):
     seq = tmp_path / "seq_a"
     _make_sequence(seq, n_lidar=3)
     set_alias(seq, "lidar", "x")
-    displaced = set_alias(seq, "imu", "x", force=True)   # steal it
+    displaced = set_alias(seq, "imu", "x", force=True)  # steal it
     assert displaced == ["lidar"]
     ch = read_config(seq)["channels"]
     assert ch["imu"]["alias"] == "x" and "alias" not in ch["lidar"]
@@ -237,17 +244,18 @@ def test_set_alias_force_reassigns(tmp_path):
 
 # ──────────────────────────── remove_channel ─────────────────────────────────
 
+
 def test_remove_channel_drops_declaration_keeps_data(tmp_path):
     from apairo.core.config import read_config, remove_channel
 
     seq = tmp_path / "seq_a"
-    _make_sequence(seq, n_lidar=3)            # channels: lidar, imu
-    entry = remove_channel(seq, "imu")        # config-only by default
+    _make_sequence(seq, n_lidar=3)  # channels: lidar, imu
+    entry = remove_channel(seq, "imu")  # config-only by default
 
     assert "imu" not in read_config(seq)["channels"]
     assert "lidar" in read_config(seq)["channels"]
-    assert entry["kind"] == "raw"             # returns what it removed
-    assert (seq / "imu").is_dir()             # data untouched
+    assert entry["kind"] == "raw"  # returns what it removed
+    assert (seq / "imu").is_dir()  # data untouched
     assert RawDataset(seq).keys == ["lidar"]  # dataset stops loading it
 
 
@@ -259,8 +267,8 @@ def test_remove_channel_data_deletes_directory(tmp_path):
     remove_channel(seq, "imu", data=True)
 
     assert "imu" not in read_config(seq)["channels"]
-    assert not (seq / "imu").exists()         # directory removed from disk
-    assert (seq / "lidar").is_dir()           # other channels untouched
+    assert not (seq / "imu").exists()  # directory removed from disk
+    assert (seq / "lidar").is_dir()  # other channels untouched
 
 
 def test_remove_channel_unknown_raises(tmp_path):
@@ -281,6 +289,7 @@ def test_remove_channel_no_config_raises(tmp_path):
 
 
 # ─────────────────────────── suffixed sub-channels ───────────────────────────
+
 
 def _add_suffixed_files(channel_dir, suffix, n):
     for i in range(n):
@@ -337,7 +346,10 @@ def test_merge_picks_up_suffix_added_after_first_init(tmp_path):
 
     channels = read_config(seq)["channels"]
     assert channels["lidar_intensity"] == {
-        "kind": "raw", "loader": "npys", "directory": "lidar", "suffix": "intensity",
+        "kind": "raw",
+        "loader": "npys",
+        "directory": "lidar",
+        "suffix": "intensity",
     }
     assert channels["lidar"] == {"kind": "raw", "loader": "npys"}  # untouched
 
@@ -400,6 +412,7 @@ def test_single_sequence_is_not_root(tmp_path):
 
 
 # ─────────────────────────────── root dataset ────────────────────────────────
+
 
 def test_root_loads_all_sequences(root_dataset):
     root, len_a, len_b = root_dataset
@@ -494,6 +507,7 @@ def test_run_preprocess_on_root_writes_and_reloads_per_sequence(root_dataset):
 
 # ─────────────────────────────── errors ──────────────────────────────────────
 
+
 def test_neither_sequence_nor_root(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -502,6 +516,7 @@ def test_neither_sequence_nor_root(tmp_path):
 
 
 # ─────────────────────────────── format-agnostic (zarr) ──────────────────────
+
 
 def test_zarr_channel_is_format_agnostic(tmp_path):
     """An async channel stored as zarr loads identically -- the loader, taken
@@ -518,8 +533,11 @@ def test_zarr_channel_is_format_agnostic(tmp_path):
     store = zarr.storage.LocalStore(str(gps))
     gps_data = np.random.rand(2, 3)
     arr = zarr.create(
-        store=store, shape=gps_data.shape, dtype=gps_data.dtype,
-        zarr_format=2, overwrite=True,
+        store=store,
+        shape=gps_data.shape,
+        dtype=gps_data.dtype,
+        zarr_format=2,
+        overwrite=True,
     )
     arr[:] = gps_data
     _write_timestamps(gps, [0.0, 0.1])
@@ -534,3 +552,36 @@ def test_zarr_channel_is_format_agnostic(tmp_path):
     # Frame 0 of the gps channel is row 0 of the stored array.
     sample = ds[0]
     np.testing.assert_allclose(sample.data["gps"], gps_data[0])
+
+
+# ─────────────────────────────── read-only data ──────────────────────────────
+
+
+def _chmod_tree(path, dir_mode, file_mode):
+    for p in [path, *path.rglob("*")]:
+        p.chmod(dir_mode if p.is_dir() else file_mode)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0, reason="root bypasses permissions"
+)
+def test_bootstrap_read_only_directory(tmp_path, caplog):
+    """Loading raw data never requires write access: on a read-only directory
+    (shared cluster mount, ro container volume) the bootstrapped config is kept
+    in memory instead of being written to .apairo."""
+    seq = tmp_path / "seq_ro"
+    _make_npys_channel(
+        seq, "lidar", [np.random.rand(4, 3) for _ in range(3)], [0.0, 0.1, 0.2]
+    )
+    _chmod_tree(seq, 0o555, 0o444)
+    try:
+        with caplog.at_level(logging.WARNING):
+            ds = RawDataset(seq)
+        assert ds.keys == ["lidar"]
+        assert len(ds) == 3
+        assert ds[0].data["lidar"].shape == (4, 3)
+        assert not (seq / CONFIG_DIR).exists()  # nothing written
+        assert "Cannot write the .apairo sidecar" in caplog.text
+    finally:
+        _chmod_tree(seq, 0o755, 0o644)

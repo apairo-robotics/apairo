@@ -1,20 +1,23 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+
 import numpy as np
 
-from apairo.utils.timestamps import get_end_of_time
-from apairo.loader import str_to_loader, loads_timestamps, load_timestamps, load_profile
-from apairo.utils.files import get_files
 from apairo.core import AbstractDataset, AbstractLoader, FrameRef
-from apairo.core.naming import suffixed_frame_files
-from apairo.core.sample import Sample
 from apairo.core.config import (
     config_exists,
     read_config,
     write_config,
+)
+from apairo.core.config import (
     register_raw_channel as _register_raw_channel,
 )
+from apairo.core.naming import suffixed_frame_files
+from apairo.core.sample import Sample
+from apairo.loader import load_profile, load_timestamps, loads_timestamps, str_to_loader
+from apairo.utils.files import get_files
+from apairo.utils.timestamps import get_end_of_time
 
 
 def _detect_loader(channel_dir: Path) -> str | None:
@@ -28,8 +31,7 @@ def _detect_loader(channel_dir: Path) -> str | None:
     if (channel_dir / ".zarray").exists() or (channel_dir / "zarr.json").exists():
         return "zarr"
     data_files = [
-        f for f in channel_dir.iterdir()
-        if f.is_file() and f.name != "timestamps.txt"
+        f for f in channel_dir.iterdir() if f.is_file() and f.name != "timestamps.txt"
     ]
     if not data_files:
         return None
@@ -45,7 +47,7 @@ def _detect_loader(channel_dir: Path) -> str | None:
     return None
 
 
-def _suffix_channel_entries(channel_dir: Path, loader: str) -> Dict[str, dict]:
+def _suffix_channel_entries(channel_dir: Path, loader: str) -> dict[str, dict]:
     """Suffixed npy sub-channels found in *channel_dir*, keyed by suffix.
 
     A directory holding ``000000.npy`` *and* ``000000_intensity.npy`` yields
@@ -107,8 +109,8 @@ class AsyncLayoutDataset(AbstractDataset):
     def __init__(
         self,
         directory: str | Path,
-        keys: Optional[List[str]] = None,
-        dataset_profile: Optional[str | Path] = None,
+        keys: list[str] | None = None,
+        dataset_profile: str | Path | None = None,
     ) -> None:
         directory = Path(directory)
 
@@ -117,8 +119,16 @@ class AsyncLayoutDataset(AbstractDataset):
         # public name it is exposed under; timestamp_aliases maps a channel to the
         # one it borrows its clock from (its `timestamps_from`). Everything below
         # is keyed by the public name; the directory name only locates files.
-        channels = read_config(directory).get("channels", {}) if config_exists(directory) else {}
-        self._alias_of: Dict[str, str] = {
+        # _config_fallback is set by ConfigurableDataset when the directory is
+        # read-only and the bootstrapped sidecar could not be written.
+        fallback = getattr(self, "_config_fallback", None)
+        if fallback is not None:
+            channels = fallback.get("channels", {})
+        elif config_exists(directory):
+            channels = read_config(directory).get("channels", {})
+        else:
+            channels = {}
+        self._alias_of: dict[str, str] = {
             k: v["alias"] for k, v in channels.items() if v.get("alias")
         }
         # Honour the request's language: a channel explicitly asked for by its
@@ -131,19 +141,19 @@ class AsyncLayoutDataset(AbstractDataset):
                 real = to_real.get(k, k)
                 if real in self._alias_of:
                     self._alias_of[real] = k
-        self._timestamp_aliases: Dict[str, str] = {
+        self._timestamp_aliases: dict[str, str] = {
             self._public(k): self._resolve_key(v["timestamps_from"])
             for k, v in channels.items()
             if v.get("timestamps_from")
         }
         # A suffixed sub-channel (e.g. velodyne_0_intensity) has no directory of
         # its own -- it reads a suffix-filtered subset of another channel's files.
-        self._suffix_of: Dict[str, str] = {
+        self._suffix_of: dict[str, str] = {
             self._public(k): v["suffix"] for k, v in channels.items() if v.get("suffix")
         }
 
         if dataset_profile is not None:
-            self._profile: Dict[str, str] = load_profile(dataset_profile)
+            self._profile: dict[str, str] = load_profile(dataset_profile)
         elif channels:
             self._profile = {
                 self._public(k): v["loader"]
@@ -167,7 +177,7 @@ class AsyncLayoutDataset(AbstractDataset):
 
         # Re-key the on-disk directories by their public name so a request, a
         # loader and a sample all speak the same (aliased) language.
-        self._files: Dict[str, str] = {}
+        self._files: dict[str, str] = {}
         for real, path in get_files(str(directory)).items():
             public = self._public(real)
             if public in self._files:
@@ -193,7 +203,7 @@ class AsyncLayoutDataset(AbstractDataset):
         if missing:
             raise KeyError(f"Keys not found in dataset directory: {missing}")
 
-        self._keys: List[str] = []
+        self._keys: list[str] = []
         self._set_keys(keys)
         self._init()
 
@@ -216,7 +226,7 @@ class AsyncLayoutDataset(AbstractDataset):
         cls,
         directory: str | Path,
         *,
-        raw_keys: Optional[List[str]] = None,
+        raw_keys: list[str] | None = None,
         overwrite: bool = False,
         merge: bool = False,
     ) -> None:
@@ -273,13 +283,18 @@ class AsyncLayoutDataset(AbstractDataset):
                 # A directory's base channel may already be registered while a
                 # suffix that only appeared later (e.g. *_intensity.npy) is not
                 # -- check independently so re-running merge picks it up.
-                for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
+                for suffix, frag in _suffix_channel_entries(
+                    channel_dir, loader
+                ).items():
                     key = f"{channel_dir.name}_{suffix}"
                     if key in existing:
                         continue
                     _register_raw_channel(
-                        directory, key, frag["loader"],
-                        directory=frag["directory"], suffix=frag["suffix"],
+                        directory,
+                        key,
+                        frag["loader"],
+                        directory=frag["directory"],
+                        suffix=frag["suffix"],
                     )
                     added += 1
             if added == 0:
@@ -323,11 +338,11 @@ class AsyncLayoutDataset(AbstractDataset):
     # ------------------------------------------------------------------ keys
 
     @property
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         return self._keys
 
     @keys.setter
-    def keys(self, keys: List[str]) -> None:
+    def keys(self, keys: list[str]) -> None:
         keys = [self._resolve_key(k) for k in keys]
         missing = set(keys) - set(self._files)
         if missing:
@@ -338,7 +353,7 @@ class AsyncLayoutDataset(AbstractDataset):
     # ----------------------------------------------------------------- shape
 
     @property
-    def shape(self) -> Dict[str, Tuple[int, ...]]:
+    def shape(self) -> dict[str, tuple[int, ...]]:
         return {key: self.loaders[key].shape for key in self.keys}
 
     # ----------------------------------------------------------------- init
@@ -350,7 +365,7 @@ class AsyncLayoutDataset(AbstractDataset):
         self._init_timeline()
 
     def _init_loaders(self) -> None:
-        loaders: Dict[str, AbstractLoader] = {}
+        loaders: dict[str, AbstractLoader] = {}
         for key in self._keys:
             loader_cls = str_to_loader[self._profile[key]]
             directory = self._files[key]
@@ -360,8 +375,8 @@ class AsyncLayoutDataset(AbstractDataset):
                 if suffix
                 else loader_cls(directory)
             )
-        self.loaders: Dict[str, AbstractLoader] = loaders
-        self.timestamps: Dict[str, np.ndarray] = self._collect_timestamps()
+        self.loaders: dict[str, AbstractLoader] = loaders
+        self.timestamps: dict[str, np.ndarray] = self._collect_timestamps()
         self._check_suffix_coverage()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
 
@@ -386,13 +401,13 @@ class AsyncLayoutDataset(AbstractDataset):
                     f"frame. Check for missing or extra '_{suffix}.npy' files."
                 )
 
-    def _collect_timestamps(self) -> Dict[str, np.ndarray]:
+    def _collect_timestamps(self) -> dict[str, np.ndarray]:
         """Timestamps per loaded key: its own ``timestamps.txt`` when present,
         else the channel named by its ``timestamps_from`` (a derived channel
         sharing its source's clock), else the legacy replacement map handled by
         :func:`~apairo.loader.loads_timestamps`."""
-        timestamps: Dict[str, np.ndarray] = {}
-        fallback: List[str] = []
+        timestamps: dict[str, np.ndarray] = {}
+        fallback: list[str] = []
         for key in self._keys:
             ts_path = Path(self._files[key]) / "timestamps.txt"
             if ts_path.exists():
@@ -417,6 +432,7 @@ class AsyncLayoutDataset(AbstractDataset):
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
         from apairo.utils.timestamps import merge_timeline
+
         self._tl_key_idxs, self._tl_frame_idxs = merge_timeline(
             self.timestamps, self._keys
         )
@@ -438,7 +454,7 @@ class AsyncLayoutDataset(AbstractDataset):
 
     # ------------------------------------------------------ frame provenance
 
-    def _sequence_name(self) -> Optional[str]:
+    def _sequence_name(self) -> str | None:
         """This (single) sequence's directory name, or ``None`` if unknown."""
         d = getattr(self, "_sequence_dir", None)
         return d.name if d is not None else None
@@ -471,4 +487,3 @@ class AsyncLayoutDataset(AbstractDataset):
             files = getattr(self.loaders[key], "files", None)
             result[i] = Path(files[row]).stem if files else f"{row:06d}"
         return result
-

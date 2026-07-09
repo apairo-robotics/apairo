@@ -62,7 +62,11 @@ def test_example_compiles(name: str) -> None:
 @pytest.mark.parametrize("name", TARTAN_EXAMPLES)
 def test_tartan_example_runs(name: str, tmp_path: Path) -> None:
     seq = tmp_path / "figure_8"
-    shutil.copytree(ASSETS / "mini_tartan" / "figure_8", seq)
+    shutil.copytree(
+        ASSETS / "mini_tartan" / "figure_8",
+        seq,
+        ignore=shutil.ignore_patterns(".apairo"),
+    )
     _run(name, {"APAIRO_TARTAN_SEQ": str(seq)}, cwd=tmp_path)
 
 

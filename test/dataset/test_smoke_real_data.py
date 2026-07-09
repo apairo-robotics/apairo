@@ -34,9 +34,14 @@ def rellis_root(tmp_path):
 
 @pytest.fixture
 def tartan_seq(tmp_path):
-    """Copy of the mini TartanDrive sequence."""
+    """Copy of the mini TartanDrive sequence -- always bare, so the auto
+    bootstrap runs even when a stray local run left a sidecar in the assets."""
     dst = tmp_path / "figure_8"
-    shutil.copytree(ASSETS / "mini_tartan" / "figure_8", dst)
+    shutil.copytree(
+        ASSETS / "mini_tartan" / "figure_8",
+        dst,
+        ignore=shutil.ignore_patterns(".apairo"),
+    )
     return dst
 
 
@@ -77,9 +82,8 @@ def test_rellis_sequences(rellis_root):
 
 def test_rellis_chaining(rellis_root):
     ds = Rellis3DDataset(rellis_root, keys=["lidar", "labels"])
-    view = (
-        ds.transform("lidar", lambda pts: pts[pts[:, 0] > 0])
-        .filter("labels", lambda lbl: len(np.unique(lbl)) > 3)
+    view = ds.transform("lidar", lambda pts: pts[pts[:, 0] > 0]).filter(
+        "labels", lambda lbl: len(np.unique(lbl)) > 3
     )
     assert 0 < len(view) <= 10
     sample = view[0]
@@ -287,10 +291,9 @@ def test_tartan_velodyne_intensity_auto_discovered(tartan_seq):
 
 def test_tartan_synchronize_chain_shuffled_access(tartan_seq):
     ds = TartanKittiDataset(tartan_seq, keys=TARTAN_KEYS)
-    view = (
-        ds.synchronize(reference="velodyne_0", method="nearest", tolerance=0.15)
-        .transform("velodyne_0", lambda pts: pts[pts[:, 2] > -1.0])
-    )
+    view = ds.synchronize(
+        reference="velodyne_0", method="nearest", tolerance=0.15
+    ).transform("velodyne_0", lambda pts: pts[pts[:, 2] > -1.0])
     assert len(view) == 8
     for i in np.random.permutation(len(view)):
         sample = view[int(i)]

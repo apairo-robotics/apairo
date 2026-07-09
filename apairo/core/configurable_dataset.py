@@ -1,17 +1,28 @@
 from __future__ import annotations
+
+import logging
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional
 
 from apairo.core.config import (
-    register_channel as _register_channel,
-    register_raw_channel as _register_raw_channel,
-    remove_channel as _remove_channel,
-    verify_config as _verify_config,
+    config_exists,
     read_config,
     write_config,
-    config_exists,
 )
+from apairo.core.config import (
+    register_channel as _register_channel,
+)
+from apairo.core.config import (
+    register_raw_channel as _register_raw_channel,
+)
+from apairo.core.config import (
+    remove_channel as _remove_channel,
+)
+from apairo.core.config import (
+    verify_config as _verify_config,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class _RunPreprocessDescriptor:
@@ -26,12 +37,15 @@ class _RunPreprocessDescriptor:
 
         if obj is not None:
             root_dir = obj.root_dir
+
             def _instance_run(preprocessor, *, overwrite=False, **dataset_kwargs):
                 run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+
             return _instance_run
 
         def _class_run(preprocessor, root_dir, *, overwrite=False, **dataset_kwargs):
             run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+
         return _class_run
 
 
@@ -66,8 +80,8 @@ class ConfigurableDataset:
         key: str,
         loader: str,
         *,
-        timestamps_from: Optional[str] = None,
-        sources: Optional[list[str]] = None,
+        timestamps_from: str | None = None,
+        sources: list[str] | None = None,
     ) -> None:
         """Register a preprocessed channel in ``sequence_dir/.apairo``.
 
@@ -221,9 +235,9 @@ class ConfigurableDataset:
         key: str,
         loader: str,
         *,
-        alias: Optional[str] = None,
-        directory: Optional[str] = None,
-        suffix: Optional[str] = None,
+        alias: str | None = None,
+        directory: str | None = None,
+        suffix: str | None = None,
     ) -> None:
         """Declare a raw channel in ``sequence_dir/.apairo``.
 
@@ -275,10 +289,28 @@ class ConfigurableDataset:
         return False
 
     def _load_or_create_config(self, root_dir: Path) -> dict:
-        """Read ``.apairo/channels.yaml`` if it exists, otherwise bootstrap and write it."""
+        """Read ``.apairo/channels.yaml`` if it exists, otherwise bootstrap it.
+
+        The bootstrapped config is written back so the next load skips
+        detection. Loading must never *require* write access (shared datasets
+        often sit on read-only mounts): when the sidecar cannot be written, the
+        config is kept on the instance (``_config_fallback``) and picked up by
+        :class:`~apairo.dataset.async_layout.AsyncLayoutDataset` in place of
+        the on-disk file.
+        """
         if not config_exists(root_dir):
             config = self._bootstrap_config(root_dir)
-            write_config(root_dir, config)
+            try:
+                write_config(root_dir, config)
+            except OSError as exc:
+                logger.warning(
+                    "Cannot write the .apairo sidecar in '%s' (%s); using the "
+                    "bootstrapped config in memory for this instance. Run "
+                    "`apairo init` on a writable copy to persist it.",
+                    root_dir,
+                    exc,
+                )
+                self._config_fallback = config
         else:
             config = read_config(root_dir)
         return config
