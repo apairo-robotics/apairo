@@ -181,7 +181,7 @@ class ConfigurableDataset:
         config = (
             read_config(sequence_dir)
             if config_exists(sequence_dir)
-            else cls(sequence_dir)._load_or_create_config(sequence_dir)
+            else cls(sequence_dir)._load_or_create_config(sequence_dir)  # type: ignore[call-arg]
         )
         channels = config.get("channels", {})
 

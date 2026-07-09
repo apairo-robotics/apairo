@@ -48,7 +48,8 @@ class ZarrWriter:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         if self._chunks is None and self._compression is None:
-            zarr.save_array(str(path), data)
+            # np.ndarray satisfies zarr's NDArrayLike protocol at runtime.
+            zarr.save_array(str(path), data)  # type: ignore[arg-type]
             return
 
         compressor = None

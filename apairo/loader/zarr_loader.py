@@ -32,9 +32,9 @@ class ZarrLoader(AbstractLoader):
 
     def __getitem__(self, idx: int) -> np.ndarray:
         data = self._array[int(idx)]
-        if not isinstance(data, np.ndarray):
-            data = np.asarray(data)
-        return data
+        if isinstance(data, np.ndarray):
+            return data
+        return np.asarray(data)
 
     @property
     def shape(self) -> tuple[int, ...]:

@@ -144,7 +144,7 @@ def register_channel(
     """
     root_dir = Path(root_dir)
     # Read existing config to preserve all other channels (raw + preprocessed).
-    config = (
+    config: dict = (
         read_config(root_dir)
         if config_exists(root_dir)
         else {"version": 1, "channels": {}}
@@ -209,7 +209,7 @@ def register_raw_channel(
             *directory*; only meaningful for the ``"npys"`` loader.
     """
     root_dir = Path(root_dir)
-    config = (
+    config: dict = (
         read_config(root_dir)
         if config_exists(root_dir)
         else {"version": 1, "channels": {}}
@@ -590,7 +590,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
             issues.append(f"Channel '{key}': entry is not a mapping")
             continue
 
-        storage_dir = root_dir / meta.get("directory", key)
+        storage_dir = root_dir / str(meta.get("directory", key))
         if not storage_dir.is_dir():
             issues.append(
                 f"Channel '{key}': directory not found on disk ({storage_dir})"

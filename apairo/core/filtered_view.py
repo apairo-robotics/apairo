@@ -61,7 +61,7 @@ class FilteredView(AbstractDataset):
         """Return a FilteredView restricted to the named predefined split."""
         from apairo.core.profiled_dataset import ProfiledDataset, _apply_lst_filter
 
-        ds = self._parent
+        ds: AbstractDataset | None = self._parent
         while ds is not None and not isinstance(ds, ProfiledDataset):
             ds = getattr(ds, "_parent", None)
         if ds is None:

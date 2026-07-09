@@ -4,12 +4,14 @@ from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
     ClassVar,
+    Literal,
     NamedTuple,
 )
 
 import numpy as np
 
 if TYPE_CHECKING:
+    from apairo.core.filtered_view import FilteredView
     from apairo.core.synchronized_view import ChannelStrategy
 from . import abstract_loader
 from .config import Calibration, read_calibration
@@ -100,6 +102,9 @@ class AbstractDataset(ABC):
     loaders: dict[_Key, abstract_loader.AbstractLoader]
     synchronous: bool
     profile: dict[_Key, str] | None
+    # Lazily created by transform(); read via getattr with a default everywhere.
+    _pipeline: list[Callable[[Sample], Sample]]
+    _drop_keys: set[str]
 
     def _set_keys(self, keys: list[_Key]) -> None:
         if len(keys) == 0:
@@ -218,6 +223,7 @@ class AbstractDataset(ABC):
             transforms stacked.  To build independent variants, pass
             ``in_place=False`` (or branch first, e.g. ``ds.filter(...)``).
         """
+        step: Callable[[Sample], Sample]
         drop_key = output
         if fn is None:
             from apairo.core.preprocessor import (
@@ -261,12 +267,12 @@ class AbstractDataset(ABC):
         target = self if in_place else self._branch()
 
         if not hasattr(target, "_pipeline"):
-            target._pipeline: list[Callable] = []
+            target._pipeline = []
         target._pipeline.append(step)
 
         if drop_key is not None and not keep:
             if not hasattr(target, "_drop_keys"):
-                target._drop_keys: set[str] = set()
+                target._drop_keys = set()
             target._drop_keys.add(drop_key)
 
         return target
@@ -363,7 +369,9 @@ class AbstractDataset(ABC):
         return ConcatDataset([self] * n)
 
     def join(
-        self, *others: "AbstractDataset", on_collision: str = "raise"
+        self,
+        *others: "AbstractDataset",
+        on_collision: 'Literal["raise", "last"]' = "raise",
     ) -> "AbstractDataset":
         """Merge channels from this dataset and *others* into a single dataset.
 
@@ -385,7 +393,7 @@ class AbstractDataset(ABC):
 
         return ZipDataset(self, *others, on_collision=on_collision)
 
-    def filter_sequences(self, seq_ids) -> "AbstractDataset":
+    def filter_sequences(self, seq_ids) -> "FilteredView":
         """Return a FilteredView restricted to frames from *seq_ids*.
 
         Requires ``frame_sequence_ids`` to be available on this dataset
@@ -402,7 +410,7 @@ class AbstractDataset(ABC):
         self,
         key_or_fn_or_indices,
         fn: Callable | None = None,
-    ) -> "AbstractDataset":
+    ) -> "FilteredView":
         """Return a filtered view of this dataset.
 
         Three forms:
@@ -598,6 +606,23 @@ class AbstractDataset(ABC):
         except (AttributeError, NotImplementedError, RuntimeError):
             sequence = None
         return FrameRef(sequence=sequence, channel=None, row=int(idx))
+
+    @property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence id per global frame, shape ``(len(self),)``.
+
+        Provided by datasets and views with a sequence structure. The base
+        raises ``AttributeError`` so ``getattr(ds, "frame_sequence_ids", None)``
+        keeps working as an availability probe."""
+        raise AttributeError(f"{type(self).__name__} exposes no frame_sequence_ids")
+
+    @property
+    def frame_stems(self) -> np.ndarray:
+        """Filename stem backing each global frame, shape ``(len(self),)``.
+
+        Provided by on-disk datasets and index views; raises ``AttributeError``
+        when unavailable, like :attr:`frame_sequence_ids`."""
+        raise AttributeError(f"{type(self).__name__} exposes no frame_stems")
 
     @abstractmethod
     def __len__(self) -> int: ...

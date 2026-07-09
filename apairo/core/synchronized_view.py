@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -353,10 +353,12 @@ class SynchronizedView(AbstractDataset):
 
     def __repr__(self) -> str:
         ref = self._reference if self._reference is not None else "<external clock>"
+        method: object
         if isinstance(self._method, dict):
             method = "per-channel"
         else:
-            method = getattr(self._method, "__name__", self._method)
+            m: Any = self._method
+            method = getattr(m, "__name__", m)
         return (
             f"SynchronizedView(n={len(self)}, reference={ref!r}, "
             f"method={method!r}, keys={self._keys})"

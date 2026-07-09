@@ -86,7 +86,7 @@ class TarImageLoader(AbstractLoader):
                 "Pillow is required for TarImageLoader. "
                 "Install with: pip install Pillow"
             ) from exc
-        img = Image.open(BytesIO(data))
+        img: Image.Image = Image.open(BytesIO(data))
         if img.mode in ("P", "CMYK", "YCbCr", "I", "F"):
             img = img.convert("RGB")
         arr = np.asarray(img)

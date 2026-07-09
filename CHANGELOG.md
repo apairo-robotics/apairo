@@ -37,8 +37,17 @@ All notable changes to apairo are documented here. The format is based on
   scale it with `--sequences/--frames/--points`. Complements `bench.py`
   (cost) with a correctness soak. Its first run caught the pickling bug above.
 - **PEP 561 `py.typed` marker** -- the type annotations are now visible to
-  consumers' type checkers. `[tool.mypy]` config and `make typecheck` track
-  the internal baseline (not a CI gate yet).
+  consumers' type checkers.
+- **mypy at zero errors, gated in CI.** The 74-error internal baseline is
+  fixed for real (attribute contracts declared on the base class and the
+  root mixin, `Literal` for `join(on_collision=)` and precise `FilteredView`
+  returns, honest `Path`/`Optional` narrowing in the profiled layout), with
+  10 documented `# type: ignore[code]` escapes where the pattern is
+  intentionally dynamic (deprecation alias, duck-typed stream loaders,
+  property-over-attribute overrides). Along the way `AsyncLayoutDataset.init`
+  now returns the written `channels.yaml` path (previously `None`), and two
+  malformed-profile cases fail with a clear message instead of an opaque
+  `TypeError`.
 - **Python 3.13 and 3.14** -- declared in the classifiers and tested in CI,
   alongside new macOS and Windows jobs. Dependency floors are now explicit
   (`numpy>=1.26`, `PyYAML>=6.0`); a dedicated CI job runs the suite against

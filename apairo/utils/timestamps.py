@@ -20,7 +20,7 @@ def get_end_of_time(timestamps: dict) -> float:
 def get_reference_timestamps(timestamps: dict) -> str:
     """Return the key of the channel with the lowest frequency."""
     freq = {key: get_frequency(value) for key, value in timestamps.items()}
-    return min(freq, key=freq.get)
+    return min(freq, key=freq.__getitem__)
 
 
 def merge_timeline(timestamps: dict, keys: list) -> tuple:

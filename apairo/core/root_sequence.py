@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -38,13 +38,23 @@ from apairo.core.abstract_dataset import FrameRef
 from apairo.core.config import Calibration, read_calibration
 
 if TYPE_CHECKING:
+    # For the type checker the mixin sits on AbstractDataset (its real MRO
+    # position); at runtime it stays a plain mixin so the MRO is unchanged.
+    from apairo.core.abstract_dataset import AbstractDataset as _MixinBase
     from apairo.core.sequence_view import SequenceView
+else:
+    _MixinBase = object
 
 
-class RootSequenceMixin:
+class RootSequenceMixin(_MixinBase):
     """Flat-indexed root over several same-typed sequence datasets."""
 
     _is_root: bool = False
+    # Single-sequence instances expose their directory (subclass contract).
+    _sequence_dir: Path
+    # Root instances hold one single-sequence instance of the concrete class
+    # (built by the _init_root factory) per sequence directory.
+    _sequences: list[Any]
 
     # ------------------------------------------------------------------ build
 
@@ -204,7 +214,7 @@ class RootSequenceMixin:
 
     def __len__(self) -> int:
         if not self._is_root:
-            return super().__len__()
+            return super().__len__()  # type: ignore[safe-super]  # layout base implements it
         if not hasattr(self, "_cumulative_lengths"):
             raise RuntimeError("No keys loaded. Set ds.keys = [...] first.")
         return int(self._cumulative_lengths[-1])

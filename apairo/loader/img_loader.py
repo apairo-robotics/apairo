@@ -24,7 +24,6 @@ class IMGLoader(AbstractLoader):
 
     directory: str
     files: list[str]
-    shape: tuple[int, ...]
 
     def __init__(self, directory, files: list[str] | None = None):
         try:

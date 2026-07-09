@@ -11,7 +11,7 @@ help:
 	@echo "  make coverage  : Run tests with coverage report"
 	@echo "  make lint      : Run linting with ruff"
 	@echo "  make format    : Format the codebase with ruff"
-	@echo "  make typecheck : Run mypy (baseline tracking, not a CI gate yet)"
+	@echo "  make typecheck : Run mypy (CI gate -- must stay at zero errors)"
 	@echo "  make soak      : Run the synthetic intensive-usage soak (benchmarks/soak.py)"
 	@echo "  make clean     : Remove build artifacts and cache"
 

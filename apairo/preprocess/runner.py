@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -29,7 +29,7 @@ def _to_numpy(data) -> np.ndarray:
 
 def run(
     preprocessor: Preprocessor,
-    dataset_cls: type,
+    dataset_cls: type[Any],
     root_dir: str | Path,
     *,
     overwrite: bool = False,

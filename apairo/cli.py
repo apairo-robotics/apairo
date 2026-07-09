@@ -26,6 +26,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -52,7 +53,7 @@ from apairo.dataset.semantic_kitti import SemanticKittiDataset
 # Datasets selectable with ``--as``: the profile-free generic loader plus the
 # profiled datasets, whose ``init`` maps canonical channel names from a profile.
 # (TartanKittiDataset, multi-sequence, will register here later.)
-DATASETS = {
+DATASETS: dict[str, type[Any]] = {
     "RawDataset": RawDataset,
     "SemanticKittiDataset": SemanticKittiDataset,
     "Rellis3DDataset": Rellis3DDataset,
@@ -199,7 +200,7 @@ def _profiled_status_class(path: Path):
     ``init --as <Class>``.  Returns ``None`` for a generic (profile-free)
     directory, so status falls through to the generic reading."""
     name = read_manifest(path).get("class")
-    cls = DATASETS.get(name)
+    cls = DATASETS.get(name) if isinstance(name, str) else None
     if cls is not None and issubclass(cls, ProfiledDataset):
         return cls
     return None
@@ -681,7 +682,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         _print_registered(path)
         _hint_unregistered(cls, path)
     else:
-        _print_status(_build_status(path))
+        status = _build_status(path)
+        if status is not None:
+            _print_status(status)
     return 0
 
 

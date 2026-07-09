@@ -25,6 +25,10 @@ class SynchronousDataset(AbstractDataset):
 
     timestamps = None
 
+    # Provided by the concrete dataset (see ProfiledDataset.__init__).
+    _root: Path
+    _files: dict[str, list[Path]]
+
     @property
     def root_dir(self) -> Path:
         return self._root

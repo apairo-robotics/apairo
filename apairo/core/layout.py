@@ -114,6 +114,10 @@ class DatasetLayout:
         if spec.store == "tar_jpeg":
             if not p.is_file():
                 return None
+            if spec.name_to_index is None:
+                raise ValueError(
+                    f"tar_jpeg channel {key!r} declares no name_to_index mapping."
+                )
             from apairo.loader.tar_loader import TarImageLoader
 
             return TarImageLoader(p, n_frames, spec.name_to_index)

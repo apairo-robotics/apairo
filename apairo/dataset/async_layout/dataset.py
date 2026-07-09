@@ -6,6 +6,8 @@ import numpy as np
 
 from apairo.core import AbstractDataset, AbstractLoader, FrameRef
 from apairo.core.config import (
+    CHANNELS_FILE,
+    CONFIG_DIR,
     config_exists,
     read_config,
     write_config,
@@ -229,7 +231,7 @@ class AsyncLayoutDataset(AbstractDataset):
         raw_keys: list[str] | None = None,
         overwrite: bool = False,
         merge: bool = False,
-    ) -> None:
+    ) -> Path:
         """Scan an async-layout directory and write ``.apairo/channels.yaml``.
 
         All detected subdirectories are registered as raw channels.  Loader
@@ -254,6 +256,9 @@ class AsyncLayoutDataset(AbstractDataset):
                 without touching channels already declared (raw or
                 preprocessed).  If ``.apairo`` does not yet exist, behaves
                 like a normal init.  Incompatible with ``overwrite``.
+
+        Returns:
+            Path of the written ``channels.yaml``.
 
         Raises:
             ValueError: If both ``overwrite`` and ``merge`` are ``True``.
@@ -302,7 +307,7 @@ class AsyncLayoutDataset(AbstractDataset):
                 raise ValueError(
                     f"No new recognizable channels found in '{directory}'{detail}."
                 )
-            return
+            return directory / CONFIG_DIR / CHANNELS_FILE
 
         if config_exists(directory) and not overwrite:
             raise FileExistsError(
@@ -334,6 +339,7 @@ class AsyncLayoutDataset(AbstractDataset):
             )
 
         write_config(directory, {"version": 1, "channels": channels})
+        return directory / CONFIG_DIR / CHANNELS_FILE
 
     # ------------------------------------------------------------------ keys
 

@@ -24,7 +24,9 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -36,7 +38,10 @@ from apairo.writer.npy_writer import NPYWriter
 # Per-frame array loaders this writer can emit (one data file per frame). The
 # stacked ``npy`` (one file, many rows) and ``img``/``zarr`` use different on-disk
 # models and are out of scope here.
-_PER_FRAME = {"npys": (NPYWriter, ".npy"), "bin": (BINWriter, ".bin")}
+_PER_FRAME: dict[str, tuple[Callable[[], Any], str]] = {
+    "npys": (NPYWriter, ".npy"),
+    "bin": (BINWriter, ".bin"),
+}
 
 
 class ChannelWriter:

@@ -122,7 +122,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     # ------------------------------------------------------------------ init
 
     @classmethod
-    def init(
+    def init(  # type: ignore[override]  # root-aware variant, intentionally different keywords
         cls,
         directory: str | Path,
         *,
@@ -248,7 +248,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         if keys == "all":
             keys = sorted(self._profile)
         # Delegate to the layout base's setter (validates + re-inits loaders).
-        AsyncLayoutDataset.keys.fset(self, list(keys))
+        AsyncLayoutDataset.keys.fset(self, list(keys))  # type: ignore[attr-defined]  # class-level property object
 
     # ------------------------------------------------------------------ public
 

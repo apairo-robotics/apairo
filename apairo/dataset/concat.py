@@ -55,12 +55,13 @@ class ConcatDataset(AbstractDataset):
         self.__dict__.pop("timestamps", None)
 
     @functools.cached_property
-    def timestamps(self) -> dict[str, np.ndarray] | None:
+    def timestamps(self) -> dict[str, np.ndarray] | None:  # type: ignore[override]
         """None for synchronous datasets, concatenated arrays for temporal ones."""
         if self.datasets[0].timestamps is None:
             return None
         result: dict[str, list[np.ndarray]] = {k: [] for k in self._keys}
         for ds in self.datasets:
+            assert ds.timestamps is not None  # parents share sync-ness
             for k in self._keys:
                 result[k].append(ds.timestamps[k])
         return {k: np.concatenate(v) for k, v in result.items()}

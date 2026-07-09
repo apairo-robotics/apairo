@@ -44,7 +44,7 @@ class StreamDataset(AbstractDataset):
         if not streams:
             raise ValueError("StreamDataset requires at least one stream.")
 
-        self.loaders: dict[str, Sequence] = {}
+        self.loaders = {}
         self.timestamps: dict[str, np.ndarray] = {}
         for key, (ts, items) in streams.items():
             ts = np.asarray(ts, dtype=np.float64)
@@ -60,7 +60,8 @@ class StreamDataset(AbstractDataset):
             if np.any(np.diff(ts) < 0):
                 raise ValueError(f"Stream {key!r}: timestamps must be ascending.")
             self.timestamps[key] = ts
-            self.loaders[key] = items
+            # Duck-typed: any indexable per-frame container works as a loader.
+            self.loaders[key] = items  # type: ignore[assignment]
 
         self._set_keys(list(streams))
 

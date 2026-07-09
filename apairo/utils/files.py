@@ -1,20 +1,6 @@
 import os
 
 
-def check_keys(keys: list, files: list) -> bool:
-    """Check if the keys exist in the dataset"""
-    for key in keys:
-        if key not in files:
-            raise ValueError(f"Key {key} not found in files")
-
-
-def check_files(files: list, profile: dict) -> bool:
-    """Check if the file names are in the profile."""
-    for file in files:
-        if file not in profile:
-            raise ValueError(f"File {file} not in profile")
-
-
 def get_files(directory: str) -> dict[str, str]:
     """Get the files in the directory.
 

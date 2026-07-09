@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any, ClassVar
 
 from apairo.core.sample import Sample
@@ -43,6 +43,10 @@ class Preprocessor(ABC):
         ``.apairo`` for reference).
     """
 
+    # A preprocessor is a callable; concrete subclasses implement __call__
+    # (FramePreprocessor and SequencePreprocessor declare it abstract).
+    __call__: Callable[..., Any]
+
     output_key: ClassVar[str]
     output_loader: ClassVar[str]
     input_keys: ClassVar[list[str]]
@@ -63,7 +67,7 @@ class Preprocessor(ABC):
                 DeprecationWarning,
                 stacklevel=3,  # __init_subclass__ <- ABCMeta.__new__ <- class statement
             )
-            cls.__call__ = legacy
+            cls.__call__ = legacy  # type: ignore[method-assign]  # deprecation alias
 
     def process(self, *args, **kwargs) -> Any:
         """Deprecated alias for calling the instance directly."""

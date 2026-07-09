@@ -9,6 +9,7 @@ import yaml
 
 if TYPE_CHECKING:
     from apairo.core.abstract_dataset import AbstractDataset
+    from apairo.core.filtered_view import FilteredView
     from apairo.core.sequence_view import SequenceView
 
 import numpy as np
@@ -78,7 +79,7 @@ def _parse_splits_spec(raw: dict) -> SplitSpec | None:
     )
 
 
-def _apply_lst_filter(ds, frame_filter: set[tuple[str, str]]) -> AbstractDataset:
+def _apply_lst_filter(ds, frame_filter: set[tuple[str, str]]) -> FilteredView:
     """Return a FilteredView of *ds* keeping only frames in *frame_filter*."""
     seq_ids = ds.frame_sequence_ids
     stems = ds.frame_stems
@@ -153,7 +154,18 @@ class ModalitySpec:
 @dataclass
 class LayerSpec:
     type: str
-    value: object = None
+    value: str | None = None
+
+
+def _fixed_layer_parts(layers: list[LayerSpec]) -> list[str]:
+    """Directory names of the 'fixed' layers; a fixed layer must carry one."""
+    parts = []
+    for layer in layers:
+        if layer.type == "fixed":
+            if layer.value is None:
+                raise ValueError("A 'fixed' layout layer must carry a directory name.")
+            parts.append(layer.value)
+    return parts
 
 
 def _parse_layers(raw: list) -> list[LayerSpec]:
@@ -451,7 +463,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         partially-built instance."""
         spec = self._modalities[key]
         mapped = self._mapped_name(key)
-        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        fixed_parts = _fixed_layer_parts(self._layers)
         base = self._root / Path(*fixed_parts) if fixed_parts else self._root
         if not base.is_dir():
             return []
@@ -705,11 +717,13 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         return d
 
     def derived_path(self, idx: int, key: str, ext: str) -> Path:
-        ref = self._files[self._ref_key][idx]
+        ref_key = self._ref_key
+        assert ref_key is not None  # set once keys are loaded
+        ref = self._files[ref_key][idx]
         rel = ref.relative_to(self._root)
         parts = list(rel.parts)
-        src_spec = self._modalities.get(self._ref_key)
-        n = len(src_spec.effective_subpath(self._ref_key)) if src_spec else 1
+        src_spec = self._modalities.get(ref_key)
+        n = len(src_spec.effective_subpath(ref_key)) if src_spec else 1
         parts[self._modality_idx : self._modality_idx + n] = [key]
         parts[-1] = f"{ref.stem}.{ext}"
         return self._root / Path(*parts)
@@ -717,7 +731,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def _is_present(self, root_dir: Path, key: str) -> bool:
         spec = self._modalities[key]
         mapped = self._mapped_name(key)
-        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        fixed_parts = _fixed_layer_parts(self._layers)
         if spec.is_sequence_file:
             return any(root_dir.glob(f"**/{mapped}{spec.ext}"))
         if fixed_parts:
@@ -745,7 +759,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         declared = set(config.get("channels", {}))
         raw_dirs = {self._mapped_name(k) for k in self.available_keys}
         prefix = [
-            layer.value if layer.type == "fixed" else "*"
+            layer.value if layer.type == "fixed" and layer.value is not None else "*"
             for layer in self._layers[: self._modality_layer_idx]
         ]
         pattern = str(Path(*prefix) / "*") if prefix else "*"
@@ -770,7 +784,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def _discover_sequence_files(self, key: str) -> list[Path]:
         """Find sequence-level files (one per sequence, not per frame)."""
         spec = self._modalities[key]
-        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        fixed_parts = _fixed_layer_parts(self._layers)
         mapped = self._mapped_name(key)
 
         if fixed_parts:
@@ -787,7 +801,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def _discover_derived(
         self, key: str, ext: str, apply_frame_filter: bool = True
     ) -> list[Path]:
-        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        fixed_parts = _fixed_layer_parts(self._layers)
         if fixed_parts:
             prefix = Path(*fixed_parts)
             pattern = str(prefix / "**" / key / f"*.{ext}")
@@ -827,7 +841,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def _discover_native(self, key: str, apply_frame_filter: bool = True) -> list[Path]:
         spec = self._modalities[key]
-        fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
+        fixed_parts = _fixed_layer_parts(self._layers)
         mapped = self._mapped_name(key)
 
         if fixed_parts:
@@ -868,6 +882,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         channel honour the same split/predicate selection as the per-frame
         channels.  Keyed off the anchor (``_ref_key``) glob without the frame
         filter."""
+        assert self._ref_key is not None  # callers check before anchoring
         per_seq: dict[str, list[str]] = {}
         for f in self._discover_native(self._ref_key, apply_frame_filter=False):
             per_seq.setdefault(self._seq_root(f).name, []).append(f.stem)
@@ -896,7 +911,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         return _StackedSequenceLoader(seq_paths, reader, index, reshape)
 
     @property
-    def loaders(self) -> dict:
+    def loaders(self) -> dict:  # type: ignore[override]  # property over the base attribute
         """Per-channel loaders, indexed by global frame index."""
         return self._loaders
 
@@ -911,11 +926,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         Lists directories at the profile's sequence depth (children of the
         ``fixed`` prefix).  Structural only -- no file discovery -- so it works
         on a partially-built instance (``init``/``inventory``)."""
-        prefix = [
-            layer.value
-            for layer in self._layers[: self._seq_layer_idx]
-            if layer.type == "fixed"
-        ]
+        prefix = _fixed_layer_parts(self._layers[: self._seq_layer_idx])
         base = self._root / Path(*prefix) if prefix else self._root
         if not base.is_dir():
             return []
@@ -969,7 +980,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             "preprocess": preprocess,
         }
 
-    def describe(self, sequence_id: str | None = None) -> dict:
+    def describe(self, sequence_id: str | None = None) -> dict:  # type: ignore[override]  # instance form supersedes the mixin classmethod
         """Describe this dataset's structure -- identity, sequences, channels.
 
         Returns a structured dict (and prints a human-readable summary).  Cross-
@@ -1073,7 +1084,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def frame_stems(self) -> np.ndarray:
         """Filename stem for every frame, indexed by global frame index."""
         result = np.empty(len(self), dtype=object)
-        anchor = self._files.get(self._ref_key)
+        anchor = self._files.get(self._ref_key) if self._ref_key is not None else None
         if anchor:
             for i, path in enumerate(anchor):
                 result[i] = path.stem

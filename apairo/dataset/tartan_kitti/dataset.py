@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 from apairo.dataset.async_layout.dataset import _suffix_channel_entries
 from apairo.dataset.raw import RawDataset
@@ -27,7 +28,7 @@ class TartanKittiDataset(RawDataset):
         ds = TartanKittiDataset(root_dir, keys=["velodyne_0"])   # all sequences
     """
 
-    available_keys: frozenset = frozenset(_PROFILE)
+    available_keys: ClassVar[frozenset] = frozenset(_PROFILE)
 
     def _bootstrap_config(self, sequence_dir: Path) -> dict:
         """Declare the on-disk profile channels, pinning each loader from the
