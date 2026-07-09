@@ -36,7 +36,7 @@ from pathlib import Path
 
 import numpy as np
 
-from apairo import RawDataset, ChannelWriter
+from apairo import ChannelWriter, RawDataset
 
 # Runnable out of the box against the bundled test asset; override for real data.
 ROOT = Path(
@@ -45,14 +45,15 @@ ROOT = Path(
         Path(__file__).resolve().parents[1] / "test/assets/mini_tartan/figure_8",
     )
 )
-REFERENCE = "velodyne_0"   # the clock the derived channel is 1:1 with
-CHANNEL   = "slidevox_feats"
+REFERENCE = "velodyne_0"  # the clock the derived channel is 1:1 with
+CHANNEL = "slidevox_feats"
 
 # --- config that churns; its value names the cache dir -----------------------
 VOX = 0.15
-CACHE_DIR = Path(
-    os.environ.get("APAIRO_CACHE_ROOT", Path(__file__).parent / "_cache")
-) / f"slidevox_v{int(VOX * 100):03d}"
+CACHE_DIR = (
+    Path(os.environ.get("APAIRO_CACHE_ROOT", Path(__file__).parent / "_cache"))
+    / f"slidevox_v{int(VOX * 100):03d}"
+)
 
 
 def replay_sequential(sync):
@@ -83,8 +84,11 @@ def materialise_once(sync):
         return
     print(f"computing {CHANNEL} (cold cache) → {CACHE_DIR}")
     with ChannelWriter(
-        CACHE_DIR, CHANNEL, loader="npys",
-        timestamps_from=REFERENCE, sources=[REFERENCE],
+        CACHE_DIR,
+        CHANNEL,
+        loader="npys",
+        timestamps_from=REFERENCE,
+        sources=[REFERENCE],
     ) as w:
         for i, (feat, ts) in enumerate(replay_sequential(sync)):
             w.add(feat, stem=f"{i:06d}", timestamp=ts)
@@ -95,7 +99,7 @@ def materialise_once(sync):
 # ---------------------------------------------------------------------------
 
 base = RawDataset(ROOT, keys=[REFERENCE])
-sync = base.synchronize(reference=REFERENCE)   # length == number of ref frames
+sync = base.synchronize(reference=REFERENCE)  # length == number of ref frames
 print(f"base: {len(sync)} frames on the '{REFERENCE}' clock")
 
 # ---------------------------------------------------------------------------
@@ -111,7 +115,7 @@ materialise_once(sync)
 feats = RawDataset(CACHE_DIR)
 print(f"cached channel: {feats.keys}  ({len(feats)} frames)")
 
-combined = sync.join(feats)     # per-index merge; raises on length/key mismatch
+combined = sync.join(feats)  # per-index merge; raises on length/key mismatch
 
 sample = combined[0]
 print(f"combined keys : {combined.keys}")

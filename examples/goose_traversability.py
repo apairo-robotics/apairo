@@ -17,9 +17,8 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from apairo import Goose3DDataset, FramePreprocessor
+from apairo import FramePreprocessor, Goose3DDataset
 from apairo.core.sample import Sample
-
 
 TRAVERSABLE_LABELS = {
     23,  # Asphalt

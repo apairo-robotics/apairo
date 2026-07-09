@@ -16,9 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
-from apairo import Rellis3DDataset, FramePreprocessor
+from apairo import FramePreprocessor, Rellis3DDataset
 from apairo.core.sample import Sample
-
 
 # ---------------------------------------------------------------------------
 # 1. Preprocessor — declared once, run once, stored in .apairo. A re-run raises

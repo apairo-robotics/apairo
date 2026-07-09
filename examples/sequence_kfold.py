@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from apairo import Rellis3DDataset, FramePreprocessor
+from apairo import FramePreprocessor, Rellis3DDataset
 
 ROOT = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
 INDEX_DIR = Path("./kfold_indices")

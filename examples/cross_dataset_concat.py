@@ -17,10 +17,9 @@ Prerequisite: run the per-dataset traversability preprocessors first so that
 
 from pathlib import Path
 
-import numpy as np
 from torch.utils.data import DataLoader
 
-from apairo import Rellis3DDataset, Goose3DDataset, SemanticKittiDataset
+from apairo import Goose3DDataset, Rellis3DDataset, SemanticKittiDataset
 
 RELLIS_ROOT = Path("/data/RELLIS")
 GOOSE_ROOT = Path("/data/goose/GOOSE_3D/train")

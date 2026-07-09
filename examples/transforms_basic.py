@@ -13,9 +13,10 @@ Usage:
 """
 
 import argparse
-import numpy as np
-from apairo import Goose3DDataset, Compose
 
+import numpy as np
+
+from apairo import Compose, Goose3DDataset
 
 # ---------------------------------------------------------------------------
 # 1. Per-channel transform

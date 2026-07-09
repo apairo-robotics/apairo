@@ -3,9 +3,10 @@
 import os
 
 import numpy as np
-from apairo.preprocess import FramePreprocessor, SequencePreprocessor
-from apairo.dataset import TartanKittiDataset
+
 from apairo.core.sample import Sample
+from apairo.dataset import TartanKittiDataset
+from apairo.preprocess import FramePreprocessor, SequencePreprocessor
 
 SEQ_DIR = os.environ.get("APAIRO_TARTAN_SEQ", "/data/tartan/2024-01-01_forest")
 
@@ -41,7 +42,7 @@ class GICPPoses(SequencePreprocessor):
 
     def __call__(self, frames):
         poses = []
-        for sample in frames:
+        for _sample in frames:
             # Replace with your actual ICP call:
             poses.append(np.eye(4, dtype=np.float32))
         return np.stack(poses)  # (N, 4, 4)

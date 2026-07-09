@@ -15,10 +15,10 @@ import tracemalloc
 from pathlib import Path
 
 import numpy as np
-
-import apairo as ap
 from baseline import NaiveLoader, latest_match
 from synth import make_async_sequence
+
+import apairo as ap
 
 POINTS = 1024
 REF = "lidar"
