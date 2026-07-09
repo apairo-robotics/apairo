@@ -39,9 +39,7 @@ def _make_async_dataset(tmp_path, lidar_ts, imu_ts):
 @pytest.fixture
 def async_ds(tmp_path):
     # lidar: 4 events at [0, 1/3, 2/3, 1]; imu: 8 events at [0, 1/7, ..., 1]
-    return _make_async_dataset(
-        tmp_path, np.linspace(0, 1, 4), np.linspace(0, 1, 8)
-    )
+    return _make_async_dataset(tmp_path, np.linspace(0, 1, 4), np.linspace(0, 1, 8))
 
 
 def test_default_reference_is_lowest_frequency(async_ds):
@@ -101,9 +99,7 @@ def test_tolerance_drops_unmatched_frames(async_ds):
 
 def test_previous_drops_frames_before_first_event(tmp_path):
     # imu starts after the first lidar frame -> frame 0 has no previous match
-    ds = _make_async_dataset(
-        tmp_path, np.linspace(0, 1, 4), np.linspace(0.1, 1, 8)
-    )
+    ds = _make_async_dataset(tmp_path, np.linspace(0, 1, 4), np.linspace(0.1, 1, 8))
     view = ds.synchronize(reference="lidar", method="previous")
     assert len(view) == 3
     np.testing.assert_array_equal(view.frame_indices["lidar"], [1, 2, 3])
@@ -111,9 +107,7 @@ def test_previous_drops_frames_before_first_event(tmp_path):
 
 def test_next_drops_frames_after_last_event(tmp_path):
     # imu stops before the last lidar frame -> frame 3 has no next match
-    ds = _make_async_dataset(
-        tmp_path, np.linspace(0, 1, 4), np.linspace(0.0, 0.9, 8)
-    )
+    ds = _make_async_dataset(tmp_path, np.linspace(0, 1, 4), np.linspace(0.0, 0.9, 8))
     view = ds.synchronize(reference="lidar", method="next")
     assert len(view) == 3
     np.testing.assert_array_equal(view.frame_indices["lidar"], [0, 1, 2])
@@ -215,8 +209,8 @@ def test_distance_clock(async_ds):
     """One frame every 2 m, robot moving at 4 m/s along x then stopping."""
     from apairo.utils import clock_from_distance
 
-    odom_ts = np.linspace(0.0, 1.0, 21)            # 20 Hz over 1 s
-    x = np.minimum(odom_ts, 0.5) * 4.0              # moves 2 m, then static
+    odom_ts = np.linspace(0.0, 1.0, 21)  # 20 Hz over 1 s
+    x = np.minimum(odom_ts, 0.5) * 4.0  # moves 2 m, then static
     positions = np.stack([x, np.zeros_like(x)], axis=1)
 
     clock = clock_from_distance(odom_ts, positions, step=0.5)
@@ -244,6 +238,7 @@ def test_distance_clock_validation():
 
 def test_callable_method(async_ds):
     """A custom strategy: always pick the first event of each channel."""
+
     def first_event(ts: np.ndarray, ref_ts: np.ndarray) -> np.ndarray:
         return np.zeros(len(ref_ts), dtype=np.int64)
 
@@ -255,6 +250,7 @@ def test_callable_method(async_ds):
 
 def test_callable_method_negative_index_drops_frame(async_ds):
     """Negative indices mark 'no match' and drop the reference frame."""
+
     def skip_first(ts: np.ndarray, ref_ts: np.ndarray) -> np.ndarray:
         idx = np.searchsorted(ts, ref_ts, side="right") - 1
         idx[0] = -1
@@ -279,14 +275,14 @@ def test_invalid_method_string(async_ds):
 
 def test_interpolated_channel_value(async_ds):
     """imu frame i holds np.full(2, i): interpolation blends event values."""
-    view = async_ds.synchronize(
-        reference="lidar", method={"imu": LerpInterp()}
-    )
+    view = async_ds.synchronize(reference="lidar", method={"imu": LerpInterp()})
     assert len(view) == 4
     # lidar tick t=1/3 sits between imu events 2 (t=2/7) and 3 (t=3/7):
     # alpha = (1/3 - 2/7) / (1/7) = 1/3 -> value 2 + 1/3
     np.testing.assert_allclose(
-        view[1].data["imu"], np.full(2, 2 + 1 / 3), rtol=1e-6  # data is float32
+        view[1].data["imu"],
+        np.full(2, 2 + 1 / 3),
+        rtol=1e-6,  # data is float32
     )
     # the lidar channel (unlisted) defaults to "previous" -- raw events
     np.testing.assert_array_equal(view[1].data["lidar"], np.full(2, 1))
@@ -310,9 +306,7 @@ def test_interpolation_exact_last_event_bypasses_interpolator(tmp_path):
 
 def test_interpolation_requires_bracketing(tmp_path):
     # imu starts after the first lidar tick and ends before the last one
-    ds = _make_async_dataset(
-        tmp_path, np.linspace(0, 1, 4), np.linspace(0.2, 0.8, 5)
-    )
+    ds = _make_async_dataset(tmp_path, np.linspace(0, 1, 4), np.linspace(0.2, 0.8, 5))
     view = ds.synchronize(reference="lidar", method={"imu": LerpInterp()})
     # ticks 0.0 and 1.0 are not bracketed by imu events -> dropped
     assert len(view) == 2
@@ -334,8 +328,8 @@ def test_method_set_raises(async_ds):
 
 def test_interpolated_frame_indices_and_offsets(async_ds):
     view = async_ds.synchronize(reference="lidar", method={"imu": LerpInterp()})
-    assert view.frame_indices["imu"].shape == (4, 2)   # bracketing pairs
-    assert view.frame_indices["lidar"].shape == (4,)   # matched
+    assert view.frame_indices["imu"].shape == (4, 2)  # bracketing pairs
+    assert view.frame_indices["lidar"].shape == (4,)  # matched
     np.testing.assert_array_equal(view.time_offsets("imu"), np.zeros(4))
 
 

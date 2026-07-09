@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
 import yaml
 
 if TYPE_CHECKING:
@@ -11,9 +13,6 @@ if TYPE_CHECKING:
 
 import numpy as np
 
-from apairo.core.synchronous_dataset import SynchronousDataset
-from apairo.core.configurable_dataset import ConfigurableDataset
-from apairo.core.sample import Sample
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
@@ -21,10 +20,15 @@ from apairo.core.config import (
     read_calibration,
     read_config,
     read_manifest,
-    remove_channel as _remove_channel,
     write_config,
     write_manifest,
 )
+from apairo.core.config import (
+    remove_channel as _remove_channel,
+)
+from apairo.core.configurable_dataset import ConfigurableDataset
+from apairo.core.sample import Sample
+from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.loader import DERIVED_LOADERS
 
 _NUMPY_DTYPE: dict[str, type] = {
@@ -63,7 +67,7 @@ class SplitSpec:
     files: dict[str, str]  # split_name -> relative path to the lst file
 
 
-def _parse_splits_spec(raw: dict) -> "SplitSpec | None":
+def _parse_splits_spec(raw: dict) -> SplitSpec | None:
     if not raw:
         return None
     split_type = raw.get("type")
@@ -74,12 +78,12 @@ def _parse_splits_spec(raw: dict) -> "SplitSpec | None":
     )
 
 
-def _apply_lst_filter(ds, frame_filter: "set[tuple[str, str]]") -> "AbstractDataset":
+def _apply_lst_filter(ds, frame_filter: set[tuple[str, str]]) -> AbstractDataset:
     """Return a FilteredView of *ds* keeping only frames in *frame_filter*."""
     seq_ids = ds.frame_sequence_ids
     stems = ds.frame_stems
     mask = np.fromiter(
-        ((s, t) in frame_filter for s, t in zip(seq_ids, stems)),
+        ((s, t) in frame_filter for s, t in zip(seq_ids, stems, strict=True)),
         dtype=bool,
         count=len(ds),
     )
@@ -109,17 +113,17 @@ def _read_lst_frame_set(lst_path: Path) -> set[tuple[str, str]]:
 @dataclass
 class ModalitySpec:
     ext: str
-    dtype: Optional[str] = None
-    reshape: Optional[list] = None
-    mask: Optional[int] = None
-    cast_dtype: Optional[str] = None
-    loader: Optional[str] = None
+    dtype: str | None = None
+    reshape: list | None = None
+    mask: int | None = None
+    cast_dtype: str | None = None
+    loader: str | None = None
     subpath: list[str] = field(default_factory=list)
     optional: bool = False
-    resolved_dtype: Optional[type] = field(default=None, compare=False, repr=False)
+    resolved_dtype: type | None = field(default=None, compare=False, repr=False)
 
     @classmethod
-    def from_dict(cls, key: str, d: dict) -> "ModalitySpec":
+    def from_dict(cls, key: str, d: dict) -> ModalitySpec:
         ext = d.get("ext", "")
         if ext and not ext.startswith("."):
             ext = f".{ext}"
@@ -329,7 +333,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         *,
         merge: bool = False,
         overwrite: bool = False,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> Path:
         """Write ``.apairo/channels.yaml`` from the dataset profile.
 
@@ -548,7 +552,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         # alias and everything downstream says the alias; ask for the real name
         # and it says the real name. Default keys speak the alias.
         real_keys = [to_real.get(k, k) for k in keys]
-        self._public_of: dict[str, str] = dict(zip(real_keys, keys))
+        self._public_of: dict[str, str] = dict(zip(real_keys, keys, strict=True))
         keys = real_keys
 
         # Classify each requested key.
@@ -734,7 +738,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         """Modality-depth directories on disk that are neither a mapped raw
         channel nor already declared -- i.e. likely preprocessed channels apairo
         has not been told about.  Report-only helper for :meth:`unregistered_channels`."""
-        from apairo.dataset.async_layout.dataset import _detect_loader  # local: avoid import cycle
+        from apairo.dataset.async_layout.dataset import (
+            _detect_loader,  # local: avoid import cycle
+        )
 
         declared = set(config.get("channels", {}))
         raw_dirs = {self._mapped_name(k) for k in self.available_keys}
@@ -778,7 +784,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             paths = [p for p in paths if p.parent.name in self._sequence_ids_filter]
         return paths
 
-    def _discover_derived(self, key: str, ext: str, apply_frame_filter: bool = True) -> list[Path]:
+    def _discover_derived(
+        self, key: str, ext: str, apply_frame_filter: bool = True
+    ) -> list[Path]:
         fixed_parts = [layer.value for layer in self._layers if layer.type == "fixed"]
         if fixed_parts:
             prefix = Path(*fixed_parts)
@@ -868,7 +876,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             for seq, stems in per_seq.items()
         }
 
-    def _build_stacked_loader(self, seq_paths, reshape, reader) -> _StackedSequenceLoader:
+    def _build_stacked_loader(
+        self, seq_paths, reshape, reader
+    ) -> _StackedSequenceLoader:
         """Wrap one stacked file per sequence (``{seq_id: path}``) into a loader
         aligned to the selected global frame order, so it stays in step with the
         per-frame channels under splits and filters."""
@@ -1021,7 +1031,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 return list(layer.value)
         return []
 
-    def split(self, name: str) -> "ProfiledDataset":
+    def split(self, name: str) -> ProfiledDataset:
         """Return a new dataset instance filtered to the named split."""
         return type(self)(
             self._root,
@@ -1069,7 +1079,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 result[i] = path.stem
         return result
 
-    def filter_split(self, name: str) -> "AbstractDataset":
+    def filter_split(self, name: str) -> AbstractDataset:
         """Return a FilteredView restricted to the named predefined split.
 
         Applies the split without re-instantiating the dataset — registered
@@ -1080,7 +1090,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         """
         return _apply_lst_filter(self, self._lst_frame_filter(name))
 
-    def _lst_frame_filter(self, name: str) -> "set[tuple[str, str]]":
+    def _lst_frame_filter(self, name: str) -> set[tuple[str, str]]:
         if self._splits_spec is None or self._splits_spec.type != "lst":
             raise ValueError(f"{type(self).__name__} has no LST-based splits defined.")
         lst_rel = self._splits_spec.files.get(name)
@@ -1089,15 +1099,15 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             raise ValueError(f"Split '{name}' not found. Available: {available}")
         return _read_lst_frame_set(self._root / lst_rel)
 
-    def sequences(self) -> "list[SequenceView]":
+    def sequences(self) -> list[SequenceView]:
         from apairo.core.sequence_view import SequenceView  # noqa: F401
 
         return [self.sequence(sid) for sid in self.sequence_ids]
 
-    def sequence(self, seq_id: str) -> "SequenceView":
+    def sequence(self, seq_id: str) -> SequenceView:
         if seq_id not in self._seq_groups:
             raise KeyError(
-                f"Sequence '{seq_id}' not found. " f"Available: {self.sequence_ids}"
+                f"Sequence '{seq_id}' not found. Available: {self.sequence_ids}"
             )
         from apairo.core.sequence_view import SequenceView
 
@@ -1111,4 +1121,3 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         return Sample(data={key: self._loaders[key][idx] for key in self._keys})
-

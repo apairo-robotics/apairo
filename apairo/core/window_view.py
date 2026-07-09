@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -58,7 +59,7 @@ class WindowView(AbstractDataset):
         parent: AbstractDataset,
         size: int,
         stride: int = 1,
-        reduce: Callable[[list["Sample"]], "Sample"] | None = None,
+        reduce: Callable[[list[Sample]], Sample] | None = None,
         boundary: str = "clip",
     ) -> None:
         if not isinstance(size, int) or size < 1:
@@ -129,7 +130,7 @@ class WindowView(AbstractDataset):
     def __len__(self) -> int:
         return len(self._anchors)
 
-    def _load(self, idx: int) -> "Sample":
+    def _load(self, idx: int) -> Sample:
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         samples = [self._parent[int(m)] for m in self._windows[idx]]

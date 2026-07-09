@@ -1,5 +1,6 @@
-import pytest
 import numpy as np
+import pytest
+
 from apairo.loader.npys_loader import NPYSLoader
 from apairo.utils import npy_analyser
 from test.utils import create_random_npy_files

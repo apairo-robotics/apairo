@@ -1,6 +1,7 @@
 """Tests for ``apairo.ChannelWriter`` -- writing a per-frame channel that the
 loader reads back, with the naming/timestamps/registration policy owned by apairo.
 """
+
 import numpy as np
 import pytest
 
@@ -16,8 +17,9 @@ def _read_ts(cdir):
 
 def test_writes_frames_timestamps_and_registers(tmp_path):
     seq = tmp_path / "seq"
-    with ChannelWriter(seq, "ground_truth", loader="npys",
-                       timestamps_from="cloud", sources=["cloud"]) as w:
+    with ChannelWriter(
+        seq, "ground_truth", loader="npys", timestamps_from="cloud", sources=["cloud"]
+    ) as w:
         w.add(np.arange(5, dtype=np.int32), stem="001813", timestamp=10.0)
 
     cdir = seq / "ground_truth"
@@ -96,13 +98,14 @@ def test_roundtrip_loads_with_rawdataset(tmp_path):
     seq = tmp_path / "seq"
     (seq / "cloud").mkdir(parents=True)
     ts = [100.0, 101.0, 102.0]
-    for i, t in enumerate(ts):
+    for i, _t in enumerate(ts):
         np.save(seq / "cloud" / f"{i:06d}.npy", np.random.rand(8, 3))
     np.savetxt(seq / "cloud" / "timestamps.txt", np.array(ts))
     apairo.RawDataset.init(seq)  # registers the raw 'cloud' channel
 
-    with apairo.ChannelWriter(seq, "ground_truth", loader="npys",
-                              timestamps_from="cloud", sources=["cloud"]) as w:
+    with apairo.ChannelWriter(
+        seq, "ground_truth", loader="npys", timestamps_from="cloud", sources=["cloud"]
+    ) as w:
         w.add(np.arange(8, dtype=np.int32), stem="000001", timestamp=ts[1])
 
     ds = apairo.RawDataset(seq)

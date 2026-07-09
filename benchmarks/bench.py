@@ -5,6 +5,7 @@ Run: ``python benchmarks/bench.py`` (sizes optional: ``python benchmarks/bench.p
 It measures apairo's own overhead against a competent hand-rolled baseline, so
 the result is the framework tax -- not real-world I/O, GPU, or zarr chunking.
 """
+
 from __future__ import annotations
 
 import statistics
@@ -166,8 +167,12 @@ def _plot(scaling: list[dict], frame_size: list[dict]) -> None:
     fig, ax = plt.subplots()
     ax.plot(N, data_kb, "o-", label="dataset on disk")
     ax.plot(N, [r["view_kb"] for r in scaling], "o-", label="filter view in RAM")
-    ax.set(yscale="log", xlabel="frames", ylabel="KB (log)",
-           title="A lazy view is a few KB, whatever the data size")
+    ax.set(
+        yscale="log",
+        xlabel="frames",
+        ylabel="KB (log)",
+        title="A lazy view is a few KB, whatever the data size",
+    )
     ax.legend()
     fig.savefig(out / "view_memory.png", dpi=120, bbox_inches="tight")
 
@@ -176,8 +181,12 @@ def _plot(scaling: list[dict], frame_size: list[dict]) -> None:
     fig, ax = plt.subplots()
     ax.plot(pts, [r["access_base"] for r in frame_size], "o-", label="np.load")
     ax.plot(pts, [r["access_ap"] for r in frame_size], "o--", label="apairo ds[i]")
-    ax.set(xscale="log", xlabel="points / frame", ylabel="µs / frame",
-           title="Per-frame access: apairo tracks np.load")
+    ax.set(
+        xscale="log",
+        xlabel="points / frame",
+        ylabel="µs / frame",
+        title="Per-frame access: apairo tracks np.load",
+    )
     ax.legend()
     fig.savefig(out / "access.png", dpi=120, bbox_inches="tight")
     print("\nwrote view_memory.png, access.png")

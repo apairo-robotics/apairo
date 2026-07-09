@@ -25,10 +25,12 @@ Subclass contract:
 * subclasses implement :meth:`_single_available` (channels of one sequence) and
   :meth:`_set_single_keys` (apply keys to one sequence).
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -49,8 +51,8 @@ class RootSequenceMixin:
     def _init_root(
         self,
         root: str | Path,
-        seq_dirs: List[Path],
-        make_sequence: Callable[[Path], "RootSequenceMixin"],
+        seq_dirs: list[Path],
+        make_sequence: Callable[[Path], RootSequenceMixin],
         *,
         build_index: bool = True,
     ) -> None:
@@ -136,13 +138,13 @@ class RootSequenceMixin:
         return self._sequences
 
     @property
-    def sequence_ids(self) -> List[str]:
+    def sequence_ids(self) -> list[str]:
         """Sequence directory names, in load order (root datasets only)."""
         if not self._is_root:
             raise AttributeError("'sequence_ids' is only available on root datasets.")
         return [seq._sequence_dir.name for seq in self._sequences]
 
-    def sequence(self, seq_id: str) -> "SequenceView":
+    def sequence(self, seq_id: str) -> SequenceView:
         """Return a :class:`~apairo.core.sequence_view.SequenceView` for *seq_id*."""
         if not self._is_root:
             raise AttributeError("'sequence()' is only available on root datasets.")
@@ -172,15 +174,17 @@ class RootSequenceMixin:
             )
         from apairo.dataset.concat import ConcatDataset
 
-        return ConcatDataset([
-            seq.synchronize(reference=reference, method=method, tolerance=tolerance)
-            for seq in self._sequences
-        ])
+        return ConcatDataset(
+            [
+                seq.synchronize(reference=reference, method=method, tolerance=tolerance)
+                for seq in self._sequences
+            ]
+        )
 
     # ------------------------------------------------------------------ keys
 
     @property
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         if self._is_root:
             return self._sequences[0].keys if self._sequences else []
         return super().keys
@@ -223,8 +227,10 @@ class RootSequenceMixin:
         if not self._is_root:
             return super().frame_info(idx)
         seq_idx, local_idx = self._locate(idx)
-        return self._sequences[seq_idx].frame_info(local_idx)._replace(
-            sequence=self.sequence_ids[seq_idx]
+        return (
+            self._sequences[seq_idx]
+            .frame_info(local_idx)
+            ._replace(sequence=self.sequence_ids[seq_idx])
         )
 
     @property

@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Tuple
+
 import numpy as np
 
 from apairo.core import AbstractLoader
@@ -18,11 +19,11 @@ class TXTLoader(AbstractLoader):
             3x4 pose matrix).
     """
 
-    def __init__(self, paths: list[Path], reshape: Optional[list] = None) -> None:
+    def __init__(self, paths: list[Path], reshape: list | None = None) -> None:
         arrays = [np.atleast_2d(np.loadtxt(p)) for p in sorted(paths)]
         self.array: np.ndarray = np.vstack(arrays) if len(arrays) > 1 else arrays[0]
         self._reshape = reshape
-        self._shape: Tuple[int, ...] = (
+        self._shape: tuple[int, ...] = (
             tuple(reshape) if reshape else tuple(self.array.shape[1:])
         )
 
@@ -34,5 +35,5 @@ class TXTLoader(AbstractLoader):
         return row.reshape(self._reshape) if self._reshape else row
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return self._shape

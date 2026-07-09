@@ -57,9 +57,11 @@ class CachedDataset(AbstractDataset):
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         s = self._cache[idx]
-        return Sample(data={k: copy.copy(v) for k, v in s.data.items()}, timestamp=s.timestamp)
+        return Sample(
+            data={k: copy.copy(v) for k, v in s.data.items()}, timestamp=s.timestamp
+        )
 
-    def cache(self) -> "AbstractDataset":
+    def cache(self) -> AbstractDataset:
         logger.warning(
             "cache() called on an already-cached dataset — "
             "this duplicates the data in RAM. Cache before branching."

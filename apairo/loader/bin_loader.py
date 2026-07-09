@@ -1,5 +1,6 @@
-import numpy as np
 import os
+
+import numpy as np
 
 from apairo.core import AbstractLoader
 

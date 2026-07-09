@@ -18,10 +18,10 @@ import numpy as np
 
 from apairo import Rellis3DDataset, FramePreprocessor
 
-ROOT       = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
-INDEX_DIR  = Path("./kfold_indices")
-K          = 5
-MIN_POS    = 200   # minimum traversable points to keep a frame
+ROOT = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
+INDEX_DIR = Path("./kfold_indices")
+K = 5
+MIN_POS = 200  # minimum traversable points to keep a frame
 
 _TRAVERSABLE_IDS = [1, 3, 10, 23, 31, 33]
 
@@ -29,11 +29,11 @@ _TRAVERSABLE_IDS = [1, 3, 10, 23, 31, 33]
 class TravLabel(FramePreprocessor):
     """Ground-truth traversability from RELLIS semantic label IDs."""
 
-    output_key      = "trav_gt"
-    output_loader   = "npys"
-    input_keys      = ["labels"]
+    output_key = "trav_gt"
+    output_loader = "npys"
+    input_keys = ["labels"]
     timestamps_from = "lidar"
-    sources         = ["labels"]
+    sources = ["labels"]
 
     def __call__(self, sample) -> np.ndarray:
         return np.isin(sample.data["labels"], _TRAVERSABLE_IDS).astype(np.uint8)
@@ -70,7 +70,7 @@ print(f"Frames after quality filter: {len(ds_filtered)} / {len(ds_full)}")
 seq_ids = np.unique(ds_filtered.frame_sequence_ids)
 print(f"Sequences remaining: {len(seq_ids)}")
 
-rng   = np.random.default_rng(seed=42)
+rng = np.random.default_rng(seed=42)
 order = rng.permutation(len(seq_ids))
 folds = np.array_split(order, K)
 
@@ -79,7 +79,7 @@ for fold_idx, val_order in enumerate(folds):
 
     # filter_sequences() maps back onto the already-filtered view — no new sweep.
     ds_train = ds_filtered.filter_sequences(seq_ids[train_order].tolist())
-    ds_val   = ds_filtered.filter_sequences(seq_ids[val_order].tolist())
+    ds_val = ds_filtered.filter_sequences(seq_ids[val_order].tolist())
 
     print(
         f"Fold {fold_idx}: "

@@ -57,9 +57,10 @@ class FilteredView(AbstractDataset):
         """Provenance of a view frame -- the parent's, at the remapped index."""
         return self._parent.frame_info(int(self._indices[idx]))
 
-    def filter_split(self, name: str) -> "FilteredView":
+    def filter_split(self, name: str) -> FilteredView:
         """Return a FilteredView restricted to the named predefined split."""
         from apairo.core.profiled_dataset import ProfiledDataset, _apply_lst_filter
+
         ds = self._parent
         while ds is not None and not isinstance(ds, ProfiledDataset):
             ds = getattr(ds, "_parent", None)
@@ -70,7 +71,7 @@ class FilteredView(AbstractDataset):
     def __len__(self) -> int:
         return len(self._indices)
 
-    def _load(self, idx: int) -> "Sample":
+    def _load(self, idx: int) -> Sample:
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         return self._parent[int(self._indices[idx])]

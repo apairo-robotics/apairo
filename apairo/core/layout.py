@@ -19,9 +19,9 @@ Boundaries:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -40,12 +40,12 @@ class ChannelSpec:
         write_options: Extra writer arguments (e.g. ``{"quality": 95}``).
     """
 
-    path: Tuple[str, ...]
+    path: tuple[str, ...]
     store: str = "zarr"
-    dtype: Optional[np.dtype] = None
-    chunks: Optional[Callable[[tuple], tuple]] = None
-    name_to_index: Optional[Callable[[str], Optional[int]]] = None
-    member_name: Optional[Callable[[int], str]] = None
+    dtype: np.dtype | None = None
+    chunks: Callable[[tuple], tuple] | None = None
+    name_to_index: Callable[[str], int | None] | None = None
+    member_name: Callable[[int], str] | None = None
     write_options: dict = field(default_factory=dict)
 
 
@@ -63,9 +63,9 @@ class DatasetLayout:
 
     def __init__(
         self,
-        channels: Dict[str, ChannelSpec],
-        compression: Optional[Tuple[str, int]] = None,
-        default: Optional[ChannelSpec] = None,
+        channels: dict[str, ChannelSpec],
+        compression: tuple[str, int] | None = None,
+        default: ChannelSpec | None = None,
     ) -> None:
         self._channels = dict(channels)
         self._compression = compression
@@ -74,7 +74,7 @@ class DatasetLayout:
     # ------------------------------------------------------------ resolution
 
     @property
-    def channels(self) -> Dict[str, ChannelSpec]:
+    def channels(self) -> dict[str, ChannelSpec]:
         return dict(self._channels)
 
     def spec(self, key: str) -> ChannelSpec:
@@ -92,7 +92,7 @@ class DatasetLayout:
         p = self.path(root, key)
         return p.is_file() if spec.store == "tar_jpeg" else p.is_dir()
 
-    def scan(self, root: Path | str) -> List[str]:
+    def scan(self, root: Path | str) -> list[str]:
         """Channel keys present in *root*: table channels + flat convention."""
         root = Path(root)
         keys = [k for k in sorted(self._channels) if self.exists(root, k)]
@@ -115,11 +115,13 @@ class DatasetLayout:
             if not p.is_file():
                 return None
             from apairo.loader.tar_loader import TarImageLoader
+
             return TarImageLoader(p, n_frames, spec.name_to_index)
 
         if not p.is_dir():
             return None
         from apairo.loader.zarr_loader import ZarrLoader
+
         return ZarrLoader(p)
 
     # ------------------------------------------------------------ write path
@@ -131,12 +133,14 @@ class DatasetLayout:
 
         if spec.store == "tar_jpeg":
             from apairo.writer import TarImageWriter
-            TarImageWriter(
-                member_name=spec.member_name, **spec.write_options
-            ).write(data, p)
+
+            TarImageWriter(member_name=spec.member_name, **spec.write_options).write(
+                data, p
+            )
             return p
 
         from apairo.writer import ZarrWriter
+
         data = np.asarray(data, dtype=spec.dtype) if spec.dtype else np.asarray(data)
         codec, level = self._compression or (None, 5)
         ZarrWriter(

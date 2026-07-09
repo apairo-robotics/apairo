@@ -1,7 +1,7 @@
-from .npy_writer import NPYWriter
 from .bin_writer import BINWriter
-from .zarr_writer import ZarrWriter
+from .npy_writer import NPYWriter
 from .tar_writer import TarImageWriter
+from .zarr_writer import ZarrWriter
 
 WRITERS: dict[str, type] = {
     "npy": NPYWriter,

@@ -47,6 +47,7 @@ def windows_of(view):
 
 # ── boundary: clip ───────────────────────────────────────────────────────────
 
+
 def test_clip_keeps_every_frame_and_shrinks_at_start():
     ds = FakeDataset(5, ["a", "a", "a", "b", "b"])
     view = ds.window(size=3, stride=1, reduce=members_reducer)
@@ -71,6 +72,7 @@ def test_anchor_is_last_member():
 
 # ── boundary: drop ───────────────────────────────────────────────────────────
 
+
 def test_drop_keeps_only_full_windows():
     ds = FakeDataset(5, ["a", "a", "a", "b", "b"])
     view = ds.window(size=3, stride=1, reduce=members_reducer, boundary="drop")
@@ -82,6 +84,7 @@ def test_drop_keeps_only_full_windows():
 
 # ── stride ───────────────────────────────────────────────────────────────────
 
+
 def test_stride_skips_frames():
     ds = FakeDataset(5, ["a"] * 5)
     view = ds.window(size=2, stride=2, reduce=members_reducer)
@@ -91,6 +94,7 @@ def test_stride_skips_frames():
 
 # ── single-sequence fallback ─────────────────────────────────────────────────
 
+
 def test_fallback_single_sequence_when_no_seq_ids():
     ds = FakeDataset(4)  # no frame_sequence_ids
     view = ds.window(size=2, stride=1, reduce=members_reducer)
@@ -98,6 +102,7 @@ def test_fallback_single_sequence_when_no_seq_ids():
 
 
 # ── laziness ─────────────────────────────────────────────────────────────────
+
 
 def test_construction_reads_no_data():
     ds = FakeDataset(10, ["a"] * 10)
@@ -108,6 +113,7 @@ def test_construction_reads_no_data():
 
 
 # ── chaining ─────────────────────────────────────────────────────────────────
+
 
 def test_output_frame_sequence_ids_are_anchor_ids():
     ds = FakeDataset(5, ["a", "a", "a", "b", "b"])
@@ -140,6 +146,7 @@ def test_downstream_transform_applies():
 
 
 # ── validation ───────────────────────────────────────────────────────────────
+
 
 def test_reduce_is_required():
     ds = FakeDataset(3, ["a"] * 3)

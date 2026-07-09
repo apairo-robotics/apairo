@@ -1,5 +1,4 @@
 import os
-from typing import Dict
 
 
 def check_keys(keys: list, files: list) -> bool:
@@ -16,7 +15,7 @@ def check_files(files: list, profile: dict) -> bool:
             raise ValueError(f"File {file} not in profile")
 
 
-def get_files(directory: str) -> Dict[str, str]:
+def get_files(directory: str) -> dict[str, str]:
     """Get the files in the directory.
 
     Args:
@@ -29,8 +28,12 @@ def get_files(directory: str) -> Dict[str, str]:
     """
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory {directory} not found")
-    files = list(filter(
-        lambda x: os.path.isdir(os.path.join(directory, x)) and not x.startswith('_'),
-        os.listdir(directory)
-    ))
+    files = list(
+        filter(
+            lambda x: (
+                os.path.isdir(os.path.join(directory, x)) and not x.startswith("_")
+            ),
+            os.listdir(directory),
+        )
+    )
     return {file: os.path.join(directory, file) for file in files}

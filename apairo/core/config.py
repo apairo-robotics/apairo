@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 from collections import deque
 from pathlib import Path
-from typing import Optional
+
 import numpy as np
 import yaml
 
@@ -12,9 +13,7 @@ DATASET_FILE = "dataset.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
-KNOWN_LOADERS: frozenset[str] = frozenset(
-    {"npy", "npys", "bin", "img", "zarr"}
-)
+KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "bin", "img", "zarr"})
 
 # ── .apairo schema, version 1 ────────────────────────────────────────────────
 # The on-disk contract. Validation is tolerant: an unknown field is reported as a
@@ -25,8 +24,15 @@ SCHEMA_VERSION = 1
 _CHANNELS_TOP_FIELDS: frozenset[str] = frozenset({"version", "channels"})
 _CHANNEL_FIELDS: frozenset[str] = frozenset(
     {
-        "kind", "loader", "timestamps_from", "sources", "frame", "transform",
-        "alias", "directory", "suffix",
+        "kind",
+        "loader",
+        "timestamps_from",
+        "sources",
+        "frame",
+        "transform",
+        "alias",
+        "directory",
+        "suffix",
     }
 )
 _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
@@ -113,9 +119,9 @@ def register_channel(
     key: str,
     loader: str,
     *,
-    timestamps_from: Optional[str] = None,
-    sources: Optional[list[str]] = None,
-    frame: Optional[str] = None,
+    timestamps_from: str | None = None,
+    sources: list[str] | None = None,
+    frame: str | None = None,
 ) -> None:
     """Register a preprocessed channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -161,11 +167,11 @@ def register_raw_channel(
     key: str,
     loader: str,
     *,
-    frame: Optional[str] = None,
-    transform: Optional[dict] = None,
-    alias: Optional[str] = None,
-    directory: Optional[str] = None,
-    suffix: Optional[str] = None,
+    frame: str | None = None,
+    transform: dict | None = None,
+    alias: str | None = None,
+    directory: str | None = None,
+    suffix: str | None = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -228,7 +234,7 @@ def register_raw_channel(
 
 
 def set_alias(
-    root_dir: str | Path, channel: str, alias: Optional[str], *, force: bool = False
+    root_dir: str | Path, channel: str, alias: str | None, *, force: bool = False
 ) -> list[str]:
     """Set (or clear) the public alias of a raw channel in ``channels.yaml``.
 
@@ -363,7 +369,9 @@ def channel_dependents(channels: dict, channel: str) -> list[str]:
     for name, meta in channels.items():
         if name == channel or not isinstance(meta, dict):
             continue
-        if meta.get("timestamps_from") == channel or channel in (meta.get("sources") or []):
+        if meta.get("timestamps_from") == channel or channel in (
+            meta.get("sources") or []
+        ):
             out.append(name)
     return out
 
@@ -371,14 +379,15 @@ def channel_dependents(channels: dict, channel: str) -> list[str]:
 def _alias_holders(channels: dict, channel: str, alias: str) -> list[str]:
     """Other channels currently exposing *alias* as their public name."""
     return [
-        other for other, meta in channels.items()
+        other
+        for other, meta in channels.items()
         if other != channel and meta.get("alias") == alias
     ]
 
 
 def _alias_conflict(
     channels: dict, channel: str, alias: str, force: bool = False
-) -> Optional[str]:
+) -> str | None:
     """Reason aliasing *channel* as *alias* would clash within *channels*, or None.
 
     A public name must be unique: it cannot shadow another channel's on-disk
@@ -395,8 +404,8 @@ def _alias_conflict(
 
 
 def alias_conflict(
-    root_dir: str | Path, channel: str, alias: Optional[str], force: bool = False
-) -> Optional[str]:
+    root_dir: str | Path, channel: str, alias: str | None, force: bool = False
+) -> str | None:
     """Message if aliasing *channel* as *alias* would clash in *root_dir*, else None.
 
     Read-only counterpart to :func:`set_alias`'s guard -- lets a caller validate
@@ -405,7 +414,9 @@ def alias_conflict(
     if not alias:
         return None
     root_dir = Path(root_dir)
-    channels = read_config(root_dir).get("channels", {}) if config_exists(root_dir) else {}
+    channels = (
+        read_config(root_dir).get("channels", {}) if config_exists(root_dir) else {}
+    )
     return _alias_conflict(channels, channel, alias, force=force)
 
 
@@ -448,12 +459,14 @@ class Calibration(dict):
         for key, matrix in self.items():
             parent, sep, child = key.partition("_to_")
             if not sep:
-                raise ValueError(f"Calibration key {key!r} is not '<parent>_to_<child>'.")
+                raise ValueError(
+                    f"Calibration key {key!r} is not '<parent>_to_<child>'."
+                )
             T = np.asarray(matrix, dtype=np.float64)
             adj.setdefault(child, []).append((parent, T))
             adj.setdefault(parent, []).append((child, _invert_rigid(T)))
         seen = {source}
-        queue: "deque[tuple[str, np.ndarray]]" = deque([(source, np.eye(4))])
+        queue: deque[tuple[str, np.ndarray]] = deque([(source, np.eye(4))])
         while queue:
             frame, T_frame_from_source = queue.popleft()
             if frame == target:
@@ -484,7 +497,10 @@ def read_calibration(root_dir: str | Path) -> Calibration:
 
 
 def register_static_transform(
-    root_dir: str | Path, parent: str, child: str, matrix,
+    root_dir: str | Path,
+    parent: str,
+    child: str,
+    matrix,
 ) -> None:
     """Record a static transform (extrinsic) in ``.apairo/calibration.yaml``.
 
@@ -511,8 +527,12 @@ def register_static_transform(
     }
     (root_dir / CONFIG_DIR).mkdir(exist_ok=True)
     with open(path, "w") as f:
-        yaml.dump({"version": 1, "transforms": transforms}, f,
-                  default_flow_style=False, sort_keys=True)
+        yaml.dump(
+            {"version": 1, "transforms": transforms},
+            f,
+            default_flow_style=False,
+            sort_keys=True,
+        )
 
 
 def verify_config(root_dir: str | Path) -> list[str]:
@@ -599,9 +619,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
                         issues.append(
                             f"Channel '{key}': transform is missing '{field}'"
                         )
-                issues += _unknown(
-                    tf, _TRANSFORM_FIELDS, f"channel '{key}' transform"
-                )
+                issues += _unknown(tf, _TRANSFORM_FIELDS, f"channel '{key}' transform")
 
         ts_from = meta.get("timestamps_from")
         if ts_from and ts_from not in channels:
@@ -654,7 +672,9 @@ def verify_manifest(root_dir: str | Path) -> list[str]:
     issues: list[str] = []
     version = manifest.get("version")
     if version is not None and version != SCHEMA_VERSION:
-        issues.append(f"dataset.yaml: unknown version {version!r} (expected {SCHEMA_VERSION})")
+        issues.append(
+            f"dataset.yaml: unknown version {version!r} (expected {SCHEMA_VERSION})"
+        )
     issues += _unknown(manifest, _MANIFEST_FIELDS, "dataset.yaml")
     return issues
 

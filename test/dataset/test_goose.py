@@ -1,9 +1,10 @@
-import pytest
-import numpy as np
 from pathlib import Path
 
-from apairo.dataset.goose import Goose3DDataset
+import numpy as np
+import pytest
+
 from apairo.core.sample import Sample
+from apairo.dataset.goose import Goose3DDataset
 
 N_POINTS = 80
 
@@ -105,9 +106,7 @@ def _write_apairo(root: Path, key: str, loader: str) -> None:
 
     config = {
         "version": 1,
-        "channels": {
-            key: {"kind": "preprocess", "loader": loader}
-        },
+        "channels": {key: {"kind": "preprocess", "loader": loader}},
     }
     d = root / ".apairo"
     d.mkdir(exist_ok=True)

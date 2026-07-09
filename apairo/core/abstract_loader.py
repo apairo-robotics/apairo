@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple, Union
+from typing import Any
+
 from numpy import ndarray
 
 
@@ -14,17 +15,17 @@ class AbstractLoader(ABC):
     For example a set of ten images of size 3x224x224 would have a len of 10 and a shape of (3, 224, 224).
     """
 
-    def __init__(self, directory: str, transform=None, *args, **kwargs) -> None: ...
+    def __init__(self, directory: str, transform=None, *args, **kwargs) -> None: ...  # noqa: B027 -- optional override, signature contract only
 
     @abstractmethod
     def __len__(self) -> int:
         pass
 
     @abstractmethod
-    def __getitem__(self, idx) -> Union[ndarray, Any]:
+    def __getitem__(self, idx) -> ndarray | Any:
         pass
 
     @property
     @abstractmethod
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         pass

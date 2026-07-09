@@ -4,6 +4,7 @@ This is what a careful engineer writes without apairo: a sorted glob per channel
 and a vectorised latest-match align. Not a strawman; the point is to show apairo
 adds no I/O cost on top of this, while giving lazy views and far less code.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

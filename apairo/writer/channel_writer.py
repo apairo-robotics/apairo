@@ -21,17 +21,17 @@ Usage::
         w.add(labels, stem="001813", timestamp=t)   # -> seq/ground_truth/001813.npy
     # channels.yaml now declares ground_truth (kind: preprocess)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
 from apairo.core.config import register_channel
 from apairo.core.naming import frame_stem_is_valid, require_frame_stem
-from apairo.writer.npy_writer import NPYWriter
 from apairo.writer.bin_writer import BINWriter
+from apairo.writer.npy_writer import NPYWriter
 
 # Per-frame array loaders this writer can emit (one data file per frame). The
 # stacked ``npy`` (one file, many rows) and ``img``/``zarr`` use different on-disk
@@ -52,10 +52,16 @@ class ChannelWriter:
         frame: Coordinate frame of the data (descriptive metadata).
     """
 
-    def __init__(self, seq_dir, channel: str, *, loader: str = "npys",
-                 timestamps_from: Optional[str] = None,
-                 sources: Optional[list[str]] = None,
-                 frame: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        seq_dir,
+        channel: str,
+        *,
+        loader: str = "npys",
+        timestamps_from: str | None = None,
+        sources: list[str] | None = None,
+        frame: str | None = None,
+    ) -> None:
         if loader not in _PER_FRAME:
             raise ValueError(
                 f"ChannelWriter handles per-frame loaders {sorted(_PER_FRAME)}, "
@@ -73,13 +79,14 @@ class ChannelWriter:
         self._closed = False
         # Resume an existing channel so incremental annotation across runs stays
         # consistent: pick up the frames already on disk and their timestamps.
-        self._ts: dict[str, Optional[float]] = self._read_existing()
+        self._ts: dict[str, float | None] = self._read_existing()
 
-    def _read_existing(self) -> dict[str, Optional[float]]:
+    def _read_existing(self) -> dict[str, float | None]:
         if not self._cdir.is_dir():
             return {}
         stems = sorted(
-            p.stem for p in self._cdir.glob(f"*{self._ext}")
+            p.stem
+            for p in self._cdir.glob(f"*{self._ext}")
             if frame_stem_is_valid(p.stem)
         )
         if not stems:
@@ -88,10 +95,10 @@ class ChannelWriter:
         if ts_path.exists():
             rows = np.atleast_1d(np.loadtxt(ts_path)).tolist()
             if len(rows) == len(stems):
-                return dict(zip(stems, rows))
+                return dict(zip(stems, rows, strict=True))
         return {s: None for s in stems}
 
-    def add(self, data, stem, timestamp: Optional[float] = None) -> "ChannelWriter":
+    def add(self, data, stem, timestamp: float | None = None) -> ChannelWriter:
         """Write one frame as ``<seq>/<channel>/<stem><ext>`` and record its
         timestamp.  *stem* is the frame id (no extension) and must not contain
         ``_``.  Returns ``self`` for chaining."""
@@ -120,16 +127,20 @@ class ChannelWriter:
                 f"missing for {missing}."
             )
         if all(have):
-            np.savetxt(self._cdir / "timestamps.txt",
-                       np.array([self._ts[s] for s in stems]))
+            np.savetxt(
+                self._cdir / "timestamps.txt", np.array([self._ts[s] for s in stems])
+            )
         register_channel(
-            self._seq_dir, self._channel, self._loader,
+            self._seq_dir,
+            self._channel,
+            self._loader,
             timestamps_from=self._timestamps_from,
-            sources=self._sources, frame=self._frame,
+            sources=self._sources,
+            frame=self._frame,
         )
         self._closed = True
 
-    def __enter__(self) -> "ChannelWriter":
+    def __enter__(self) -> ChannelWriter:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

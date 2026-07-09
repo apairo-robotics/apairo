@@ -41,19 +41,20 @@ class ChannelView(AbstractDataset):
         return self._parent.is_synchronous
 
     @property
-    def frame_sequence_ids(self) -> "np.ndarray":
+    def frame_sequence_ids(self) -> np.ndarray:
         return self._parent.frame_sequence_ids
 
     @property
-    def frame_stems(self) -> "np.ndarray":
+    def frame_stems(self) -> np.ndarray:
         return self._parent.frame_stems
 
     def frame_info(self, idx: int):
         """Provenance of frame *idx* -- unchanged from the parent (same frames)."""
         return self._parent.frame_info(idx)
 
-    def _load(self, idx: int) -> "Sample":
+    def _load(self, idx: int) -> Sample:
         from apairo.core.sample import Sample
+
         sample = self._parent[idx]
         return Sample(
             data={k: sample.data[k] for k in self._keys},
@@ -61,4 +62,6 @@ class ChannelView(AbstractDataset):
         )
 
     def __repr__(self) -> str:
-        return f"ChannelView(keys={self._keys}, parent={self._parent.__class__.__name__})"
+        return (
+            f"ChannelView(keys={self._keys}, parent={self._parent.__class__.__name__})"
+        )

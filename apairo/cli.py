@@ -19,13 +19,13 @@ already surfaces the untracked channels it would act on, and they can be
 registered today from Python (``register_raw_channel`` / ``register_channel``)
 or by re-running ``apairo init`` (which re-scans and merges).
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -42,12 +42,12 @@ from apairo.core.config import (
     verify_config,
     verify_manifest,
 )
+from apairo.core.profiled_dataset import ProfiledDataset
 from apairo.dataset.async_layout.dataset import _detect_loader
+from apairo.dataset.goose import Goose3DDataset
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.rellis import Rellis3DDataset
-from apairo.dataset.goose import Goose3DDataset
 from apairo.dataset.semantic_kitti import SemanticKittiDataset
-from apairo.core.profiled_dataset import ProfiledDataset
 
 # Datasets selectable with ``--as``: the profile-free generic loader plus the
 # profiled datasets, whose ``init`` maps canonical channel names from a profile.
@@ -62,6 +62,7 @@ _BAR = "-" * 52
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
+
 
 def _read_timestamps(channel_dir: Path):
     ts_path = channel_dir / "timestamps.txt"
@@ -82,7 +83,7 @@ def _rate_span(ts):
     return rate, (t0, t1)
 
 
-def _channel_shape(channel_dir: Path, loader: Optional[str]):
+def _channel_shape(channel_dir: Path, loader: str | None):
     """Per-frame shape + dtype from a ``.npy`` header (mmap -- no data read)."""
     npys = sorted(channel_dir.glob("*.npy"))
     if not npys:
@@ -104,12 +105,12 @@ def _count_files(channel_dir: Path) -> int:
     )
 
 
-def _channel_detail(seq_dir: Path, channel: str, meta: Optional[dict]) -> dict:
+def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
     """Per-channel facts for the channel directory ``seq_dir/channel``."""
     return _channel_detail_dir(seq_dir / channel, meta)
 
 
-def _channel_detail_dir(cdir: Path, meta: Optional[dict]) -> dict:
+def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
     """Per-channel facts for an explicit directory, all cheap: timestamps give
     frames/rate/span, the .npy header gives shape/dtype (mmap). ``meta=None``
     marks an untracked channel.  Taking the directory explicitly lets a profiled
@@ -139,7 +140,11 @@ def _channel_detail_dir(cdir: Path, meta: Optional[dict]) -> dict:
 
 def _untracked_channels(seq_dir: Path) -> list[str]:
     """Channel-like sub-directories present on disk but absent from channels.yaml."""
-    tracked = set(read_config(seq_dir).get("channels", {})) if config_exists(seq_dir) else set()
+    tracked = (
+        set(read_config(seq_dir).get("channels", {}))
+        if config_exists(seq_dir)
+        else set()
+    )
     return [
         d.name
         for d in sorted(seq_dir.iterdir())
@@ -153,14 +158,17 @@ def _untracked_channels(seq_dir: Path) -> list[str]:
 def _seq_info(seq_dir: Path) -> dict:
     cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
     channels = {k: _channel_detail(seq_dir, k, v) for k, v in sorted(cfg.items())}
-    untracked = {u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)}
+    untracked = {
+        u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)
+    }
     starts = [c["span"][0] for c in {**channels, **untracked}.values() if c["span"]]
     return {
         "channels": channels,
         "untracked": untracked,
         "start": min(starts) if starts else None,
         "events": sum(c["frames"] for c in channels.values()),
-        "issues": verify_config(seq_dir) if config_exists(seq_dir)
+        "issues": verify_config(seq_dir)
+        if config_exists(seq_dir)
         else ["not initialized -- run `apairo init`"],
     }
 
@@ -171,7 +179,8 @@ def _is_sequence(path: Path) -> bool:
 
 def _sequence_dirs(root: Path) -> list[Path]:
     return [
-        d for d in sorted(root.iterdir())
+        d
+        for d in sorted(root.iterdir())
         if d.is_dir() and not d.name.startswith(".") and _is_sequence(d)
     ]
 
@@ -181,6 +190,7 @@ def _fmt_channels(d: dict) -> str:
 
 
 # ── status ──────────────────────────────────────────────────────────────────
+
 
 def _profiled_status_class(path: Path):
     """The profiled dataset class this directory was initialized as, if any.
@@ -243,7 +253,7 @@ def _build_profiled_status(path: Path, cls) -> dict:
     }
 
 
-def _build_profiled_sequence_status(path: Path, cls, seq_id: str) -> Optional[dict]:
+def _build_profiled_sequence_status(path: Path, cls, seq_id: str) -> dict | None:
     """Per-channel detail for one sequence of a profiled dataset, addressed by id.
 
     Resolves each canonical channel to its nested per-sequence directory and runs
@@ -266,7 +276,9 @@ def _build_profiled_sequence_status(path: Path, cls, seq_id: str) -> Optional[di
             seq_base / c["dir"], {"loader": c["loader"], "kind": "raw"}
         )
     for key, meta in inv["preprocess"].items():
-        channels[key] = _channel_detail_dir(seq_base / key, {**meta, "kind": "preprocess"})
+        channels[key] = _channel_detail_dir(
+            seq_base / key, {**meta, "kind": "preprocess"}
+        )
 
     starts = [c["span"][0] for c in channels.values() if c["span"]]
     return {
@@ -290,7 +302,7 @@ def _available_sequences(path: Path) -> list[str]:
     return [d.name for d in _sequence_dirs(path)]
 
 
-def _build_sequence_status(path: Path, seq_id: str) -> Optional[dict]:
+def _build_sequence_status(path: Path, seq_id: str) -> dict | None:
     """Per-sequence status addressed by id from the root (``status -s <id>``).
 
     Profiled datasets resolve the sequence through the profile; generic datasets
@@ -304,14 +316,16 @@ def _build_sequence_status(path: Path, seq_id: str) -> Optional[dict]:
     return _build_status(seq_dir)
 
 
-def _build_status(path: Path) -> Optional[dict]:
+def _build_status(path: Path) -> dict | None:
     profiled = _profiled_status_class(path)
     if profiled is not None:
         return _build_profiled_status(path, profiled)
 
     if _is_sequence(path):
         return {
-            "name": path.name, "class": "RawDataset", "kind": "sequence",
+            "name": path.name,
+            "class": "RawDataset",
+            "kind": "sequence",
             "calibration": sorted(read_calibration(path)),
             **_seq_info(path),
         }
@@ -394,16 +408,21 @@ def _fmt_shape(detail: dict) -> str:
     return f"{s} {detail['dtype']}" if detail.get("dtype") else s
 
 
-def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float]) -> None:
+def _print_channel_table(channels: dict, untracked: dict, t0_ref: float | None) -> None:
     ref = t0_ref or 0.0
     all_ch = list(channels.items()) + list(untracked.items())
     show_frame = any(c.get("frame") for _, c in all_ch)  # only when declared
-    headers = ["channel", "kind"] + (["frame"] if show_frame else []) + \
-        ["loader", "frames", "rate", "span", "shape", ""]
+    headers = (
+        ["channel", "kind"]
+        + (["frame"] if show_frame else [])
+        + ["loader", "frames", "rate", "span", "shape", ""]
+    )
     rows = []
     for name, c in all_ch:
         rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "-"
-        span = f"{c['span'][0] - ref:.2f}-{c['span'][1] - ref:.2f}s" if c["span"] else "-"
+        span = (
+            f"{c['span'][0] - ref:.2f}-{c['span'][1] - ref:.2f}s" if c["span"] else "-"
+        )
         if c["kind"] == "untracked":
             note = "<- run `apairo init`"
         elif c.get("transform"):
@@ -418,11 +437,22 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: Optional[float
         # An aliased channel is shown alias-first (the name you load it by), with
         # its on-disk directory in parentheses.
         display = f"{c['alias']} ({name})" if c.get("alias") else name
-        row = [display, c["kind"]] + ([c.get("frame") or "-"] if show_frame else []) + [
-            c["loader"] or "?", str(c["frames"]), rate, span, _fmt_shape(c), note,
-        ]
+        row = (
+            [display, c["kind"]]
+            + ([c.get("frame") or "-"] if show_frame else [])
+            + [
+                c["loader"] or "?",
+                str(c["frames"]),
+                rate,
+                span,
+                _fmt_shape(c),
+                note,
+            ]
+        )
         rows.append(row)
-    widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
+    widths = [
+        max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))
+    ]
 
     def line(cols):
         return "  ".join(c.ljust(widths[i]) for i, c in enumerate(cols)).rstrip()
@@ -443,7 +473,9 @@ def _print_exceptional(exceptional: dict) -> None:
     for i, (ch, c) in enumerate(items):
         label = "exceptional" if i == 0 else ""
         chan = f"{ch} ({c['loader']})".ljust(w_ch)
-        print(f"{label:<12}{chan}  {c['coverage'].ljust(w_cov)}  [{', '.join(c['seqs'])}]")
+        print(
+            f"{label:<12}{chan}  {c['coverage'].ljust(w_cov)}  [{', '.join(c['seqs'])}]"
+        )
 
 
 def _print_missing(missing: dict) -> None:
@@ -468,10 +500,14 @@ def _print_status(s: dict, show_tf: bool = False, show_missing: bool = False) ->
         print(f"preprocess  {_fmt_channels(s['preprocess'])}")
         _print_exceptional(s.get("exceptional") or {})
         if s.get("aliases"):
-            shown = ", ".join(f"{real} as {alias}" for real, alias in sorted(s["aliases"].items()))
+            shown = ", ".join(
+                f"{real} as {alias}" for real, alias in sorted(s["aliases"].items())
+            )
             print(f"aliases     {shown}")
         if s["untracked"]:
-            print(f"untracked   {', '.join(s['untracked'])}   <- run `apairo init` to register")
+            print(
+                f"untracked   {', '.join(s['untracked'])}   <- run `apairo init` to register"
+            )
         n_tf = len(s.get("tf", {}))
         if show_tf and s.get("tf"):
             print(f"tf          {_fmt_channels(s['tf'])}")
@@ -482,9 +518,11 @@ def _print_status(s: dict, show_tf: bool = False, show_missing: bool = False) ->
         print(_BAR)
         if s.get("start") is not None:
             print(f"start       {s['start']:.2f}s   (span shown relative to this)")
-        channels = s["channels"] if show_tf else {
-            k: v for k, v in s["channels"].items() if not v.get("transform")
-        }
+        channels = (
+            s["channels"]
+            if show_tf
+            else {k: v for k, v in s["channels"].items() if not v.get("transform")}
+        )
         n_tf = sum(1 for v in s["channels"].values() if v.get("transform"))
         if channels or s["untracked"]:
             _print_channel_table(channels, s["untracked"], s.get("start"))
@@ -493,7 +531,9 @@ def _print_status(s: dict, show_tf: bool = False, show_missing: bool = False) ->
     n_cal = len(s.get("calibration") or [])
     if show_tf:
         if s.get("calibration"):
-            print(f"calibration {', '.join(s['calibration'])}   (static, in .apairo/calibration.yaml)")
+            print(
+                f"calibration {', '.join(s['calibration'])}   (static, in .apairo/calibration.yaml)"
+            )
     elif n_tf or n_cal:
         bits = []
         if n_tf:
@@ -517,14 +557,19 @@ def cmd_status(args: argparse.Namespace) -> int:
         if status is None:
             avail = _available_sequences(path)
             hint = f" Available: {', '.join(avail)}." if avail else ""
-            print(f"Sequence '{args.sequence}' not found under '{path}'.{hint}",
-                  file=sys.stderr)
+            print(
+                f"Sequence '{args.sequence}' not found under '{path}'.{hint}",
+                file=sys.stderr,
+            )
             return 1
     else:
         status = _build_status(path)
         if status is None:
-            print(f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
-                  f"Run `apairo init` to set it up.", file=sys.stderr)
+            print(
+                f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
+                f"Run `apairo init` to set it up.",
+                file=sys.stderr,
+            )
             return 1
     if args.json:
         print(json.dumps(status, indent=2, sort_keys=True))
@@ -535,7 +580,8 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 # ── check ─────────────────────────────────────────────────────────────────────
 
-def _check_issues(path: Path) -> Optional[list[str]]:
+
+def _check_issues(path: Path) -> list[str] | None:
     """All version-1 schema / consistency issues for a dataset, or ``None`` if
     *path* is not an apairo dataset.
 
@@ -562,11 +608,16 @@ def cmd_check(args: argparse.Namespace) -> int:
         return 2
     issues = _check_issues(path)
     if issues is None:
-        print(f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
-              f"Run `apairo init` to set it up.", file=sys.stderr)
+        print(
+            f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
+            f"Run `apairo init` to set it up.",
+            file=sys.stderr,
+        )
         return 1
     if args.json:
-        print(json.dumps({"ok": not issues, "issues": issues}, indent=2, sort_keys=True))
+        print(
+            json.dumps({"ok": not issues, "issues": issues}, indent=2, sort_keys=True)
+        )
     elif not issues:
         print("OK -- no issues")
     else:
@@ -577,6 +628,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 # ── init ────────────────────────────────────────────────────────────────────
+
 
 def _hint_unregistered(cls, path: Path) -> None:
     """After init, surface directories that look like preprocessed channels but
@@ -635,6 +687,7 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 # ── alias ─────────────────────────────────────────────────────────────────────
 
+
 def _alias_targets(path: Path, channel: str) -> list[Path]:
     """Sequence directories under *path* whose config declares *channel*.
 
@@ -643,7 +696,8 @@ def _alias_targets(path: Path, channel: str) -> list[Path]:
     if config_exists(path) and channel in read_config(path).get("channels", {}):
         return [path]
     return [
-        d for d in _sequence_dirs(path)
+        d
+        for d in _sequence_dirs(path)
         if config_exists(d) and channel in read_config(d).get("channels", {})
     ]
 
@@ -654,29 +708,35 @@ def cmd_alias(args: argparse.Namespace) -> int:
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
     if not args.remove and not args.alias:
-        print("Provide an alias (`apairo alias <channel> <alias>`) or pass --remove.",
-              file=sys.stderr)
+        print(
+            "Provide an alias (`apairo alias <channel> <alias>`) or pass --remove.",
+            file=sys.stderr,
+        )
         return 2
 
     targets = _alias_targets(path, args.channel)
     if not targets:
-        print(f"Channel '{args.channel}' is not declared under '{path}'.",
-              file=sys.stderr)
+        print(
+            f"Channel '{args.channel}' is not declared under '{path}'.", file=sys.stderr
+        )
         return 1
 
     new_alias = None if args.remove else args.alias
     # Validate every target before writing any, so a clash leaves nothing half-set.
     # With --force an alias-vs-alias clash is allowed; a directory-name clash is not.
     clashes = [
-        (seq, msg) for seq in targets
+        (seq, msg)
+        for seq in targets
         if (msg := alias_conflict(seq, args.channel, new_alias, force=args.force))
     ]
     if clashes:
         for seq, msg in clashes:
             print(f"cannot alias in '{seq.name}': {msg}", file=sys.stderr)
-        print("Pick another name, clear the conflicting alias with "
-              "`apairo alias <channel> --remove`, or pass --force to reassign it.",
-              file=sys.stderr)
+        print(
+            "Pick another name, clear the conflicting alias with "
+            "`apairo alias <channel> --remove`, or pass --force to reassign it.",
+            file=sys.stderr,
+        )
         return 1
 
     displaced: set[str] = set()
@@ -701,7 +761,8 @@ def _channel_targets(path: Path, channel: str) -> list[Path]:
     if config_exists(path) and channel in read_config(path).get("channels", {}):
         return [path]
     return [
-        d for d in _sequence_dirs(path)
+        d
+        for d in _sequence_dirs(path)
         if config_exists(d) and channel in read_config(d).get("channels", {})
     ]
 
@@ -714,17 +775,22 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
 
     targets = _channel_targets(path, args.channel)
     if not targets:
-        print(f"Channel '{args.channel}' is not declared under '{path}'.",
-              file=sys.stderr)
+        print(
+            f"Channel '{args.channel}' is not declared under '{path}'.", file=sys.stderr
+        )
         return 1
 
     # A profiled dataset keeps one root channels.yaml but stores data per
     # sequence; its own remove_channel cascades --purge across the sequences,
     # which the generic root/key deletion cannot reach.
     profiled = _profiled_status_class(path)
-    where = ("the dataset" if profiled is not None
-             else "1 sequence" if len(targets) == 1
-             else f"{len(targets)} sequences")
+    where = (
+        "the dataset"
+        if profiled is not None
+        else "1 sequence"
+        if len(targets) == 1
+        else f"{len(targets)} sequences"
+    )
 
     # Across every target: is it raw anywhere, and what still depends on it?
     is_raw = False
@@ -739,14 +805,18 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
     # then confirm unless --yes. A preprocessed channel without --purge is cheap
     # (regenerable, data untouched) and removed silently.
     if dependents:
-        print(f"warning: '{args.channel}' is still referenced by "
-              f"{', '.join(sorted(dependents))} (timestamps_from/sources).",
-              file=sys.stderr)
+        print(
+            f"warning: '{args.channel}' is still referenced by "
+            f"{', '.join(sorted(dependents))} (timestamps_from/sources).",
+            file=sys.stderr,
+        )
     if is_raw:
         print(f"warning: '{args.channel}' is a RAW (source) channel.", file=sys.stderr)
     if args.purge:
-        print("warning: --purge will delete the channel's data directory on disk.",
-              file=sys.stderr)
+        print(
+            "warning: --purge will delete the channel's data directory on disk.",
+            file=sys.stderr,
+        )
 
     if (is_raw or args.purge) and not args.yes:
         verb = "Remove and delete data for" if args.purge else "Remove"
@@ -771,8 +841,11 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
+
 def _add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("path", nargs="?", default=".", help="dataset directory (default: .)")
+    p.add_argument(
+        "path", nargs="?", default=".", help="dataset directory (default: .)"
+    )
 
 
 def _discover_plugins() -> dict:
@@ -790,36 +863,62 @@ def _discover_plugins() -> dict:
 def _build_parser(plugin_names) -> argparse.ArgumentParser:
     epilog = None
     if plugin_names:
-        epilog = ("ecosystem commands: " + ", ".join(sorted(plugin_names))
-                  + "   (run `apairo <command> --help`)")
+        epilog = (
+            "ecosystem commands: "
+            + ", ".join(sorted(plugin_names))
+            + "   (run `apairo <command> --help`)"
+        )
     parser = argparse.ArgumentParser(
-        prog="apairo", description="Inspect and initialize apairo datasets.",
+        prog="apairo",
+        description="Inspect and initialize apairo datasets.",
         epilog=epilog,
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_init = sub.add_parser("init", help="write .apairo sidecars by scanning a directory")
+    p_init = sub.add_parser(
+        "init", help="write .apairo sidecars by scanning a directory"
+    )
     _add_common(p_init)
-    p_init.add_argument("--as", dest="as_", metavar="CLASS", choices=list(DATASETS),
-                        default="RawDataset",
-                        help="initialize with this dataset class (default: RawDataset)")
+    p_init.add_argument(
+        "--as",
+        dest="as_",
+        metavar="CLASS",
+        choices=list(DATASETS),
+        default="RawDataset",
+        help="initialize with this dataset class (default: RawDataset)",
+    )
     p_init.add_argument("--name", help="dataset name for the root manifest")
-    p_init.add_argument("--force", action="store_true",
-                        help="rebuild from scratch (default: merge, non-destructive)")
+    p_init.add_argument(
+        "--force",
+        action="store_true",
+        help="rebuild from scratch (default: merge, non-destructive)",
+    )
 
     p_status = sub.add_parser("status", help="show what a dataset directory contains")
     _add_common(p_status)
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
-    p_status.add_argument("--sequence", "-s", dest="sequence", metavar="ID",
-                          help="show the per-channel detail for a single sequence "
-                               "(by id), addressed from the dataset root -- avoids "
-                               "pointing status at the nested sequence directory")
-    p_status.add_argument("--show-tf", dest="show_tf", action="store_true",
-                          help="include the transform layer: static calibration and "
-                               "dynamic tf channels (hidden by default)")
-    p_status.add_argument("--missing", action="store_true",
-                          help="(root) per-sequence breakdown of which channels each "
-                               "sequence lacks vs the union of all channels")
+    p_status.add_argument(
+        "--sequence",
+        "-s",
+        dest="sequence",
+        metavar="ID",
+        help="show the per-channel detail for a single sequence "
+        "(by id), addressed from the dataset root -- avoids "
+        "pointing status at the nested sequence directory",
+    )
+    p_status.add_argument(
+        "--show-tf",
+        dest="show_tf",
+        action="store_true",
+        help="include the transform layer: static calibration and "
+        "dynamic tf channels (hidden by default)",
+    )
+    p_status.add_argument(
+        "--missing",
+        action="store_true",
+        help="(root) per-sequence breakdown of which channels each "
+        "sequence lacks vs the union of all channels",
+    )
 
     p_check = sub.add_parser(
         "check",
@@ -833,33 +932,51 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
         help="expose a channel under a clean public name (e.g. ouster_points as lidar)",
     )
     p_alias.add_argument("channel", help="the channel's on-disk directory name")
-    p_alias.add_argument("alias", nargs="?",
-                         help="public name to expose it under (omit with --remove)")
-    p_alias.add_argument("--path", default=".",
-                         help="dataset directory (default: .); root-aware")
-    p_alias.add_argument("--remove", action="store_true",
-                         help="clear the channel's alias instead of setting it")
-    p_alias.add_argument("--force", action="store_true",
-                         help="reassign the alias even if another channel holds it "
-                              "(that channel is left unaliased)")
+    p_alias.add_argument(
+        "alias", nargs="?", help="public name to expose it under (omit with --remove)"
+    )
+    p_alias.add_argument(
+        "--path", default=".", help="dataset directory (default: .); root-aware"
+    )
+    p_alias.add_argument(
+        "--remove",
+        action="store_true",
+        help="clear the channel's alias instead of setting it",
+    )
+    p_alias.add_argument(
+        "--force",
+        action="store_true",
+        help="reassign the alias even if another channel holds it "
+        "(that channel is left unaliased)",
+    )
 
     p_channel = sub.add_parser("channel", help="manage channel declarations in .apairo")
     channel_sub = p_channel.add_subparsers(dest="channel_command", required=True)
     p_channel_remove = channel_sub.add_parser(
         "remove", help="drop a channel's declaration (optionally delete its data)"
     )
-    p_channel_remove.add_argument("channel", help="the channel's on-disk directory name")
-    p_channel_remove.add_argument("--path", default=".",
-                                  help="dataset directory (default: .); root-aware")
-    p_channel_remove.add_argument("--purge", action="store_true",
-                                  help="also delete the channel's data directory on disk "
-                                       "(destructive; default keeps the files)")
-    p_channel_remove.add_argument("--yes", "-y", action="store_true",
-                                  help="skip the confirmation prompt for raw channels / --purge")
+    p_channel_remove.add_argument(
+        "channel", help="the channel's on-disk directory name"
+    )
+    p_channel_remove.add_argument(
+        "--path", default=".", help="dataset directory (default: .); root-aware"
+    )
+    p_channel_remove.add_argument(
+        "--purge",
+        action="store_true",
+        help="also delete the channel's data directory on disk "
+        "(destructive; default keeps the files)",
+    )
+    p_channel_remove.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="skip the confirmation prompt for raw channels / --purge",
+    )
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     # Ecosystem dispatch: `apairo <plugin> ...` hands the rest to the plugin,

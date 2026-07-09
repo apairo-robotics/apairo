@@ -1,16 +1,17 @@
-from .img_loader import IMGLoader
-from .npy_loader import NPYLoader
-from .npys_loader import NPYSLoader
-from .bin_loader import BINLoader
-from .txt_loader import TXTLoader
-from .zarr_loader import ZarrLoader
-from .tar_loader import TarImageLoader
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
+
 import numpy as np
 import yaml
 
+from .bin_loader import BINLoader
+from .img_loader import IMGLoader
+from .npy_loader import NPYLoader
+from .npys_loader import NPYSLoader
+from .tar_loader import TarImageLoader
+from .txt_loader import TXTLoader
+from .zarr_loader import ZarrLoader
 
 str_to_loader = {
     "img": IMGLoader,
@@ -26,11 +27,10 @@ def _load_img(path: Path) -> np.ndarray:
         from PIL import Image
 
         return np.array(Image.open(path))
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
-            "Loading image files requires Pillow. "
-            "Install it with: pip install Pillow"
-        )
+            "Loading image files requires Pillow. Install it with: pip install Pillow"
+        ) from exc
 
 
 DERIVED_LOADERS: dict[str, Callable[[Path], np.ndarray]] = {
@@ -91,5 +91,5 @@ def loads_timestamps(keys: list, files: dict) -> dict:
 
 def load_profile(profile_path: str | Path) -> dict:
     """Load a YAML loader-profile file."""
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         return yaml.safe_load(f)

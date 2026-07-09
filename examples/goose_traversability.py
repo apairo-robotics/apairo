@@ -22,12 +22,13 @@ from apairo.core.sample import Sample
 
 
 TRAVERSABLE_LABELS = {
-     23 # Asphalt
-    ,24 # Gravel
-    ,31 # Soil
-    ,50 # Low grass
-    ,51 # High grass
+    23,  # Asphalt
+    24,  # Gravel
+    31,  # Soil
+    50,  # Low grass
+    51,  # High grass
 }
+
 
 class TraversabilityPreprocessor(FramePreprocessor):
     """Map GOOSE semantic labels to a binary traversability mask.
@@ -45,7 +46,9 @@ class TraversabilityPreprocessor(FramePreprocessor):
     def __init__(self, config_path: str | Path) -> None:
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
-        self._traversable: set[int] = set(cfg.get('traversable_map') or TRAVERSABLE_LABELS)
+        self._traversable: set[int] = set(
+            cfg.get("traversable_map") or TRAVERSABLE_LABELS
+        )
 
     def __call__(self, sample: Sample) -> np.ndarray:
         labels: np.ndarray = sample.data["labels"]  # (N,)

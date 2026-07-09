@@ -25,8 +25,8 @@ from apairo.core.sample import Sample
 # Here: the RELLIS-3D ground classes a wheeled robot can drive over. The IDs come
 # straight from the RELLIS-3D ontology — edit the set to change what counts.
 TRAVERSABLE = {
-    1:  "dirt",
-    3:  "grass",
+    1: "dirt",
+    3: "grass",
     10: "asphalt",
     23: "concrete",
     31: "puddle",
@@ -37,11 +37,11 @@ TRAVERSABLE = {
 class TraversabilityFromLabels(FramePreprocessor):
     """Per-point traversability (uint8: 1 = traversable) from semantic labels."""
 
-    output_key      = "trav_gt"
-    output_loader   = "npys"     # one file per frame, aligned with the lidar points
-    input_keys      = ["labels"]
+    output_key = "trav_gt"
+    output_loader = "npys"  # one file per frame, aligned with the lidar points
+    input_keys = ["labels"]
     timestamps_from = "lidar"
-    sources         = ["labels"]
+    sources = ["labels"]
 
     def __call__(self, sample: Sample) -> np.ndarray:
         return np.isin(sample.data["labels"], list(TRAVERSABLE)).astype(np.uint8)

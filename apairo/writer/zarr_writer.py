@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Tuple
+
 import numpy as np
 
 
@@ -22,8 +23,8 @@ class ZarrWriter:
 
     def __init__(
         self,
-        chunks: Optional[Tuple[int, ...]] = None,
-        compression: Optional[str] = None,
+        chunks: tuple[int, ...] | None = None,
+        compression: str | None = None,
         compression_level: int = 5,
     ) -> None:
         self._chunks = chunks
@@ -39,11 +40,10 @@ class ZarrWriter:
         """
         try:
             import zarr
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
-                "zarr is required for ZarrWriter. "
-                "Install with: pip install zarr"
-            )
+                "zarr is required for ZarrWriter. Install with: pip install zarr"
+            ) from exc
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -54,6 +54,7 @@ class ZarrWriter:
         compressor = None
         if self._compression is not None:
             from numcodecs import Blosc
+
             compressor = Blosc(
                 cname=self._compression,
                 clevel=self._compression_level,

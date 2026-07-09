@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Tuple
+
 import numpy as np
 
 from apairo.core.abstract_loader import AbstractLoader
@@ -19,11 +20,10 @@ class ZarrLoader(AbstractLoader):
     def __init__(self, zarr_path: str | Path) -> None:
         try:
             import zarr
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
-                "zarr is required for ZarrLoader. "
-                "Install with: pip install zarr"
-            )
+                "zarr is required for ZarrLoader. Install with: pip install zarr"
+            ) from exc
         self._path = Path(zarr_path)
         self._array = zarr.open_array(str(self._path), mode="r")
 
@@ -37,7 +37,7 @@ class ZarrLoader(AbstractLoader):
         return data
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         if self._array.ndim <= 1:
             return (1,)
         return tuple(self._array.shape[1:])

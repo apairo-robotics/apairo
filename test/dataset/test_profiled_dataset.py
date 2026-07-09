@@ -1,8 +1,10 @@
-import pytest
-import numpy as np
-import yaml
 from pathlib import Path
-from apairo.core.profiled_dataset import ModalitySpec, _parse_layers, ProfiledDataset
+
+import numpy as np
+import pytest
+import yaml
+
+from apairo.core.profiled_dataset import ModalitySpec, ProfiledDataset, _parse_layers
 
 
 def test_modality_spec_from_dict_basic():
@@ -267,9 +269,7 @@ def test_bootstrap_config_uses_profile(goose_root):
 def _write_apairo(directory: Path, key: str, loader: str) -> None:
     config = {
         "version": 1,
-        "channels": {
-            key: {"kind": "preprocess", "loader": loader}
-        },
+        "channels": {key: {"kind": "preprocess", "loader": loader}},
     }
     d = directory / ".apairo"
     d.mkdir(exist_ok=True)
@@ -464,6 +464,7 @@ def test_derived_from_derived_with_intermediate(goose_root_chained):
 
 # --- frame_sequence_ids ---
 
+
 def test_frame_sequence_ids_shape(kitti_root):
     ds = _KittiDS(kitti_root, keys=["lidar"])
     ids = ds.frame_sequence_ids
@@ -494,13 +495,13 @@ def test_frame_sequence_ids_with_filter(kitti_root):
     seq_ids = ds.frame_sequence_ids[view.indices]
 
     train_idx = np.where(seq_ids == "00")[0]
-    val_idx   = np.where(seq_ids == "01")[0]
+    val_idx = np.where(seq_ids == "01")[0]
 
     ds_train = view.filter(train_idx)
-    ds_val   = view.filter(val_idx)
+    ds_val = view.filter(val_idx)
 
     assert len(ds_train) == 4
-    assert len(ds_val)   == 4
+    assert len(ds_val) == 4
     assert len(ds_train) + len(ds_val) == len(view)
 
 
@@ -510,15 +511,16 @@ def test_frame_sequence_ids_with_filter(kitti_root):
 # profiled dataset now honours aliases too, so channel names can be unified
 # across heterogeneous datasets in one pipeline.
 
+
 def test_profiled_alias_request_by_alias(goose_root):
     from apairo.core.config import set_alias
 
-    _GooseDS(goose_root, keys=["lidar"])      # bootstraps .apairo/channels.yaml
+    _GooseDS(goose_root, keys=["lidar"])  # bootstraps .apairo/channels.yaml
     set_alias(goose_root, "lidar", "points")  # expose lidar as 'points'
 
     ds = _GooseDS(goose_root, keys=["points", "labels"])
     assert len(ds) == 6
-    assert set(ds[0].data) == {"points", "labels"}   # exposed under the alias
+    assert set(ds[0].data) == {"points", "labels"}  # exposed under the alias
     assert "lidar" not in ds[0].data
     assert ds.keys == ["points", "labels"]
 
@@ -578,6 +580,7 @@ def test_profiled_alias_shadowing_channel_name_blocks_load(goose_root):
 # so --purge/data=True must reach every sequence's modality directory -- the
 # generic root/key deletion would miss them.
 
+
 def test_profiled_remove_channel_data_cascades_to_sequences(rellis_root):
     _RellisDS(rellis_root, keys=["lidar"])  # bootstraps the root .apairo
     seq_dirs = sorted((rellis_root / "Rellis-3D").glob("*/os1_cloud_node_kitti_bin"))
@@ -586,8 +589,9 @@ def test_profiled_remove_channel_data_cascades_to_sequences(rellis_root):
     _RellisDS.remove_channel(rellis_root, "lidar", data=True)
 
     from apairo.core.config import read_config
+
     assert "lidar" not in read_config(rellis_root)["channels"]
-    assert not any(d.exists() for d in seq_dirs)   # every sequence's data gone
+    assert not any(d.exists() for d in seq_dirs)  # every sequence's data gone
 
 
 def test_profiled_remove_channel_config_only_keeps_data(rellis_root):
@@ -597,5 +601,6 @@ def test_profiled_remove_channel_config_only_keeps_data(rellis_root):
     _RellisDS.remove_channel(rellis_root, "lidar")  # config-only (default)
 
     from apairo.core.config import read_config
+
     assert "lidar" not in read_config(rellis_root)["channels"]
-    assert all(d.is_dir() for d in seq_dirs)        # data untouched
+    assert all(d.is_dir() for d in seq_dirs)  # data untouched

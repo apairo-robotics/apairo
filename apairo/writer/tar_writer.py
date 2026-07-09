@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import tarfile
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Optional
+
 import numpy as np
 
 
@@ -20,8 +22,8 @@ class TarImageWriter:
 
     def __init__(
         self,
-        member_name: Optional[Callable[[int], str]] = None,
-        quality: Optional[int] = None,
+        member_name: Callable[[int], str] | None = None,
+        quality: int | None = None,
     ) -> None:
         self._member_name = member_name or (lambda i: f"{i}.jpg")
         self._quality = quality
@@ -36,11 +38,11 @@ class TarImageWriter:
         """
         try:
             from PIL import Image
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "Pillow is required for TarImageWriter. "
                 "Install with: pip install Pillow"
-            )
+            ) from exc
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 

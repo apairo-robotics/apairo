@@ -1,13 +1,13 @@
+from apairo.core.config import register_channel
+
 from .async_layout import AsyncLayoutDataset
-from .raw import RawDataset
-from .tartan_kitti import TartanKittiDataset
+from .concat import ConcatDataset
 from .goose import Goose3DDataset
+from .raw import RawDataset
 from .rellis import Rellis3DDataset
 from .semantic_kitti import SemanticKittiDataset
-from .concat import ConcatDataset
+from .tartan_kitti import TartanKittiDataset
 from .zip import ZipDataset
-
-from apairo.core.config import register_channel
 
 
 def split_sequences(

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple
+
 import numpy as np
 
 from apairo.core import AbstractLoader
@@ -23,7 +23,7 @@ class NPYLoader(AbstractLoader):
         return self.array[idx]
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         if self.array.ndim == 1:
             return (1,)
         return tuple(self.array.shape[1:])

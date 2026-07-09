@@ -31,9 +31,7 @@ def merge_timeline(timestamps: dict, keys: list) -> tuple:
     Stable sort -- events keep channel-declaration order on equal timestamps.
     """
     lengths = [len(np.atleast_1d(timestamps[k])) for k in keys]
-    all_ts = np.concatenate(
-        [np.atleast_1d(timestamps[k]).astype(float) for k in keys]
-    )
+    all_ts = np.concatenate([np.atleast_1d(timestamps[k]).astype(float) for k in keys])
     key_idxs = np.repeat(np.arange(len(keys), dtype=np.intp), lengths)
     frame_idxs = np.concatenate([np.arange(n, dtype=np.intp) for n in lengths])
     order = np.argsort(all_ts, kind="stable")
@@ -81,9 +79,7 @@ def clock_from_distance(
         raise ValueError(f"step must be positive, got {step}.")
 
     cumdist = np.zeros(len(positions))
-    cumdist[1:] = np.cumsum(
-        np.linalg.norm(np.diff(positions, axis=0), axis=1)
-    )
+    cumdist[1:] = np.cumsum(np.linalg.norm(np.diff(positions, axis=0), axis=1))
     targets = np.arange(0.0, cumdist[-1] + step, step)
     idx = np.searchsorted(cumdist, targets, side="left")
     idx = np.unique(idx[idx < len(timestamps)])

@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -8,8 +8,8 @@ repos:
       - id: check-merge-conflict
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    rev: v0.15.20
     hooks:
-      - id: ruff          # lint + isort
+      - id: ruff-check    # lint + import sorting
         args: [--fix]
-      - id: ruff-format   # format (remplace black)
+      - id: ruff-format   # formatting (replaces black)

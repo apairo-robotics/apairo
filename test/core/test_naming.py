@@ -4,13 +4,14 @@ Covers apairo/core/naming.py -- the reserved-``_`` convention shared by
 NPYSLoader (reads), ChannelWriter (writes), and suffixed sub-channel discovery.
 """
 
+import pytest
+
 from apairo.core.naming import (
     frame_stem_is_valid,
     is_frame_file,
     require_frame_stem,
     suffixed_frame_files,
 )
-import pytest
 
 
 def test_frame_stem_is_valid():

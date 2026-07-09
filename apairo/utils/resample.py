@@ -13,8 +13,6 @@ to ``[-pi, pi]``.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 import numpy as np
 
 
@@ -33,8 +31,8 @@ def resample_pose_path(
     positions: np.ndarray,
     yaws: np.ndarray,
     targets: np.ndarray,
-    timestamps: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+    timestamps: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     """Linearly resample a 2D pose path at *targets* along *axis*.
 
     Args:

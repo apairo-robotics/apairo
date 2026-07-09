@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from apairo.writer import NPYWriter, BINWriter, WRITERS
+from apairo.writer import WRITERS, BINWriter, NPYWriter
 
 
 @pytest.fixture

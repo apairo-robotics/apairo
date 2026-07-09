@@ -43,6 +43,7 @@ def tartan_seq(tmp_path):
 
 def test_legacy_process_warns_at_definition_and_still_works(tartan_seq):
     with pytest.warns(DeprecationWarning, match="__call__"):
+
         class _Legacy(FramePreprocessor):
             output_key = "legacy"
             output_loader = "npys"
@@ -89,8 +90,8 @@ def test_transform_runs_frame_preprocessor_lazily(tartan_seq):
 
     s = preview[2]
     np.testing.assert_array_equal(np.asarray(s.data["doubled"]), np.full((5, 4), 4))
-    assert "velodyne_0" in s.data                     # source untouched
-    assert not (tartan_seq / "doubled").exists()      # nothing written
+    assert "velodyne_0" in s.data  # source untouched
+    assert not (tartan_seq / "doubled").exists()  # nothing written
 
 
 def test_transform_preprocessor_output_override(tartan_seq):

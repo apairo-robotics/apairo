@@ -26,7 +26,9 @@ def test_get_tf_multi_hop_and_inverse():
 
 def test_get_tf_is_round_trip():
     cal = Calibration({"a_to_b": _t(1, 0, 0), "b_to_c": _t(0, 2, 0)})
-    np.testing.assert_allclose(cal.get_tf("a", "c") @ cal.get_tf("c", "a"), np.eye(4), atol=1e-12)
+    np.testing.assert_allclose(
+        cal.get_tf("a", "c") @ cal.get_tf("c", "a"), np.eye(4), atol=1e-12
+    )
 
 
 def test_calibration_is_a_dict():
@@ -68,4 +70,6 @@ def test_dataset_calibration_resolves(tmp_path):
     root = _mini_seq(tmp_path)
     register_static_transform(root, "os_lidar", "base_link", _t(0, 0, 1))
     ds = RawDataset(root, keys=["lidar"])
-    np.testing.assert_allclose(ds.calibration.get_tf("os_lidar", "base_link")[:3, 3], [0, 0, -1])
+    np.testing.assert_allclose(
+        ds.calibration.get_tf("os_lidar", "base_link")[:3, 3], [0, 0, -1]
+    )

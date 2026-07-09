@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import warnings
-from abc import abstractmethod, ABC
-from typing import Any, ClassVar, Iterator, Optional
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from typing import Any, ClassVar
 
 from apairo.core.sample import Sample
 
@@ -45,8 +46,8 @@ class Preprocessor(ABC):
     output_key: ClassVar[str]
     output_loader: ClassVar[str]
     input_keys: ClassVar[list[str]]
-    timestamps_from: ClassVar[Optional[str]] = None
-    sources: ClassVar[Optional[list[str]]] = None
+    timestamps_from: ClassVar[str | None] = None
+    sources: ClassVar[list[str] | None] = None
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)

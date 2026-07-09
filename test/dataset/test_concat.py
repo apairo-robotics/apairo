@@ -1,8 +1,10 @@
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock
-from apairo.dataset.concat import ConcatDataset
+
 from apairo.core.sample import Sample
+from apairo.dataset.concat import ConcatDataset
 
 
 def _make_mock_dataset(n: int, key: str = "imu"):
@@ -100,7 +102,9 @@ def test_key_intersection_projected_in_load():
         ds.timestamps = None
         ds.__len__ = MagicMock(return_value=n)
         ds.__getitem__ = MagicMock(
-            side_effect=lambda i: Sample(data={k: np.zeros(3) for k in keys}, timestamp=float(i))
+            side_effect=lambda i: Sample(
+                data={k: np.zeros(3) for k in keys}, timestamp=float(i)
+            )
         )
         return ds
 

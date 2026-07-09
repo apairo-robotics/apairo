@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -39,13 +39,13 @@ class StreamDataset(AbstractDataset):
 
     def __init__(
         self,
-        streams: Dict[str, Tuple[np.ndarray, Sequence]],
+        streams: dict[str, tuple[np.ndarray, Sequence]],
     ) -> None:
         if not streams:
             raise ValueError("StreamDataset requires at least one stream.")
 
-        self.loaders: Dict[str, Sequence] = {}
-        self.timestamps: Dict[str, np.ndarray] = {}
+        self.loaders: dict[str, Sequence] = {}
+        self.timestamps: dict[str, np.ndarray] = {}
         for key, (ts, items) in streams.items():
             ts = np.asarray(ts, dtype=np.float64)
             if ts.ndim != 1 or len(ts) == 0:
@@ -55,8 +55,7 @@ class StreamDataset(AbstractDataset):
                 )
             if len(ts) != len(items):
                 raise ValueError(
-                    f"Stream {key!r}: {len(ts)} timestamps for "
-                    f"{len(items)} items."
+                    f"Stream {key!r}: {len(ts)} timestamps for {len(items)} items."
                 )
             if np.any(np.diff(ts) < 0):
                 raise ValueError(f"Stream {key!r}: timestamps must be ascending.")
@@ -66,6 +65,7 @@ class StreamDataset(AbstractDataset):
         self._set_keys(list(streams))
 
         from apairo.utils.timestamps import merge_timeline
+
         self._tl_key_idxs, self._tl_frame_idxs = merge_timeline(
             self.timestamps, self._keys
         )

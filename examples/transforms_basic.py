@@ -21,6 +21,7 @@ from apairo import Goose3DDataset, Compose
 # 1. Per-channel transform
 # ---------------------------------------------------------------------------
 
+
 def example_per_channel(root: str) -> None:
     """Intensity normalisation applied to the lidar channel only."""
 
@@ -34,6 +35,7 @@ def example_per_channel(root: str) -> None:
 # ---------------------------------------------------------------------------
 # 2. Sample-level transform (filter)
 # ---------------------------------------------------------------------------
+
 
 def example_filter(root: str) -> None:
     """Range filter applied consistently to lidar AND its aligned labels.
@@ -49,7 +51,7 @@ def example_filter(root: str) -> None:
         pts = sample.data["lidar"]
         dist = np.linalg.norm(pts[:, :3], axis=1)
         mask = dist < 50.0
-        sample.data["lidar"]  = pts[mask]
+        sample.data["lidar"] = pts[mask]
         sample.data["labels"] = sample.data["labels"][mask]
         return sample
 
@@ -64,6 +66,7 @@ def example_filter(root: str) -> None:
 # ---------------------------------------------------------------------------
 # 3. Published channel + keep=False (temporary intermediate)
 # ---------------------------------------------------------------------------
+
 
 def example_publish(root: str) -> None:
     """Filtered lidar published as a shared source for two independent branches.
@@ -92,7 +95,7 @@ def example_publish(root: str) -> None:
     )
 
     # Steps 2a and 2b -- two independent branches from the same filtered source
-    ds.transform("lidar_f", normalize,        output="lidar_norm")
+    ds.transform("lidar_f", normalize, output="lidar_norm")
     ds.transform("lidar_f", voxel_downsample, output="lidar_vox")
 
     sample = ds[0]
@@ -105,23 +108,29 @@ def example_publish(root: str) -> None:
 # 4. Compose -- named pipeline for reuse
 # ---------------------------------------------------------------------------
 
+
 def example_compose(root: str) -> None:
     """Bundle several per-channel ops into a named Compose object."""
 
     ds = Goose3DDataset(root, keys=["lidar"])
     ds.transform(
         "lidar",
-        Compose([
-            lambda pts: pts[np.linalg.norm(pts[:, :3], axis=1) < 50.0],
-            lambda pts: pts / (pts.max() + 1e-6),
-        ]),
+        Compose(
+            [
+                lambda pts: pts[np.linalg.norm(pts[:, :3], axis=1) < 50.0],
+                lambda pts: pts / (pts.max() + 1e-6),
+            ]
+        ),
     )
 
     sample = ds[0]
-    print(f"[compose] {sample.data['lidar'].shape[0]} points, max={sample.data['lidar'].max():.4f}")
+    print(
+        f"[compose] {sample.data['lidar'].shape[0]} points, max={sample.data['lidar'].max():.4f}"
+    )
 
 
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()

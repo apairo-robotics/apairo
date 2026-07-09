@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from apairo.dataset.tartan_kitti import TartanKittiDataset
 from apairo.core.preprocessor import FramePreprocessor
 from apairo.core.sample import Sample
+from apairo.dataset.tartan_kitti import TartanKittiDataset
 
 
 class _Identity(FramePreprocessor):

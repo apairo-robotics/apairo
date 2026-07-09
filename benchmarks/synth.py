@@ -5,6 +5,7 @@ sequence (a lidar, a faster pose stream). The same dataset exercises per-frame
 access, synchronize, and the lazy views. Generated trees are cached under
 ``benchmarks/.cache`` and reused across runs.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,7 +29,9 @@ def make_async_sequence(n_ref_frames: int, points: int, ref_rate: float = 20.0) 
             d.mkdir(parents=True, exist_ok=True)
             n = int(round(duration * rate))
             for i in range(n):
-                np.save(d / f"{i:06d}.npy", rng.standard_normal(shape).astype(np.float32))
+                np.save(
+                    d / f"{i:06d}.npy", rng.standard_normal(shape).astype(np.float32)
+                )
             np.savetxt(d / "timestamps.txt", np.arange(n) / rate)
 
     if not (root / ".apairo" / "channels.yaml").exists():

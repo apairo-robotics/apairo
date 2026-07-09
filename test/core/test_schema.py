@@ -62,8 +62,10 @@ def test_verify_config_suffixed_channel_resolves_directory(tmp_path):
             "channels": {
                 "lidar": {"kind": "raw", "loader": "npys"},
                 "lidar_intensity": {
-                    "kind": "raw", "loader": "npys",
-                    "directory": "lidar", "suffix": "intensity",
+                    "kind": "raw",
+                    "loader": "npys",
+                    "directory": "lidar",
+                    "suffix": "intensity",
                 },
             },
         },
@@ -78,8 +80,10 @@ def test_verify_config_suffixed_channel_missing_directory(tmp_path):
             "version": SCHEMA_VERSION,
             "channels": {
                 "lidar_intensity": {
-                    "kind": "raw", "loader": "npys",
-                    "directory": "lidar", "suffix": "intensity",
+                    "kind": "raw",
+                    "loader": "npys",
+                    "directory": "lidar",
+                    "suffix": "intensity",
                 },
             },
         },

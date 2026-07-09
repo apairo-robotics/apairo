@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from apairo.core import AbstractDataset
 from apairo.core.sample import Sample
 from apairo.dataset.zip import ZipDataset
@@ -24,9 +25,11 @@ class _DS(AbstractDataset):
 def ds_a():
     return _DS(5, ["lidar", "labels"])
 
+
 @pytest.fixture
 def ds_b():
     return _DS(5, ["trav_gt"])
+
 
 @pytest.fixture
 def ds_c():
@@ -34,6 +37,7 @@ def ds_c():
 
 
 # ------------------------------------------------------------------ construction
+
 
 def test_basic_merge(ds_a, ds_b):
     z = ZipDataset(ds_a, ds_b)
@@ -54,7 +58,7 @@ def test_length_mismatch_raises():
 
 
 def test_key_collision_raises(ds_a):
-    b = _DS(5, ["lidar"])   # "lidar" already in ds_a
+    b = _DS(5, ["lidar"])  # "lidar" already in ds_a
     with pytest.raises(KeyError, match="lidar"):
         ZipDataset(ds_a, b)
 
@@ -73,6 +77,7 @@ def test_invalid_on_collision(ds_a, ds_b):
 
 # ------------------------------------------------------------------ access
 
+
 def test_getitem_merges_data(ds_a, ds_b):
     z = ZipDataset(ds_a, ds_b)
     sample = z[0]
@@ -85,7 +90,7 @@ def test_getitem_correct_values():
     a = _DS(3, ["x"], value_fn=lambda k, i: np.array([i * 10.0]))
     b = _DS(3, ["y"], value_fn=lambda k, i: np.array([i * 100.0]))
     z = ZipDataset(a, b)
-    np.testing.assert_array_equal(z[2].data["x"],  [20.0])
+    np.testing.assert_array_equal(z[2].data["x"], [20.0])
     np.testing.assert_array_equal(z[2].data["y"], [200.0])
 
 
@@ -96,6 +101,7 @@ def test_three_datasets(ds_a, ds_b, ds_c):
 
 # ------------------------------------------------------------------ parent transforms
 
+
 def test_parent_transforms_applied():
     a = _DS(3, ["lidar"], value_fn=lambda k, i: np.ones(3))
     b = _DS(3, ["trav_gt"])
@@ -105,6 +111,7 @@ def test_parent_transforms_applied():
 
 
 # ------------------------------------------------------------------ chaining
+
 
 def test_join_sugar(ds_a, ds_b):
     z = ds_a.join(ds_b)

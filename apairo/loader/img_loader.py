@@ -1,6 +1,6 @@
 import os
+
 import numpy as np
-from typing import List, Tuple
 
 from apairo.core import AbstractLoader
 
@@ -23,21 +23,25 @@ class IMGLoader(AbstractLoader):
     """
 
     directory: str
-    files: List[str]
-    shape: Tuple[int, ...]
+    files: list[str]
+    shape: tuple[int, ...]
 
-    def __init__(self, directory, files: List[str] | None = None):
+    def __init__(self, directory, files: list[str] | None = None):
         try:
             from PIL import Image as _Image  # noqa: F401
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
-                "Image loading requires Pillow. " "Install it with: pip install Pillow"
-            )
+                "Image loading requires Pillow. Install it with: pip install Pillow"
+            ) from exc
         self.directory = directory
-        self.files = list(files) if files is not None else list(
-            sorted(
-                filter(lambda f: f[-3:] in {"png", "jpg"}, os.listdir(directory)),
-                key=lambda f: int(f.split(".")[0]),
+        self.files = (
+            list(files)
+            if files is not None
+            else list(
+                sorted(
+                    filter(lambda f: f[-3:] in {"png", "jpg"}, os.listdir(directory)),
+                    key=lambda f: int(f.split(".")[0]),
+                )
             )
         )
         from PIL import Image

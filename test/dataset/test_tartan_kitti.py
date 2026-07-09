@@ -1,16 +1,21 @@
-import numpy as np
-import pytest
 from pathlib import Path
 
+import numpy as np
+import pytest
+
+from apairo.core.sample import Sample
 from apairo.dataset.async_layout import AsyncLayoutDataset as TartanKittiDataset
 from apairo.loader import NPYLoader
-from apairo.core.sample import Sample
 from test.utils import (
-    create_random_images, create_random_npy_files,
-    create_random_npy_file, create_timestamps_file
+    create_random_images,
+    create_random_npy_file,
+    create_random_npy_files,
+    create_timestamps_file,
 )
 
-_PROFILE = Path(__file__).parent.parent.parent / "apairo/dataset/tartan_kitti/profile.yaml"
+_PROFILE = (
+    Path(__file__).parent.parent.parent / "apairo/dataset/tartan_kitti/profile.yaml"
+)
 
 
 @pytest.fixture
@@ -123,8 +128,8 @@ def test_synchronize_on_sequence(dataset):
 
 def test_synchronize_root(tmp_path):
     """Root-level synchronize: each sequence on its own clock, concatenated."""
-    from apairo.dataset.tartan_kitti import TartanKittiDataset as RealTartan
     from apairo.dataset.concat import ConcatDataset
+    from apairo.dataset.tartan_kitti import TartanKittiDataset as RealTartan
 
     for seq in ["seq_a", "seq_b"]:
         for name, n in [("controls", 50), ("height_map", 10)]:
@@ -154,8 +159,8 @@ def test_iter_concrete():
     dataset = TartanKittiDataset.__new__(TartanKittiDataset)  # Skip init
     dataset._keys = ["controls", "image_left"]
     dataset.timestamps = {
-        "controls": np.array([0.0, .5, 1.0, 1.5, 2.0]),
-        "image_left": np.array([0.0, 1.0, 2.0])
+        "controls": np.array([0.0, 0.5, 1.0, 1.5, 2.0]),
+        "image_left": np.array([0.0, 1.0, 2.0]),
     }
     dataset.end_of_time = 3.0
     dataset._init_timeline()

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Callable, Literal, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -19,9 +20,9 @@ SyncMethod = Callable[[np.ndarray, np.ndarray], np.ndarray]
 # What a single channel can be synchronized with: a built-in matching mode,
 # a custom matching callable, or a value-level interpolator.
 # "latest" is a deprecated alias for "previous".
-ChannelStrategy = Union[
-    Literal["previous", "next", "nearest", "latest"], SyncMethod, Interpolator
-]
+ChannelStrategy = (
+    Literal["previous", "next", "nearest", "latest"] | SyncMethod | Interpolator
+)
 
 
 class SynchronizedView(AbstractDataset):
@@ -131,9 +132,7 @@ class SynchronizedView(AbstractDataset):
         self._strategies = strategies
         self._tolerance = tolerance
         self._ref_timestamps = ref_ts[keep]
-        self._index_map = {
-            k: v[keep].astype(np.intp) for k, v in index_map.items()
-        }
+        self._index_map = {k: v[keep].astype(np.intp) for k, v in index_map.items()}
         self._channel_ts = channel_ts
         self._keys = keys
 
@@ -167,8 +166,7 @@ class SynchronizedView(AbstractDataset):
                 stacklevel=4,  # _resolve_strategies <- __init__ <- synchronize()
             )
             strategies = {
-                k: ("previous" if s == "latest" else s)
-                for k, s in strategies.items()
+                k: ("previous" if s == "latest" else s) for k, s in strategies.items()
             }
 
         for key, strat in strategies.items():
@@ -192,6 +190,7 @@ class SynchronizedView(AbstractDataset):
         """
         if reference is None:
             from apairo.utils.timestamps import get_reference_timestamps
+
             name = get_reference_timestamps({k: parent_ts[k] for k in keys})
             return name, np.asarray(parent_ts[name], dtype=float)
 
@@ -304,7 +303,7 @@ class SynchronizedView(AbstractDataset):
         ts = self._channel_ts[key]
         return ts[self._index_map[key]] - self._ref_timestamps
 
-    def frame_info(self, idx: int) -> "FrameRef":
+    def frame_info(self, idx: int) -> FrameRef:
         """Provenance of synchronised frame *idx*.
 
         A synchronised frame is *composite*: each channel is backed by its own
@@ -324,8 +323,9 @@ class SynchronizedView(AbstractDataset):
     def __len__(self) -> int:
         return len(self._ref_timestamps)
 
-    def _load(self, idx: int) -> "Sample":
+    def _load(self, idx: int) -> Sample:
         from apairo.core.sample import Sample
+
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
 
@@ -342,8 +342,10 @@ class SynchronizedView(AbstractDataset):
                     ts = self._channel_ts[key]
                     data[key] = strat(
                         t_ref,
-                        float(ts[i0]), v0,
-                        float(ts[i1]), self._parent.loaders[key][i1],
+                        float(ts[i0]),
+                        v0,
+                        float(ts[i1]),
+                        self._parent.loaders[key][i1],
                     )
             else:
                 data[key] = self._parent.loaders[key][int(self._index_map[key][idx])]

@@ -1,6 +1,7 @@
-import pytest
 import numpy as np
+import pytest
 from PIL import Image
+
 from apairo.loader import IMGLoader
 from test.utils import create_random_images
 

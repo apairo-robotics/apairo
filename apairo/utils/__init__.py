@@ -1,7 +1,7 @@
-from .utils import npy_analyser, select_sequence, dict_flatten, map_recursive
-from .timestamps import clock_from_distance
 from .naming import integer_frame_index
 from .resample import cumulative_distance, resample_pose_path
+from .timestamps import clock_from_distance
+from .utils import dict_flatten, map_recursive, npy_analyser, select_sequence
 
 __all__ = [
     "npy_analyser",

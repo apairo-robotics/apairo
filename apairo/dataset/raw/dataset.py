@@ -35,10 +35,10 @@ Usage::
     ds = RawDataset(root, keys=["lidar", "imu"]) # restrict channels
     ds_sync = ds.synchronize(reference="lidar")  # synchronous frames
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import yaml
 
@@ -98,7 +98,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     def __init__(
         self,
         directory: str | Path,
-        keys: Optional[List[str]] = None,
+        keys: list[str] | None = None,
     ) -> None:
         path = Path(directory)
 
@@ -128,7 +128,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         *,
         merge: bool = False,
         overwrite: bool = False,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> Path:
         """Write the ``.apairo`` sidecar(s) by scanning *directory*. Root-aware.
 
@@ -186,7 +186,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         )
 
     @classmethod
-    def _write_manifest(cls, root: str | Path, *, name: Optional[str] = None) -> Path:
+    def _write_manifest(cls, root: str | Path, *, name: str | None = None) -> Path:
         """(Re)write ``<root>/.apairo/dataset.yaml`` from the sequences on disk."""
         root = Path(root)
         sequences = sorted(
@@ -214,7 +214,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
     # ------------------------------------------------------------------ root
 
-    def _init_raw_root(self, root: Path, keys: Optional[List[str]]) -> None:
+    def _init_raw_root(self, root: Path, keys: list[str] | None) -> None:
         manifest = _read_manifest(root)
         self._name = manifest.get("name", root.name)
 

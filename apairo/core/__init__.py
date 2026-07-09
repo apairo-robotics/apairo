@@ -1,17 +1,16 @@
-from .abstract_loader import AbstractLoader
+from . import utils
 from .abstract_dataset import AbstractDataset, FrameRef
-from .synchronous_dataset import SynchronousDataset
+from .abstract_loader import AbstractLoader
+from .cached_dataset import CachedDataset
+from .channel_view import ChannelView
 from .configurable_dataset import ConfigurableDataset
+from .filtered_view import FilteredView
+from .interpolator import Interpolator
 from .sample import Sample
 from .sequence_view import SequenceView
-from .filtered_view import FilteredView
-from .channel_view import ChannelView
-from .cached_dataset import CachedDataset
 from .synchronized_view import SynchronizedView
-from .interpolator import Interpolator
+from .synchronous_dataset import SynchronousDataset
 from .transform import Compose
-
-from . import utils
 
 __all__ = [
     "AbstractLoader",

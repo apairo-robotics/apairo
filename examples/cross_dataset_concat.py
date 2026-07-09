@@ -23,8 +23,8 @@ from torch.utils.data import DataLoader
 from apairo import Rellis3DDataset, Goose3DDataset, SemanticKittiDataset
 
 RELLIS_ROOT = Path("/data/RELLIS")
-GOOSE_ROOT  = Path("/data/goose/GOOSE_3D/train")
-KITTI_ROOT  = Path("/data/semantic_kitti")
+GOOSE_ROOT = Path("/data/goose/GOOSE_3D/train")
+KITTI_ROOT = Path("/data/semantic_kitti")
 
 
 def normalize_intensity(mean, std):
@@ -32,6 +32,7 @@ def normalize_intensity(mean, std):
         pts = pts.copy()
         pts[:, 3] = (pts[:, 3] - mean) / (std + 1e-6)
         return pts
+
     return _fn
 
 
@@ -39,6 +40,7 @@ def rename_key(src, dst):
     def _fn(sample):
         sample.data[dst] = sample.data.pop(src)
         return sample
+
     return _fn
 
 
@@ -63,10 +65,9 @@ ds_goose = (
     .transform(rename_key("trav_label", "trav_gt"))
 )
 
-ds_kitti = (
-    SemanticKittiDataset(KITTI_ROOT, keys=["lidar", "trav_gt"], split="train")
-    .transform("lidar", normalize_intensity(mean=0.41, std=0.18))
-)
+ds_kitti = SemanticKittiDataset(
+    KITTI_ROOT, keys=["lidar", "trav_gt"], split="train"
+).transform("lidar", normalize_intensity(mean=0.41, std=0.18))
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +85,7 @@ print(f"Active channels       : {ds_train.keys}")
 loader = DataLoader(ds_train, batch_size=8, shuffle=True, num_workers=4)
 
 for batch in loader:
-    lidar  = batch["lidar"]    # (B, N, 4)
+    lidar = batch["lidar"]  # (B, N, 4)
     labels = batch["trav_gt"]  # (B, N)
     # ... training step ...
     break

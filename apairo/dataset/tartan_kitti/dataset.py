@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from pathlib import Path
 
 from apairo.dataset.async_layout.dataset import _suffix_channel_entries

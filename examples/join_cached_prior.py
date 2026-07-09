@@ -22,13 +22,13 @@ import numpy as np
 
 from apairo import Rellis3DDataset
 
-ROOT   = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
-VOXEL  = 0.5   # ground-estimation grid size (metres)
+ROOT = Path(os.environ.get("APAIRO_RELLIS_ROOT", "/data/RELLIS"))
+VOXEL = 0.5  # ground-estimation grid size (metres)
 
 
 def ground_height_above(pts):
     """Height of each point above the voxel-minimum ground estimate."""
-    xy  = (pts[:, :2] / VOXEL).astype(np.int32)
+    xy = (pts[:, :2] / VOXEL).astype(np.int32)
     key = xy[:, 0] * 100_003 + xy[:, 1]
     _, inv = np.unique(key, return_inverse=True)
     cell_min = np.full(inv.max() + 1, np.inf)
@@ -39,6 +39,7 @@ def ground_height_above(pts):
 def random_dropout(rate=0.05):
     def _fn(pts):
         return pts[np.random.rand(len(pts)) > rate]
+
     return _fn
 
 

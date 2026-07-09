@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import functools
-from typing import List
+
 import numpy as np
 
 from apairo.core import AbstractDataset
@@ -30,7 +31,7 @@ class ConcatDataset(AbstractDataset):
         ValueError: If ``datasets`` is empty.
     """
 
-    def __init__(self, datasets: List[AbstractDataset]) -> None:
+    def __init__(self, datasets: list[AbstractDataset]) -> None:
         if not datasets:
             raise ValueError("datasets must be non-empty")
         self.datasets = datasets
@@ -45,7 +46,7 @@ class ConcatDataset(AbstractDataset):
         self._keys = sorted(keys)
 
     @property
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         return self._keys
 
     @keys.setter

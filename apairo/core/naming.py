@@ -8,6 +8,7 @@ the frame.  ``_`` is reserved for suffixed sub-channel variants
 frame file's stem must not contain it -- the loader skips such files, and the
 writer refuses to create them.
 """
+
 from __future__ import annotations
 
 import os
@@ -35,7 +36,8 @@ def suffixed_frame_files(directory, suffix: str, ext: str = ".npy") -> list[str]
     frames."""
     tail = f"_{suffix}{ext}"
     return sorted(
-        f for f in os.listdir(directory)
+        f
+        for f in os.listdir(directory)
         if f.endswith(tail) and frame_stem_is_valid(f[: -len(tail)])
     )
 

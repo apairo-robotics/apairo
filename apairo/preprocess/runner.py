@@ -1,7 +1,9 @@
 from __future__ import annotations
+
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
-import logging
+
 import numpy as np
 
 from apairo.core.preprocessor import FramePreprocessor, SequencePreprocessor
@@ -62,7 +64,10 @@ def run(
     # emits one row per frame via output_loader="npys") is placed per frame by
     # derived_path; a stacked SequencePreprocessor writes one file per sequence
     # in that frame's channel directory (<seq>/<key>/<key>.ext).
-    if isinstance(preprocessor, SequencePreprocessor) and preprocessor.output_loader != "npys":
+    if (
+        isinstance(preprocessor, SequencePreprocessor)
+        and preprocessor.output_loader != "npys"
+    ):
         first_path = (
             dataset.derived_path(0, preprocessor.output_key, ext).parent
             / f"{preprocessor.output_key}.{ext}"
@@ -137,7 +142,9 @@ def _run_sequence(preprocessor: SequencePreprocessor, dataset, ext: str) -> None
         _run_sequence_stacked(preprocessor, dataset, ext)
 
 
-def _run_sequence_stacked(preprocessor: SequencePreprocessor, dataset, ext: str) -> None:
+def _run_sequence_stacked(
+    preprocessor: SequencePreprocessor, dataset, ext: str
+) -> None:
     """Stacked output (output_loader="npy"): one {key}.{ext} file per sequence.
 
     The preprocessor runs once per sequence and the result is written to that
@@ -194,7 +201,7 @@ def _run_sequence_per_frame(
             )
         seq_timestamps: list = []
         last_path = None
-        for row, idx, sample in zip(result, indices, frames):
+        for row, idx, sample in zip(result, indices, frames, strict=True):
             last_path = dataset.derived_path(idx, preprocessor.output_key, ext)
             writer.write(_to_numpy(row), last_path)
             if sample.timestamp is not None:

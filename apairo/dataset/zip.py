@@ -47,9 +47,7 @@ class ZipDataset(AbstractDataset):
 
         lengths = [len(ds) for ds in datasets]
         if len(set(lengths)) != 1:
-            raise ValueError(
-                f"All datasets must have the same length. Got: {lengths}"
-            )
+            raise ValueError(f"All datasets must have the same length. Got: {lengths}")
 
         if on_collision not in ("raise", "last"):
             raise ValueError(
@@ -74,7 +72,9 @@ class ZipDataset(AbstractDataset):
     def _merged_keys(self) -> list[str]:
         seen: set[str] = set()
         keys: list[str] = []
-        source = reversed(self._datasets) if self._on_collision == "last" else self._datasets
+        source = (
+            reversed(self._datasets) if self._on_collision == "last" else self._datasets
+        )
         for ds in source:
             for key in ds.keys:
                 if key not in seen:

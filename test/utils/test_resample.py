@@ -46,12 +46,15 @@ def test_spatial_axis_with_timestamps():
         dists, pos, yaw, np.array([0.0, 3.5]), timestamps=ts
     )
     np.testing.assert_allclose(out_pos[:, 0], [0.0, 3.5])
-    np.testing.assert_allclose(out_ts, [0.0, 3.5])   # 1 m/s -> t == d
+    np.testing.assert_allclose(out_ts, [0.0, 3.5])  # 1 m/s -> t == d
 
 
 def test_empty_path():
     out_pos, out_yaw, out_ts = resample_pose_path(
-        np.array([]), np.zeros((0, 2)), np.array([]), np.array([1.0, 2.0]),
+        np.array([]),
+        np.zeros((0, 2)),
+        np.array([]),
+        np.array([1.0, 2.0]),
         timestamps=np.array([]),
     )
     assert out_pos.shape == (2, 2) and (out_pos == 0).all()
@@ -60,7 +63,9 @@ def test_empty_path():
 
 def test_single_point_path():
     out_pos, out_yaw, _ = resample_pose_path(
-        np.array([0.0]), np.array([[4.0, 2.0]]), np.array([0.7]),
+        np.array([0.0]),
+        np.array([[4.0, 2.0]]),
+        np.array([0.7]),
         np.array([0.0, 9.0]),
     )
     np.testing.assert_allclose(out_pos, [[4.0, 2.0], [4.0, 2.0]])

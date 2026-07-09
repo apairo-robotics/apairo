@@ -20,7 +20,7 @@ def test_timeline_is_time_ordered(streams):
     last = -np.inf
     seen = set()
     for sample in ds:
-        assert len(sample.data) == 1     # one event, one channel
+        assert len(sample.data) == 1  # one event, one channel
         assert sample.timestamp >= last
         last = sample.timestamp
         seen.update(sample.data)
@@ -29,7 +29,7 @@ def test_timeline_is_time_ordered(streams):
 
 def test_items_are_passed_through_untouched(streams):
     ds = StreamDataset(streams)
-    assert ds[0].data["lidar"] == "scan0"          # arbitrary Python objects
+    assert ds[0].data["lidar"] == "scan0"  # arbitrary Python objects
     assert ds[1].data["cmd"] == 10
 
 
@@ -37,7 +37,7 @@ def test_synchronize(streams):
     ds = StreamDataset(streams)
     view = ds.synchronize(reference="lidar", method="previous")
     assert view.is_synchronous
-    assert len(view) == 2                          # tick 0.0 has no cmd yet
+    assert len(view) == 2  # tick 0.0 has no cmd yet
     s = view[0]
     assert s.data == {"lidar": "scan1", "cmd": 30}  # latest at t=0.4
     assert view[1].data["cmd"] == 70

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
-from apairo.core import AbstractDataset, ChannelView, CachedDataset
+
+from apairo.core import AbstractDataset, CachedDataset, ChannelView
 from apairo.core.sample import Sample
 
 
@@ -13,11 +14,13 @@ class _DS(AbstractDataset):
         return self._n
 
     def _load(self, idx):
-        return Sample(data={
-            "lidar":         np.full((3, 3), float(idx)),
-            "trav_gt":       np.array([idx % 2]),
-            "ground_height": np.array([idx * 10.0]),
-        })
+        return Sample(
+            data={
+                "lidar": np.full((3, 3), float(idx)),
+                "trav_gt": np.array([idx % 2]),
+                "ground_height": np.array([idx * 10.0]),
+            }
+        )
 
 
 @pytest.fixture
@@ -26,6 +29,7 @@ def ds():
 
 
 # ------------------------------------------------------------------ select
+
 
 def test_select_restricts_keys(ds):
     view = ds.select(["lidar", "trav_gt"])
@@ -63,6 +67,7 @@ def test_select_repr(ds):
 
 # ------------------------------------------------------------------ cache
 
+
 def test_cache_len(ds):
     cached = ds.cache()
     assert isinstance(cached, CachedDataset)
@@ -78,9 +83,9 @@ def test_cache_data_correct(ds):
 def test_cache_no_mutation(ds):
     cached = ds.cache()
     s1 = cached[0]
-    s1.data["lidar"][:] = 999   # mutate the returned sample
-    s2 = cached[0]              # fetch again
-    assert s2.data["lidar"][0, 0] != 999   # cache is not corrupted
+    s1.data["lidar"][:] = 999  # mutate the returned sample
+    s2 = cached[0]  # fetch again
+    assert s2.data["lidar"][0, 0] != 999  # cache is not corrupted
 
 
 def test_cache_after_select(ds):
@@ -92,11 +97,11 @@ def test_cache_after_select(ds):
 
 def test_cache_then_join(ds):
     ds_prior = ds.select(["ground_height"]).cache()
-    ds_base  = _DS()
+    ds_base = _DS()
     ds_base._keys = ["lidar", "trav_gt"]
     combined = ds_base.join(ds_prior)
     sample = combined[0]
-    assert "lidar"         in sample.data
+    assert "lidar" in sample.data
     assert "ground_height" in sample.data
 
 

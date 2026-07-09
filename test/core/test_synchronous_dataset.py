@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
-from pathlib import Path
-from apairo.core.synchronous_dataset import SynchronousDataset
+
 from apairo.core.sample import Sample
+from apairo.core.synchronous_dataset import SynchronousDataset
 
 
 class MockSyncDataset(SynchronousDataset):
@@ -18,6 +20,7 @@ class MockSyncDataset(SynchronousDataset):
             raise IndexError(idx)
         return Sample(data={"lidar": np.zeros((100, 4)), "label": np.zeros(100)})
 
+
 class MockSyncDatasetWithFiles(SynchronousDataset):
     def __init__(self, root: Path, files: dict[str, list[Path]]):
         self._root = root
@@ -29,6 +32,7 @@ class MockSyncDatasetWithFiles(SynchronousDataset):
 
     def _load(self, idx: int) -> Sample:
         return Sample(data={})
+
 
 def test_no_timestamps():
     ds = MockSyncDataset(5)

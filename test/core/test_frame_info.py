@@ -1,6 +1,7 @@
 """Tests for ``frame_info`` / ``frame_sequence_ids`` / ``frame_stems`` -- the
 public per-frame provenance accessor on the asynchronous dataset family.
 """
+
 import numpy as np
 import pytest
 
@@ -28,8 +29,12 @@ def _npy(seq_dir, name, stacked, ts):
 
 def _make_seq(seq_dir, n_lidar):
     # lidar: per-frame (npys); imu: stacked (npy), a different rate -> interleaved.
-    _npys(seq_dir, "lidar", [np.random.rand(4, 3) for _ in range(n_lidar)],
-          np.linspace(0.0, 1.0, n_lidar))
+    _npys(
+        seq_dir,
+        "lidar",
+        [np.random.rand(4, 3) for _ in range(n_lidar)],
+        np.linspace(0.0, 1.0, n_lidar),
+    )
     n_imu = n_lidar + 2
     _npy(seq_dir, "imu", np.random.rand(n_imu, 6), np.linspace(0.05, 0.95, n_imu))
 
@@ -106,10 +111,7 @@ def test_lst_filter_now_works_on_rawdataset(root):
     # The convergence: a (seq, stem) frame filter -- previously impossible on a
     # generic RawDataset (no frame_sequence_ids/frame_stems) -- now applies.
     ds = RawDataset(root)
-    picked = {
-        (ds.frame_sequence_ids[i], ds.frame_stems[i])
-        for i in (0, len(ds) - 1)
-    }
+    picked = {(ds.frame_sequence_ids[i], ds.frame_stems[i]) for i in (0, len(ds) - 1)}
     view = _apply_lst_filter(ds, picked)
     got = {(view.frame_sequence_ids[j], view.frame_stems[j]) for j in range(len(view))}
     assert got == picked

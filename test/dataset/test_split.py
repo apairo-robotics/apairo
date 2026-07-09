@@ -1,4 +1,5 @@
 import pytest
+
 from apairo.dataset import split_sequences
 
 

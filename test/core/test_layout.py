@@ -60,9 +60,7 @@ def test_convention_write_and_scan(layout, tmp_path):
 
 
 def test_image_roundtrip(layout, tmp_path):
-    frames = np.random.default_rng(0).integers(
-        0, 255, (3, 8, 8, 3), dtype=np.uint8
-    )
+    frames = np.random.default_rng(0).integers(0, 255, (3, 8, 8, 3), dtype=np.uint8)
     layout.write(tmp_path, "image", frames)
 
     loader = layout.loader(tmp_path, "image", 3)

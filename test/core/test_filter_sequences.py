@@ -1,4 +1,5 @@
 """Tests for filter_sequences, filter_split, frame_sequence_ids, frame_stems."""
+
 import numpy as np
 import pytest
 
@@ -39,6 +40,7 @@ def ds():
 
 # ---------------------------------------------------------------- filter_sequences
 
+
 def test_filter_sequences_keeps_matching_frames(ds):
     view = ds.filter_sequences(["seq0", "seq1"])
     assert len(view) == 4
@@ -72,8 +74,11 @@ def test_filter_sequences_on_channel_view(ds):
 
 def test_filter_sequences_no_frame_sequence_ids_raises():
     class _Plain(AbstractDataset):
-        def __len__(self): return 2
-        def _load(self, idx): return Sample(data={"x": np.array([idx])})
+        def __len__(self):
+            return 2
+
+        def _load(self, idx):
+            return Sample(data={"x": np.array([idx])})
 
     plain = _Plain()
     plain._keys = ["x"]
@@ -82,6 +87,7 @@ def test_filter_sequences_no_frame_sequence_ids_raises():
 
 
 # ---------------------------------------------------------------- frame_sequence_ids delegation
+
 
 def test_filtered_view_frame_sequence_ids(ds):
     view = ds.filter([0, 2, 4])
@@ -104,15 +110,17 @@ def test_channel_view_delegates_frame_stems(ds):
 
 
 def test_double_filtered_view_frame_sequence_ids(ds):
-    inner = ds.filter([0, 1, 2, 3])   # seq0, seq0, seq1, seq1
-    outer = inner.filter([1, 3])       # local 1→global 1 (seq0), local 3→global 3 (seq1)
+    inner = ds.filter([0, 1, 2, 3])  # seq0, seq0, seq1, seq1
+    outer = inner.filter([1, 3])  # local 1→global 1 (seq0), local 3→global 3 (seq1)
     np.testing.assert_array_equal(outer.frame_sequence_ids, ["seq0", "seq1"])
 
 
 # ---------------------------------------------------------------- CachedDataset.cache() warning
 
+
 def test_cache_on_cached_logs_warning(ds, caplog):
     import logging
+
     cached = ds.cache()
     with caplog.at_level(logging.WARNING, logger="apairo.core.cached_dataset"):
         cached2 = cached.cache()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from typing import List, Optional
 
 import numpy as np
 
@@ -30,14 +29,12 @@ class NPYSLoader(AbstractLoader):
             Frame-ordered file names resolved by the dataset.
     """
 
-    def __init__(self, directory, files: Optional[List[str]] = None):
+    def __init__(self, directory, files: list[str] | None = None):
         self.directory = directory
         if files is not None:
             self.files = list(files)
         else:
-            self.files = sorted(
-                f for f in os.listdir(directory) if is_frame_file(f)
-            )
+            self.files = sorted(f for f in os.listdir(directory) if is_frame_file(f))
         if not self.files:
             raise FileNotFoundError(f"No .npy frames found in {directory}")
         self._shape = np.load(os.path.join(self.directory, self.files[0])).shape

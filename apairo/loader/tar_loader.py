@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import tarfile
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+
 import numpy as np
 
 from apairo.core.abstract_loader import AbstractLoader
@@ -32,12 +34,12 @@ class TarImageLoader(AbstractLoader):
         self,
         tar_path: str | Path,
         n_frames: int,
-        name_to_index: Callable[[str], Optional[int]],
+        name_to_index: Callable[[str], int | None],
     ) -> None:
         self._tar_path = str(Path(tar_path))
         self._n_frames = n_frames
         self._name_to_index = name_to_index
-        self._index: Optional[dict[int, str]] = None
+        self._index: dict[int, str] | None = None
 
     def _ensure_index(self) -> dict[int, str]:
         if self._index is None:
@@ -55,7 +57,7 @@ class TarImageLoader(AbstractLoader):
     def __len__(self) -> int:
         return self._n_frames
 
-    def member_name(self, idx: int) -> Optional[str]:
+    def member_name(self, idx: int) -> str | None:
         """Tar member name for frame *idx*, or ``None`` if absent.
 
         Useful for byte-level copies (re-packing frames without a decode /
@@ -66,9 +68,7 @@ class TarImageLoader(AbstractLoader):
     def __getitem__(self, idx: int) -> np.ndarray:
         member_name = self._ensure_index().get(int(idx))
         if member_name is None:
-            raise FileNotFoundError(
-                f"Image index {idx} not found in {self._tar_path}"
-            )
+            raise FileNotFoundError(f"Image index {idx} not found in {self._tar_path}")
         with tarfile.open(self._tar_path, mode="r") as tf:
             fobj = tf.extractfile(member_name)
             if fobj is None:
@@ -81,11 +81,11 @@ class TarImageLoader(AbstractLoader):
     def _decode(data: bytes) -> np.ndarray:
         try:
             from PIL import Image
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "Pillow is required for TarImageLoader. "
                 "Install with: pip install Pillow"
-            )
+            ) from exc
         img = Image.open(BytesIO(data))
         if img.mode in ("P", "CMYK", "YCbCr", "I", "F"):
             img = img.convert("RGB")
@@ -95,5 +95,5 @@ class TarImageLoader(AbstractLoader):
         return arr
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         return (0, 0, 3)

@@ -1,4 +1,5 @@
 """Tests for the ``apairo`` CLI (init + status)."""
+
 import json
 
 import numpy as np
@@ -34,6 +35,7 @@ def _run(argv) -> int:
 
 
 # ── init ─────────────────────────────────────────────────────────────────────
+
 
 def test_init_root_writes_sidecars(raw_root):
     assert _run(["init", str(raw_root), "--name", "ds"]) == 0
@@ -73,6 +75,7 @@ def test_init_not_a_directory(tmp_path):
 
 
 # ── status ───────────────────────────────────────────────────────────────────
+
 
 def test_status_before_init_lists_untracked(raw_root, capsys):
     code = _run(["status", str(raw_root)])
@@ -132,7 +135,10 @@ def test_status_heterogeneous_root_reports_coverage(raw_root, capsys):
     assert sorted(data["common"]) == ["imu", "lidar"]  # in every sequence
     assert "trav" not in data["common"]
     assert data["exceptional"]["trav"] == {
-        "kind": "raw", "loader": "npys", "seqs": ["seq_a"], "coverage": "1/2",
+        "kind": "raw",
+        "loader": "npys",
+        "seqs": ["seq_a"],
+        "coverage": "1/2",
     }
     assert data["missing"] == {"seq_a": [], "seq_b": ["trav"]}
 
@@ -154,6 +160,7 @@ def test_status_not_a_dataset(tmp_path):
 
 
 # ── check ─────────────────────────────────────────────────────────────────────
+
 
 def test_check_clean_root(raw_root, capsys):
     _run(["init", str(raw_root)])
@@ -215,11 +222,11 @@ def test_status_profiled_dispatches_through_profile(rellis_root, capsys):
     capsys.readouterr()
     _run(["status", str(rellis_root), "--json"])
     data = json.loads(capsys.readouterr().out)
-    assert data["class"] == "Rellis3DDataset"        # recognized, not generic
+    assert data["class"] == "Rellis3DDataset"  # recognized, not generic
     assert data["kind"] == "root"
-    assert data["sequences"] == ["00000", "00001"]   # sequences are visible
-    assert data["raw"] == {"lidar": "bin"}           # canonical names, real loader
-    assert data["events"] == 6                        # 2 seqs x 3 frames
+    assert data["sequences"] == ["00000", "00001"]  # sequences are visible
+    assert data["raw"] == {"lidar": "bin"}  # canonical names, real loader
+    assert data["events"] == 6  # 2 seqs x 3 frames
     # no generic false-positives ("directory not found", "unknown loader txt_rows");
     # only the genuinely-missing required channel is reported.
     assert data["issues"] == [
@@ -247,7 +254,9 @@ def test_status_profiled_sequence_by_id(rellis_root, capsys):
     assert data["class"] == "Rellis3DDataset"
     assert data["name"] == "00000"
     assert data["channels"]["lidar"]["loader"] == "bin"
-    assert data["channels"]["lidar"]["frames"] == 3   # per-frame census of the resolved dir
+    assert (
+        data["channels"]["lidar"]["frames"] == 3
+    )  # per-frame census of the resolved dir
     assert data["events"] == 3
 
 
@@ -277,10 +286,11 @@ def test_status_generic_sequence_by_id(raw_root, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["kind"] == "sequence"
     assert data["name"] == "seq_a"
-    assert data["events"] == 8   # same as `status raw_root/seq_a`
+    assert data["events"] == 8  # same as `status raw_root/seq_a`
 
 
 # ── ecosystem dispatch (apairo <tool>) ────────────────────────────────────────
+
 
 class _FakeEntryPoint:
     def __init__(self, fn):
@@ -295,8 +305,13 @@ def test_dispatches_to_ecosystem_plugin(monkeypatch):
 
     captured = {}
     monkeypatch.setattr(
-        cli, "_discover_plugins",
-        lambda: {"extractor": _FakeEntryPoint(lambda argv: captured.setdefault("argv", argv) or 0)},
+        cli,
+        "_discover_plugins",
+        lambda: {
+            "extractor": _FakeEntryPoint(
+                lambda argv: captured.setdefault("argv", argv) or 0
+            )
+        },
     )
     with pytest.raises(SystemExit) as exc:
         cli.main(["extractor", "-i", "bags", "-o", "out"])
@@ -308,7 +323,8 @@ def test_builtins_win_over_plugins(monkeypatch, raw_root):
     import apairo.cli as cli
 
     monkeypatch.setattr(
-        cli, "_discover_plugins",
+        cli,
+        "_discover_plugins",
         lambda: {"extractor": _FakeEntryPoint(lambda argv: 1)},
     )
     # 'init' is a built-in -> handled by apairo, not dispatched as a plugin
@@ -322,12 +338,12 @@ def test_status_sequence_per_channel_json(raw_root, capsys):
     ch = json.loads(capsys.readouterr().out)["channels"]
     assert ch["lidar"]["frames"] == 3
     assert ch["lidar"]["loader"] == "npys"
-    assert ch["lidar"]["shape"] == [4, 3]          # per-frame shape (mmap header)
+    assert ch["lidar"]["shape"] == [4, 3]  # per-frame shape (mmap header)
     assert ch["lidar"]["dtype"].startswith("float")
-    assert ch["lidar"]["rate_hz"] == pytest.approx(2.0)   # (3-1)/(1-0)
+    assert ch["lidar"]["rate_hz"] == pytest.approx(2.0)  # (3-1)/(1-0)
     assert ch["imu"]["frames"] == 5
     assert ch["imu"]["loader"] == "npy"
-    assert ch["imu"]["shape"] == [6]               # stacked (5, 6) -> per-frame (6,)
+    assert ch["imu"]["shape"] == [6]  # stacked (5, 6) -> per-frame (6,)
     assert ch["imu"]["rate_hz"] == pytest.approx(4.0)
 
 
@@ -337,8 +353,8 @@ def test_status_sequence_table_text(raw_root, capsys):
     _run(["status", str(raw_root / "seq_a")])
     out = capsys.readouterr().out
     assert "rate" in out and "shape" in out
-    assert "2.0 Hz" in out       # lidar rate
-    assert "(4, 3)" in out       # lidar shape
+    assert "2.0 Hz" in out  # lidar rate
+    assert "(4, 3)" in out  # lidar shape
 
 
 def test_status_span_is_relative_to_earliest(tmp_path, capsys):
@@ -355,9 +371,9 @@ def test_status_span_is_relative_to_earliest(tmp_path, capsys):
 
     _run(["status", str(seq)])
     out = capsys.readouterr().out
-    assert f"start       {base:.2f}s" in out   # absolute reference shown once
-    assert "0.00-2.00s" in out                 # channel a, relative
-    assert "0.50-2.50s" in out                 # channel b, relative offset preserved
+    assert f"start       {base:.2f}s" in out  # absolute reference shown once
+    assert "0.00-2.00s" in out  # channel a, relative
+    assert "0.50-2.50s" in out  # channel b, relative offset preserved
 
     _run(["status", str(seq), "--json"])
     data = json.loads(capsys.readouterr().out)
@@ -393,7 +409,9 @@ def test_status_shows_transform_edge(raw_root, capsys):
     np.save(edge / "odom__base_link.npy", np.zeros((4, 7)))
     np.savetxt(edge / "timestamps.txt", np.linspace(0, 1, 4))
     register_raw_channel(
-        raw_root / "seq_a", "odom__base_link", "npy",
+        raw_root / "seq_a",
+        "odom__base_link",
+        "npy",
         transform={"parent": "odom", "child": "base_link"},
     )
     capsys.readouterr()
@@ -401,7 +419,8 @@ def test_status_shows_transform_edge(raw_root, capsys):
     _run(["status", str(raw_root / "seq_a"), "--json"])
     data = json.loads(capsys.readouterr().out)
     assert data["channels"]["odom__base_link"]["transform"] == {
-        "parent": "odom", "child": "base_link",
+        "parent": "odom",
+        "child": "base_link",
     }
 
     # tf is hidden by default -- the transform channel and its edge are not shown
@@ -467,6 +486,7 @@ def test_status_untracked_channel_detail(raw_root, capsys):
 
 # ── channel aliases (apairo alias) ────────────────────────────────────────────
 
+
 def test_alias_command_is_root_aware(raw_root):
     from apairo.core.config import read_config
 
@@ -521,20 +541,21 @@ def test_status_shows_alias_root_and_sequence(raw_root, capsys):
 
     _run(["status", str(raw_root)])
     out = capsys.readouterr().out
-    assert "aliases" in out and "lidar as points" in out   # root summary line
+    assert "aliases" in out and "lidar as points" in out  # root summary line
 
     capsys.readouterr()
     _run(["status", str(raw_root), "-s", "seq_a"])
     out = capsys.readouterr().out
-    assert "points (lidar)" in out                          # alias-first in the table
+    assert "points (lidar)" in out  # alias-first in the table
 
     capsys.readouterr()
     _run(["status", str(raw_root / "seq_a"), "--json"])
     data = json.loads(capsys.readouterr().out)
-    assert data["channels"]["lidar"]["alias"] == "points"   # json keyed by real name
+    assert data["channels"]["lidar"]["alias"] == "points"  # json keyed by real name
 
 
 # ── channel remove (apairo channel remove) ────────────────────────────────────
+
 
 def test_channel_remove_is_root_aware(raw_root):
     _run(["init", str(raw_root)])
@@ -542,15 +563,17 @@ def test_channel_remove_is_root_aware(raw_root):
     assert _run(["channel", "remove", "imu", "--path", str(raw_root), "--yes"]) == 0
     for s in ("seq_a", "seq_b"):
         assert "imu" not in read_config(raw_root / s)["channels"]
-        assert (raw_root / s / "imu").is_dir()              # data kept by default
+        assert (raw_root / s / "imu").is_dir()  # data kept by default
 
 
 def test_channel_remove_purge_deletes_data(raw_root):
     _run(["init", str(raw_root)])
-    assert _run(["channel", "remove", "imu", "--path", str(raw_root),
-                 "--purge", "--yes"]) == 0
+    assert (
+        _run(["channel", "remove", "imu", "--path", str(raw_root), "--purge", "--yes"])
+        == 0
+    )
     for s in ("seq_a", "seq_b"):
-        assert not (raw_root / s / "imu").exists()          # data gone
+        assert not (raw_root / s / "imu").exists()  # data gone
 
 
 def test_channel_remove_raw_aborts_without_confirmation(raw_root, monkeypatch):
@@ -571,8 +594,9 @@ def test_channel_remove_warns_on_dependents(raw_root, capsys):
 
     _run(["init", str(raw_root)])
     for s in ("seq_a", "seq_b"):
-        register_channel(raw_root / s, "labels", "npys",
-                         timestamps_from="lidar", sources=["lidar"])
+        register_channel(
+            raw_root / s, "labels", "npys", timestamps_from="lidar", sources=["lidar"]
+        )
     capsys.readouterr()
     _run(["channel", "remove", "lidar", "--path", str(raw_root), "--yes"])
     err = capsys.readouterr().err
@@ -586,7 +610,19 @@ def test_channel_remove_profiled_purge_cascades(rellis_root):
     seq_dirs = sorted((rellis_root / "Rellis-3D").glob("*/os1_cloud_node_kitti_bin"))
     assert len(seq_dirs) == 2
 
-    assert _run(["channel", "remove", "lidar", "--path", str(rellis_root),
-                 "--purge", "--yes"]) == 0
+    assert (
+        _run(
+            [
+                "channel",
+                "remove",
+                "lidar",
+                "--path",
+                str(rellis_root),
+                "--purge",
+                "--yes",
+            ]
+        )
+        == 0
+    )
     assert "lidar" not in read_config(rellis_root)["channels"]
     assert not any(d.exists() for d in seq_dirs)
