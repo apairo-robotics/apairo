@@ -113,11 +113,29 @@ print(ds._pipeline[-1])  # Compose([RangeFilter, Normalize])
 | **Scope** | Per-instance. Transforms on `ds` do not affect another instance at the same path. |
 | **`output`** | Publishes result as a new channel; source channel unchanged. |
 | **`keep=False`** | Removes an `output` channel from the final sample after the full pipeline runs. |
+| **`in_place=False`** | Registers the transform on an independent branch instead of `self`. |
 
-!!! warning "Transforms register in place"
+!!! warning "Transforms register in place by default"
     `transform()` mutates the dataset and returns the **same object** for
     chaining. `v1 = ds.transform(a)` then `v2 = ds.transform(b)` leaves
     `v1 is v2 is ds` with *both* transforms stacked. To build independent
-    variants from one dataset, branch first — e.g. via `ds.filter(...)`,
-    `ds.select(ds.keys)`, or separate instances — and register transforms on
-    each branch.
+    variants from one dataset, pass `in_place=False`.
+
+## Branching — `in_place=False`
+
+`transform(..., in_place=False)` leaves the dataset untouched and returns an
+independent branch: a lightweight copy that shares loaders and indices (no
+data is duplicated) but owns its pipeline. Transforms already registered are
+inherited by the branch.
+
+```python
+base = Rellis3DDataset(root, keys=["lidar", "labels"])
+
+v1 = base.transform(augment_v1, in_place=False)
+v2 = base.transform(augment_v2, in_place=False)   # independent of v1
+
+base[0]   # raw — base has no transforms
+```
+
+Use the default (in place) to build one pipeline step by step; use
+`in_place=False` at the point where pipelines diverge.

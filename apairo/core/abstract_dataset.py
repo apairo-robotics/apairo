@@ -1,15 +1,21 @@
+import copy
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Callable, ClassVar, Dict, FrozenSet, NamedTuple, Optional
+from collections.abc import Callable
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    NamedTuple,
+)
+
 import numpy as np
 
 if TYPE_CHECKING:
     from apairo.core.synchronized_view import ChannelStrategy
 from . import abstract_loader
-
-from .utils.typing import _Key
-from .utils.exceptions import KeysEmptyError, KeysDuplicateError
-from .sample import Sample
 from .config import Calibration, read_calibration
+from .sample import Sample
+from .utils.exceptions import KeysDuplicateError, KeysEmptyError
+from .utils.typing import _Key
 
 
 class FrameRef(NamedTuple):
@@ -27,9 +33,47 @@ class FrameRef(NamedTuple):
             synchronous frame, which is *all* channels at the same row.
         row: Frame index within that channel/sequence.
     """
-    sequence: Optional[str]
-    channel: Optional[str]
+
+    sequence: str | None
+    channel: str | None
     row: int
+
+
+class _ChannelStep:
+    """Pipeline step for ``transform(key, fn)`` -- module-level (not a closure)
+    so a transformed dataset stays picklable for spawn-based DataLoader workers."""
+
+    __slots__ = ("key", "fn", "output")
+
+    def __init__(self, key: str, fn: Callable, output: str | None) -> None:
+        self.key, self.fn, self.output = key, fn, output
+
+    def __call__(self, sample: Sample) -> Sample:
+        if self.key in sample.data:
+            result = self.fn(sample.data[self.key])
+            sample.data[self.output if self.output is not None else self.key] = result
+        return sample
+
+
+class _PreprocessorStep:
+    """Pipeline step for ``transform(preprocessor)`` -- lazy preview publishing
+    the result under *output*. Module-level for picklability, like _ChannelStep."""
+
+    __slots__ = ("preprocessor", "output")
+
+    def __init__(self, preprocessor, output: str) -> None:
+        self.preprocessor, self.output = preprocessor, output
+
+    def __call__(self, sample: Sample) -> Sample:
+        missing = [k for k in self.preprocessor.input_keys if k not in sample.data]
+        if missing:
+            raise KeyError(
+                f"{type(self.preprocessor).__name__} needs input channels "
+                f"{missing} absent from the sample (available: "
+                f"{sorted(sample.data)})."
+            )
+        sample.data[self.output] = self.preprocessor(sample)
+        return sample
 
 
 class AbstractDataset(ABC):
@@ -49,13 +93,13 @@ class AbstractDataset(ABC):
         calibration: Sensor extrinsics -- see :attr:`calibration`.
     """
 
-    available_keys: ClassVar[FrozenSet[str]] = frozenset()
+    available_keys: ClassVar[frozenset[str]] = frozenset()
     """Channels this dataset type can provide.  Override in each concrete class."""
 
     timestamps: dict | None
-    loaders: Dict[_Key, abstract_loader.AbstractLoader]
+    loaders: dict[_Key, abstract_loader.AbstractLoader]
     synchronous: bool
-    profile: Optional[Dict[_Key, str]]
+    profile: dict[_Key, str] | None
 
     def _set_keys(self, keys: list[_Key]) -> None:
         if len(keys) == 0:
@@ -103,6 +147,7 @@ class AbstractDataset(ABC):
         fn: Callable | None = None,
         output: str | None = None,
         keep: bool = True,
+        in_place: bool = True,
     ) -> "AbstractDataset":
         """Register a transform in the pipeline, applied at access time.
 
@@ -155,12 +200,23 @@ class AbstractDataset(ABC):
         All forms compose in registration order and return ``self`` for
         chaining.
 
+        **Branching** -- ``transform(..., in_place=False)``
+
+        Pass ``in_place=False`` to leave ``self`` untouched and register the
+        transform on an independent branch instead: a lightweight copy sharing
+        loaders and indices but owning its pipeline (transforms already
+        registered on ``self`` are inherited)::
+
+            base = Rellis3DDataset(root, keys=["lidar"])
+            v1 = base.transform(augment_v1, in_place=False)
+            v2 = base.transform(augment_v2, in_place=False)   # independent
+
         .. warning::
-            Transforms are registered **in place**: the return value is the
-            same object, so ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
-            leave ``v1 is v2 is ds`` with *both* transforms stacked.  To build
-            independent variants, branch first (e.g. ``ds.filter(...)`` or
-            ``ds.select(ds.keys)``) and register transforms on each branch.
+            By default transforms are registered **in place**: the return value
+            is the same object, so ``v1 = ds.transform(a)`` and
+            ``v2 = ds.transform(b)`` leave ``v1 is v2 is ds`` with *both*
+            transforms stacked.  To build independent variants, pass
+            ``in_place=False`` (or branch first, e.g. ``ds.filter(...)``).
         """
         drop_key = output
         if fn is None:
@@ -184,17 +240,7 @@ class AbstractDataset(ABC):
             if isinstance(key_or_fn, FramePreprocessor):
                 out = output if output is not None else key_or_fn.output_key
                 drop_key = out
-
-                def step(sample: Sample, _p=key_or_fn, _out=out) -> Sample:
-                    missing = [k for k in _p.input_keys if k not in sample.data]
-                    if missing:
-                        raise KeyError(
-                            f"{type(_p).__name__} needs input channels "
-                            f"{missing} absent from the sample (available: "
-                            f"{sorted(sample.data)})."
-                        )
-                    sample.data[_out] = _p(sample)
-                    return sample
+                step = _PreprocessorStep(key_or_fn, out)
             elif not callable(key_or_fn):
                 raise TypeError(
                     f"transform(fn) expects a callable sample->sample or a "
@@ -210,22 +256,28 @@ class AbstractDataset(ABC):
                     f"transform(key, fn) expects a channel name then a callable; "
                     f"got transform({key_or_fn!r}, {fn!r}). Arguments reversed?"
                 )
-            def step(sample: Sample, _key=key, _fn=fn, _out=output) -> Sample:
-                if _key in sample.data:
-                    result = _fn(sample.data[_key])
-                    sample.data[_out if _out is not None else _key] = result
-                return sample
+            step = _ChannelStep(key, fn, output)
 
-        if not hasattr(self, "_pipeline"):
-            self._pipeline: list[Callable] = []
-        self._pipeline.append(step)
+        target = self if in_place else self._branch()
+
+        if not hasattr(target, "_pipeline"):
+            target._pipeline: list[Callable] = []
+        target._pipeline.append(step)
 
         if drop_key is not None and not keep:
-            if not hasattr(self, "_drop_keys"):
-                self._drop_keys: set[str] = set()
-            self._drop_keys.add(drop_key)
+            if not hasattr(target, "_drop_keys"):
+                target._drop_keys: set[str] = set()
+            target._drop_keys.add(drop_key)
 
-        return self
+        return target
+
+    def _branch(self) -> "AbstractDataset":
+        """Independent branch of this dataset: a shallow copy sharing loaders
+        and indices but owning its transform pipeline."""
+        clone = copy.copy(self)
+        clone._pipeline = list(getattr(self, "_pipeline", []))
+        clone._drop_keys = set(getattr(self, "_drop_keys", set()))
+        return clone
 
     def _apply_transforms(self, sample: Sample) -> Sample:
         for fn in getattr(self, "_pipeline", []):
@@ -247,6 +299,7 @@ class AbstractDataset(ABC):
             :class:`~apairo.core.channel_view.ChannelView`
         """
         from apairo.core.channel_view import ChannelView
+
         return ChannelView(self, keys)
 
     def cache(self) -> "AbstractDataset":
@@ -266,6 +319,7 @@ class AbstractDataset(ABC):
             :class:`~apairo.core.cached_dataset.CachedDataset`
         """
         from apairo.core.cached_dataset import CachedDataset
+
         return CachedDataset(self)
 
     def concat(self, *others: "AbstractDataset") -> "AbstractDataset":
@@ -284,6 +338,7 @@ class AbstractDataset(ABC):
             :class:`~apairo.dataset.concat.ConcatDataset`
         """
         from apairo.dataset.concat import ConcatDataset
+
         return ConcatDataset([self, *others])
 
     def repeat(self, n: int) -> "AbstractDataset":
@@ -302,11 +357,14 @@ class AbstractDataset(ABC):
             :class:`~apairo.dataset.concat.ConcatDataset`
         """
         from apairo.dataset.concat import ConcatDataset
+
         if not isinstance(n, int) or n < 1:
             raise ValueError(f"n must be a positive integer, got {n!r}")
         return ConcatDataset([self] * n)
 
-    def join(self, *others: "AbstractDataset", on_collision: str = "raise") -> "AbstractDataset":
+    def join(
+        self, *others: "AbstractDataset", on_collision: str = "raise"
+    ) -> "AbstractDataset":
         """Merge channels from this dataset and *others* into a single dataset.
 
         Sugar for ``ZipDataset(self, *others)``.  All datasets must have the
@@ -324,6 +382,7 @@ class AbstractDataset(ABC):
             :class:`~apairo.dataset.zip.ZipDataset`
         """
         from apairo.dataset.zip import ZipDataset
+
         return ZipDataset(self, *others, on_collision=on_collision)
 
     def filter_sequences(self, seq_ids) -> "AbstractDataset":
@@ -445,12 +504,13 @@ class AbstractDataset(ABC):
             :class:`~apairo.core.window_view.WindowView`
         """
         from apairo.core.window_view import WindowView
+
         return WindowView(self, size, stride, reduce, boundary)
 
     def synchronize(
         self,
         reference: "str | np.ndarray | None" = None,
-        method: "ChannelStrategy | Dict[str, ChannelStrategy]" = "previous",
+        method: "ChannelStrategy | dict[str, ChannelStrategy]" = "previous",
         tolerance: float | None = None,
     ) -> "AbstractDataset":
         """Resample this asynchronous dataset onto a single reference clock.
@@ -508,6 +568,7 @@ class AbstractDataset(ABC):
             :class:`~apairo.core.synchronized_view.SynchronizedView`
         """
         from apairo.core.synchronized_view import SynchronizedView
+
         return SynchronizedView(
             self, reference=reference, method=method, tolerance=tolerance
         )
