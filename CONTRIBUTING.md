@@ -94,7 +94,12 @@ git clone https://github.com/apairo-robotics/apairo && cd apairo
 make env && source .venv/bin/activate
 make install        # pip install -e ".[dev]"
 make test           # pytest — must stay green
+make lint           # ruff check + format check — must stay clean
 ```
+
+`make typecheck` runs mypy. It is not a CI gate yet: the codebase carries a
+known baseline of errors (mostly mixin attributes typed on sibling classes).
+Don't add new ones; the gate lands once the baseline reaches zero.
 
 - Tests live in `test/`, mirroring the package layout. Synthetic data is
   built per-test in `tmp_path`; real-data smoke fixtures live in

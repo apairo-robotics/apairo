@@ -18,14 +18,17 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Intended Audience :: Science/Research",
+    "Typing :: Typed",
 ]
 
 dependencies = [
-    "numpy",
-    "PyYAML",
+    "numpy>=1.26",
+    "PyYAML>=6.0",
 ]
 
 [project.scripts]
@@ -40,7 +43,15 @@ Issues = "https://github.com/apairo-robotics/apairo/issues"
 vision = ["Pillow"]
 zarr = ["zarr>=3.0"]
 bench = ["matplotlib"]
-dev = ["pytest", "Pillow", "zarr>=3.0", "ruff"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "Pillow",
+    "zarr>=3.0",
+    "ruff==0.15.20",
+    "mypy",
+    "types-PyYAML",
+]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
@@ -50,13 +61,6 @@ docs = [
 [tool.pytest.ini_options]
 testpaths = ["test"]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["apairo*"]
-
-[tool.setuptools.package-data]
-apairo = ["dataset/**/*.yaml", "core/config/*.yaml"]
-
 [tool.ruff]
 target-version = "py311"
 
@@ -64,3 +68,16 @@ target-version = "py311"
 # Defaults (E4/E7/E9/F) plus import sorting (I), modern syntax (UP) and
 # bugbear's likely-bug patterns (B).
 select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.mypy]
+# Not a CI gate yet: `make typecheck` tracks the baseline (see CONTRIBUTING).
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apairo*"]
+
+[tool.setuptools.package-data]
+apairo = ["dataset/**/*.yaml", "core/config/*.yaml", "py.typed"]

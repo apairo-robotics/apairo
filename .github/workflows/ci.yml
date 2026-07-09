@@ -20,17 +20,27 @@ jobs:
       # Pinned to the ruff version in .pre-commit-config.yaml so CI and the
       # local hook agree on the rule set.
       - name: Install ruff
-        run: pip install ruff==0.4.4
+        run: pip install ruff==0.15.20
 
       - name: Lint
         run: ruff check apairo test
 
+      - name: Format
+        run: ruff format --check apairo test benchmarks examples
+
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +51,43 @@ jobs:
 
       - name: Install
         run: pip install -e ".[dev]"
+
+      - name: Test
+        run: pytest --cov=apairo --cov-report=term --cov-fail-under=85
+
+  soak:
+    # Synthetic intensive-usage session (benchmarks/soak.py) at CI scale:
+    # every step asserts an API contract end to end.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Soak
+        run: python benchmarks/soak.py --sequences 2 --frames 80 --epochs 2
+
+  test-numpy-floor:
+    # The declared dependency floor (pyproject) on the lowest Python.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          pip install -e ".[dev]"
+          pip install "numpy==1.26.*"
 
       - name: Test
         run: pytest
