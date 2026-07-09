@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -43,8 +44,14 @@ _MANIFEST_FIELDS: frozenset[str] = frozenset(
     {"version", "class", "name", "sequences", "channels"}
 )
 
-_CALIBRATION_TOP_FIELDS: frozenset[str] = frozenset({"version", "transforms"})
+_CALIBRATION_TOP_FIELDS: frozenset[str] = frozenset(
+    {"version", "transforms", "cameras"}
+)
 _CALIBRATION_TRANSFORM_FIELDS: frozenset[str] = frozenset({"parent", "child", "matrix"})
+# Field names mirror ROS CameraInfo -- the canonical source of intrinsics.
+_CALIBRATION_CAMERA_FIELDS: frozenset[str] = frozenset(
+    {"K", "D", "distortion_model", "width", "height", "R", "P"}
+)
 
 
 def _unknown(present, known: frozenset[str], where: str) -> list[str]:
@@ -429,18 +436,73 @@ def _invert_rigid(T: np.ndarray) -> np.ndarray:
     return out
 
 
-class Calibration(dict):
-    """A dataset's static extrinsics: ``{"<parent>_to_<child>": (4,4) float64}``.
+@dataclass(frozen=True, eq=False)
+class CameraIntrinsics:
+    """A camera's intrinsic parameters, mirroring ROS ``CameraInfo``.
 
-    A plain ``dict`` (``cal["lidar_to_base"]`` and iteration work) that can also
-    *resolve* the transform between any two connected frames -- the one canonical
-    operation a static-transform graph supports. It resolves; applying the matrix
-    to data is the caller's job (e.g. ``apairo_transform.ApplyMatrix``), since that
-    depends on what the data is (points, poses, normals...).
+    apairo **stores and exposes** intrinsics (static rig config, like the
+    extrinsics); *applying* them -- projection, undistortion -- depends on the
+    distortion model and stays in ``apairo_transform``, the same split as
+    :meth:`Calibration.get_tf` vs ``ApplyMatrix``.
+
+    Attributes:
+        K: ``(3, 3)`` float64 camera matrix.
+        distortion: ``(N,)`` float64 distortion coefficients (``D``); empty for
+            an already-rectified image.
+        model: Distortion model (``distortion_model``), e.g. ``"plumb_bob"``.
+        width: Image width in pixels, if recorded.
+        height: Image height in pixels, if recorded.
+        R: ``(3, 3)`` rectification matrix, for stereo-rectified rigs.
+        P: ``(3, 4)`` projection matrix, for stereo-rectified rigs.
+    """
+
+    K: np.ndarray
+    distortion: np.ndarray = field(default_factory=lambda: np.empty(0))
+    model: str = "plumb_bob"
+    width: int | None = None
+    height: int | None = None
+    R: np.ndarray | None = None
+    P: np.ndarray | None = None
+
+
+class Calibration(dict):
+    """A dataset's static rig configuration: extrinsics, plus camera intrinsics.
+
+    A plain ``dict`` of extrinsics ``{"<parent>_to_<child>": (4,4) float64}``
+    (``cal["lidar_to_base"]`` and iteration work) that can also *resolve* the
+    transform between any two connected frames -- the one canonical operation a
+    static-transform graph supports. It resolves; applying the matrix to data is
+    the caller's job (e.g. ``apairo_transform.ApplyMatrix``), since that depends
+    on what the data is (points, poses, normals...).
 
     Each edge ``"<parent>_to_<child>"`` is ``T_parent_from_child`` (ROS ``/tf``):
     it maps a point in *child* coordinates into *parent*.
+
+    Camera intrinsics live on :attr:`cameras` -- ``{frame:
+    :class:`CameraIntrinsics`}``, keyed by the camera's coordinate frame (the
+    ``frame_id`` of its ``CameraInfo``; channels point to it via their
+    ``frame`` field in ``channels.yaml``). Resolve one with
+    :meth:`get_intrinsics`.
     """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.cameras: dict[str, CameraIntrinsics] = {}
+
+    def get_intrinsics(self, camera: str) -> CameraIntrinsics:
+        """The :class:`CameraIntrinsics` recorded for *camera* (a frame name).
+
+        Raises:
+            KeyError: if no intrinsics are recorded for *camera* (the message
+                lists the cameras that are).
+        """
+        try:
+            return self.cameras[camera]
+        except KeyError:
+            raise KeyError(
+                f"No intrinsics recorded for camera {camera!r}. "
+                f"Available: {sorted(self.cameras)}"
+            ) from None
 
     def get_tf(self, source: str, target: str) -> np.ndarray:
         """``T_target_from_source`` -- ``p_target = get_tf(source, target) @ p_source``.
@@ -493,6 +555,22 @@ def read_calibration(root_dir: str | Path) -> Calibration:
     for key, entry in (data.get("transforms") or {}).items():
         matrix = entry["matrix"] if isinstance(entry, dict) else entry
         out[key] = np.asarray(matrix, dtype=np.float64)
+    for name, entry in (data.get("cameras") or {}).items():
+        if not isinstance(entry, dict) or "K" not in entry:
+            continue  # verify_calibration reports the malformed entry
+        out.cameras[name] = CameraIntrinsics(
+            K=np.asarray(entry["K"], dtype=np.float64),
+            distortion=np.asarray(entry.get("D") or [], dtype=np.float64),
+            model=entry.get("distortion_model", "plumb_bob"),
+            width=entry.get("width"),
+            height=entry.get("height"),
+            R=None
+            if entry.get("R") is None
+            else np.asarray(entry["R"], dtype=np.float64),
+            P=None
+            if entry.get("P") is None
+            else np.asarray(entry["P"], dtype=np.float64),
+        )
     return out
 
 
@@ -525,14 +603,70 @@ def register_static_transform(
         "child": child,
         "matrix": np.asarray(matrix, dtype=float).tolist(),
     }
+    data.update(version=1, transforms=transforms)
     (root_dir / CONFIG_DIR).mkdir(exist_ok=True)
     with open(path, "w") as f:
-        yaml.dump(
-            {"version": 1, "transforms": transforms},
-            f,
-            default_flow_style=False,
-            sort_keys=True,
-        )
+        yaml.dump(data, f, default_flow_style=False, sort_keys=True)
+
+
+def register_intrinsics(
+    root_dir: str | Path,
+    camera: str,
+    *,
+    K,
+    distortion=None,
+    model: str = "plumb_bob",
+    width: int | None = None,
+    height: int | None = None,
+    R=None,
+    P=None,
+) -> None:
+    """Record a camera's intrinsics in ``.apairo/calibration.yaml``.
+
+    Intrinsics are static rig configuration, like the extrinsics -- one entry
+    per physical camera, keyed by its coordinate frame (the ``frame_id`` of its
+    ``CameraInfo``; image channels point to it via their ``frame`` field in
+    ``channels.yaml``). Field names on disk mirror ``CameraInfo`` (``K``,
+    ``D``, ``distortion_model``, ``width``, ``height``, ``R``, ``P``), so an
+    extractor can write them near-verbatim. Existing entries are preserved.
+
+    Args:
+        root_dir: Dataset root (or sequence) directory.
+        camera: The camera's frame name.
+        K: 3x3 camera matrix (array-like).
+        distortion: Distortion coefficients (``D``); omit for a rectified image.
+        model: Distortion model, e.g. ``"plumb_bob"``.
+        width: Image width in pixels.
+        height: Image height in pixels.
+        R: 3x3 rectification matrix (stereo-rectified rigs).
+        P: 3x4 projection matrix (stereo-rectified rigs).
+    """
+    root_dir = Path(root_dir)
+    path = root_dir / CONFIG_DIR / CALIBRATION_FILE
+    data: dict = {}
+    if path.exists():
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    entry: dict = {
+        "K": np.asarray(K, dtype=float).tolist(),
+        "distortion_model": model,
+    }
+    if distortion is not None:
+        entry["D"] = np.asarray(distortion, dtype=float).tolist()
+    if width is not None:
+        entry["width"] = int(width)
+    if height is not None:
+        entry["height"] = int(height)
+    if R is not None:
+        entry["R"] = np.asarray(R, dtype=float).tolist()
+    if P is not None:
+        entry["P"] = np.asarray(P, dtype=float).tolist()
+    cameras = data.get("cameras") or {}
+    cameras[camera] = entry
+    data.update(version=1, cameras=cameras)
+    (root_dir / CONFIG_DIR).mkdir(exist_ok=True)
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=True)
 
 
 def verify_config(root_dir: str | Path) -> list[str]:
@@ -717,17 +851,45 @@ def verify_calibration(root_dir: str | Path) -> list[str]:
             if not _is_4x4(entry):
                 issues.append(f"transform '{name}': not a 4x4 matrix")
             continue
-        for field in ("parent", "child", "matrix"):
-            if field not in entry:
-                issues.append(f"transform '{name}': missing '{field}'")
+        for required in ("parent", "child", "matrix"):
+            if required not in entry:
+                issues.append(f"transform '{name}': missing '{required}'")
         if "matrix" in entry and not _is_4x4(entry["matrix"]):
             issues.append(f"transform '{name}': 'matrix' is not 4x4")
         issues += _unknown(entry, _CALIBRATION_TRANSFORM_FIELDS, f"transform '{name}'")
+
+    cameras = data.get("cameras") or {}
+    if not isinstance(cameras, dict):
+        issues.append("calibration.yaml: 'cameras' is not a mapping")
+        return issues
+    for name, entry in cameras.items():
+        if not isinstance(entry, dict):
+            issues.append(f"camera '{name}': entry is not a mapping")
+            continue
+        if "K" not in entry:
+            issues.append(f"camera '{name}': missing 'K'")
+        elif not _is_shape(entry["K"], (3, 3)):
+            issues.append(f"camera '{name}': 'K' is not 3x3")
+        if "D" in entry and not _is_shape(entry["D"], (-1,)):
+            issues.append(f"camera '{name}': 'D' is not a flat list of numbers")
+        if "R" in entry and not _is_shape(entry["R"], (3, 3)):
+            issues.append(f"camera '{name}': 'R' is not 3x3")
+        if "P" in entry and not _is_shape(entry["P"], (3, 4)):
+            issues.append(f"camera '{name}': 'P' is not 3x4")
+        issues += _unknown(entry, _CALIBRATION_CAMERA_FIELDS, f"camera '{name}'")
     return issues
 
 
 def _is_4x4(matrix) -> bool:
+    return _is_shape(matrix, (4, 4))
+
+
+def _is_shape(value, shape: tuple[int, ...]) -> bool:
+    """True when *value* is numeric with this shape (-1 = any length)."""
     try:
-        return np.asarray(matrix, dtype=float).shape == (4, 4)
+        actual = np.asarray(value, dtype=float).shape
     except Exception:
         return False
+    return len(actual) == len(shape) and all(
+        e == -1 or a == e for a, e in zip(actual, shape, strict=True)
+    )

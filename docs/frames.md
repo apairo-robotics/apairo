@@ -81,6 +81,32 @@ from apairo_transform import TransformPoints
 ds.transform("lidar", TransformPoints(T))
 ```
 
+### Camera intrinsics
+
+A camera's intrinsics (matrix `K`, distortion) are static rig configuration,
+exactly like the extrinsics — so they live in the same `calibration.yaml`,
+under a `cameras:` section with one entry per physical camera, keyed by its
+coordinate frame (the `frame_id` of its ROS `CameraInfo`; image channels point
+to it via their `frame` field in `channels.yaml`). Field names mirror
+`CameraInfo`, so an extractor writes them near-verbatim:
+
+```python
+from apairo.core.config import register_intrinsics
+
+register_intrinsics(seq, "multisense_left", K=K, distortion=D,
+                    width=1024, height=544)
+
+cam = ds.calibration.get_intrinsics("multisense_left")
+cam.K            # (3, 3) float64
+cam.distortion   # (N,)  float64 -- empty for a rectified image
+cam.model        # "plumb_bob"
+```
+
+The same line applies as for `get_tf`: apairo **stores and exposes** the
+intrinsics; *using* them — projecting a lidar cloud into the image,
+undistorting — depends on the distortion model and is `apairo_transform`'s
+job, not the core's.
+
 ### Dynamic transforms — pose channels
 
 A time-varying transform (`odom → base_link`, `map → odom`) is just a **pose

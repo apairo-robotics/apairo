@@ -23,6 +23,18 @@ All notable changes to apairo are documented here. The format is based on
   objects; picklability is locked by a test and by the soak.
 
 ### Added
+- **Camera intrinsics in the core calibration.** `calibration.yaml` gains an
+  additive `cameras:` section (one entry per physical camera, keyed by its
+  frame -- the `CameraInfo` `frame_id`; field names mirror `CameraInfo` so an
+  extractor writes them near-verbatim). `ds.calibration.get_intrinsics(cam)`
+  returns a `CameraIntrinsics` (`K` 3x3, `distortion`, `model`, size, optional
+  `R`/`P`); `register_intrinsics(...)` is the write-side sibling of
+  `register_static_transform`, `verify_calibration` validates the section, and
+  a root merges per-sequence cameras like it merges extrinsic edges. Same
+  split as `get_tf`: the core stores and exposes, applying (projection,
+  undistortion) stays in `apairo_transform`. Fixed along the way:
+  `register_static_transform` rewrote `calibration.yaml` with only
+  `{version, transforms}`, silently dropping any other section.
 - **`transform(..., in_place=False)` -- branch instead of mutate.** The
   default stays in place (the statement idiom `ds.transform(...)` keeps
   working); `in_place=False` leaves `self` untouched and returns an

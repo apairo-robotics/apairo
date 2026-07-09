@@ -132,3 +132,36 @@ def test_verify_calibration_bad_matrix(tmp_path):
         "    matrix: [1, 2, 3]\n"
     )
     assert any("not 4x4" in i for i in verify_calibration(tmp_path))
+
+
+def test_verify_calibration_valid_camera(tmp_path):
+    from apairo.core.config import register_intrinsics
+
+    register_intrinsics(
+        tmp_path,
+        "cam",
+        K=np.eye(3),
+        distortion=[0.1, 0.0, 0.0, 0.0, 0.0],
+        width=640,
+        height=480,
+    )
+    assert verify_calibration(tmp_path) == []
+
+
+def test_verify_calibration_bad_camera(tmp_path):
+    (tmp_path / ".apairo").mkdir()
+    (tmp_path / ".apairo" / "calibration.yaml").write_text(
+        "version: 1\n"
+        "cameras:\n"
+        "  cam_bad_k:\n"
+        "    K: [1, 2, 3]\n"
+        "  cam_no_k:\n"
+        "    D: [0.1]\n"
+        "  cam_unknown_field:\n"
+        "    K: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]\n"
+        "    focal: 5\n"
+    )
+    issues = verify_calibration(tmp_path)
+    assert any("cam_bad_k" in i and "not 3x3" in i for i in issues)
+    assert any("cam_no_k" in i and "missing 'K'" in i for i in issues)
+    assert any("cam_unknown_field" in i and "focal" in i for i in issues)

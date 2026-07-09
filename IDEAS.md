@@ -140,3 +140,152 @@ Validation criterion: the day `extract_mini_datasets.py` rewrites as a single
 Placement: apairo core (it touches the canonical layout and the sidecars) plus
 the `apairo export` CLI. Additive API and schema — post-1.0, same treatment as
 `apairo add`.
+
+## Camera intrinsics in Calibration
+
+`Calibration` today is extrinsics only: `{parent}_to_{child}` 4×4 rigid
+transforms, resolved with `get_tf`. That covers every lidar↔lidar and
+lidar↔base question, but the moment a camera enters the picture (project a
+scan into an image, carry per-point labels into pixel space) the caller also
+needs the **intrinsics** — K, distortion, image size — and apairo has no home
+for them. So they live as loose constructor parameters in satellite
+preprocessors (`apairo_preprocess.LidarCameraProjection` takes `intrinsics=`,
+`image_size=`, `distortion=`), i.e. copy-pasted per script instead of stored
+once as dataset ground truth. The data is sitting right there in the source
+recordings (`camera_info` topics in the ROS bags TartanDrive and our own rigs
+ship) and is exactly as static as the extrinsics we already persist.
+
+Proposed schema — a `cameras:` section in `.apairo/calibration.yaml`, sibling
+of `transforms:`:
+
+```yaml
+transforms:
+  base_to_velodyne_0: {matrix: [...]}
+  base_to_camera_left: {matrix: [...]}
+cameras:
+  camera_left:
+    model: pinhole                     # only model in v1
+    K: [[fx, 0, cx], [0, fy, cy], [0, 0, 1]]
+    distortion: [k1, k2, p1, p2, k3]   # plumb_bob; optional (rectified: omit)
+    size: [height, width]
+    frame: camera_left                 # tf frame the projection applies in
+```
+
+The `frame` field is the join with the transform graph: it names the tf frame
+(the *optical* frame, +Z forward, +X right, +Y down) so a consumer can do
+`get_tf("velodyne_0", cam.frame)` then apply K — the two halves of a
+projection resolved from one file.
+
+Proposed surface, respecting the stated `Calibration` design ("it resolves;
+applying the matrix to data is the caller's job"):
+
+- `Calibration.camera(name) -> CameraModel` — a small frozen dataclass
+  (`K`, `distortion`, `size`, `frame`, `model`). Core *stores and returns* the
+  model; projecting points through it stays satellite policy
+  (`apairo_preprocess`), exactly like `ApplyMatrix` for extrinsics.
+- `register_camera(root_dir, name, K, size, distortion=None, frame=None)` —
+  writer alongside `register_static_transform`, so extractors
+  (`apairo_extractor`) persist `camera_info` at extraction time.
+- `read_calibration` stays backward compatible: `cameras:` absent → empty;
+  the `Calibration` dict facade over `transforms:` is untouched.
+
+Open design questions, by priority:
+
+- **Optical vs body frame.** ROS rigs carry both `camera_left` and
+  `camera_left_optical`. Storing which one `frame` means is the schema's job
+  (docstring: it must be the optical frame); validating it is not possible —
+  fail-loud is not available here, only convention.
+- **Distortion models.** v1 pins `pinhole` + plumb_bob. Fisheye/equidistant
+  (`Kannala-Brandt`) is additive later via `model:`; do not design for it now.
+- **Per-sequence divergence.** The async family merges per-sequence
+  calibration tables; camera entries must merge under the same rule (same
+  name, different K across sequences → fail loud).
+
+Motivating consumers already written: `apairo_preprocess`'s projection
+preprocessors (`LidarCameraProjection`, `PointFeaturesFromImage`,
+`ImageMaskFromPointLabels`) would take `camera=ds.calibration.camera("camera_left")`
+instead of three loose arrays; the traversability-mask channel of the planned
+TartanDrive HF dataset is the first production pipeline through them.
+
+Placement: apairo core (`Calibration`, `read_calibration`, writer) +
+`apairo_extractor` (fill from `camera_info`). Additive schema, post-1.0.
+
+## Multi-channel preprocess on asynchronous datasets
+
+`run_preprocess` builds `dataset_cls(root, keys=preprocessor.input_keys)` and
+iterates. On the async family that iteration is the **interleaved event
+timeline** — one key per sample — so any preprocessor with two or more input
+keys crashes (`KeyError`) the moment it runs on a raw dataset: the sample
+never holds both channels. Every multi-input preprocessor in
+`apairo_preprocess` (`TraversabilityFromTrajectory`, `GroundHeightFromLabels`,
+`TrajectoryDistance`, `ImageMaskFromPointLabels`) therefore only runs on the
+profiled synchronous datasets (Rellis, GOOSE) — yet the datasets that *have*
+cameras and trajectories worth preprocessing (TartanDrive, our own rigs) are
+all async. This is the `trav_traj` length bug (19398 ≠ 9701) seen from the
+other side: 19398 *is* the two-channel interleaved timeline.
+
+The workaround today is manual and lossy in ergonomics: build a
+`synchronize()` view, pull samples, call the preprocessor directly, persist
+with `ChannelWriter` — four steps re-implementing what `run_preprocess` does
+in one, minus overwrite protection and provenance defaults.
+
+Two-tier proposal:
+
+- **Cheap tier — same-clock grouping.** Channels sharing an identical clock
+  (`timestamps_from` chains resolving to the same `timestamps.txt`) are
+  *already* aligned; interleaving them as separate events is pure loss. The
+  runner (or the async `_load` under a flag) can zip same-clock channels into
+  one sample instead. This alone unlocks the derived-channel compositions —
+  `trav_traj` + `lidar_uv` are both on the lidar clock by construction.
+- **General tier — preprocess over a synchronized view.** Let the runner
+  accept sync parameters and build the view itself:
+
+  ```python
+  TartanKittiDataset.run_preprocess(
+      ImageMaskFromPointLabels(...), root,
+      sync={"reference": "velodyne_0", "tolerance": 0.05},
+  )
+  ```
+
+  Output channel timestamps = the reference clock; `sync` params recorded in
+  `.apairo` as provenance. This is the natural consumer of "persist a
+  synchronize() result" above — a persisted view makes the sync reproducible
+  instead of re-derived per run — but it does not depend on it.
+
+Open design questions, by priority:
+
+- **Provenance.** A channel derived *through* a sync is only reproducible if
+  the sync params (reference, method, tolerance) are stored with it;
+  otherwise re-running with different params silently changes the channel.
+- **SequencePreprocessor.** Same gap, same fix (the sequence runner already
+  materializes `frames = [dataset[i] ...]`); lazy `transform()` stays
+  frame-only.
+- **Tolerance drops.** Frames dropped by `tolerance` leave holes in the
+  output clock — fine (the channel gets its own `timestamps.txt`), but the
+  `timestamps_from` shortcut no longer applies; the runner must detect this.
+
+Placement: apairo core (`preprocess/runner.py`, possibly a flag on the async
+`_load`). The satellite preprocessors need zero changes — that is the point.
+
+## Camera intrinsics in the core calibration
+
+Scheduled pre-1.0 -- core part shipped (see CHANGELOG). `Calibration` used to
+hold extrinsics only; lidar->image projection downstream needs `K` +
+distortion, and passing them as preprocessor parameters would move static rig
+config out of `.apairo` (repaid per dataset, invisible to `apairo status`).
+
+The split follows the `get_tf` precedent verbatim: **storing and exposing**
+intrinsics is core (static rig config in `calibration.yaml`, a `cameras:`
+section mirroring ROS `CameraInfo` field names); **applying** them
+(projection, undistortion) is model-dependent and stays in `apairo_transform`.
+Entries are keyed by the camera's *frame* (`CameraInfo.frame_id`) -- one entry
+per physical camera; image channels reach it via their `frame` field in
+`channels.yaml`.
+
+Remaining, outside this repo:
+
+- **apairo_extractor**: write `cameras:` entries from the rosbags'
+  `camera_info` topics (near-verbatim -- the schema mirrors the message).
+- **apairo_transform**: the projection/undistortion ops consuming
+  `ds.calibration.get_intrinsics(...)` (e.g. `ProjectPoints`), including the
+  lidar->image preprocessor that motivated this.

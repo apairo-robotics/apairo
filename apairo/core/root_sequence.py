@@ -125,7 +125,9 @@ class RootSequenceMixin(_MixinBase):
             return read_calibration(self._sequence_dir)
         merged = Calibration()
         for seq in self._sequences:
-            merged.update(read_calibration(seq._sequence_dir))
+            cal = read_calibration(seq._sequence_dir)
+            merged.update(cal)
+            merged.cameras.update(cal.cameras)
         return merged
 
     @property

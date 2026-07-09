@@ -76,12 +76,13 @@ channels: {lidar: {kind: raw}}  # generic roots: channel roll-up
 dispatch through that profile; `name` / `sequences` / `channels` describe a
 generic (`RawDataset`) root.
 
-## `calibration.yaml` (static extrinsics, optional)
+## `calibration.yaml` (static rig configuration, optional)
 
-Time-independent transforms. apairo **exposes** them (via `dataset.calibration` →
-`{"<parent>_to_<child>": 4x4 float64}`) and **resolves** any pair of connected
-frames with `dataset.calibration.get_tf(source, target)`; it never *applies* the
-result to data — that is `apairo_transform`'s job.
+Time-independent rig configuration: extrinsic transforms and camera
+intrinsics. apairo **exposes** them (via `dataset.calibration`) and
+**resolves** any pair of connected frames with
+`dataset.calibration.get_tf(source, target)`; it never *applies* the result to
+data — that is `apairo_transform`'s job.
 
 ```yaml
 version: 1
@@ -90,7 +91,19 @@ transforms:
     parent: lidar
     child: camera
     matrix: [[...4x4...]]
+cameras:
+  multisense_left:          # the camera's frame (CameraInfo frame_id)
+    K: [[...3x3...]]
+    D: [k1, k2, p1, p2, k3] # optional -- omit for a rectified image
+    distortion_model: plumb_bob
+    width: 1024
+    height: 544
+    R: [[...3x3...]]        # optional (stereo-rectified rigs)
+    P: [[...3x4...]]        # optional (stereo-rectified rigs)
 ```
 
-Each entry needs `parent`, `child`, and a 4×4 `matrix`. Write them with
-`register_static_transform(root, parent, child, matrix)`.
+Each transform needs `parent`, `child`, and a 4×4 `matrix`; write them with
+`register_static_transform(root, parent, child, matrix)`. Each camera needs a
+3×3 `K` (field names mirror ROS `CameraInfo`); write them with
+`register_intrinsics(root, camera, K=..., ...)` and read them back with
+`dataset.calibration.get_intrinsics(camera)`.
