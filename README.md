@@ -143,7 +143,7 @@ ds = apairo.Goose3DDataset("/data/goose", keys=["lidar", "labels"])
 ds.run_preprocess(TravLabel())
 ```
 
-See [`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) for a collection of ready-made preprocessors.
+See [`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) for a collection of ready-made preprocessors.
 
 ---
 
@@ -165,7 +165,7 @@ def sync_filter(sample):
 ds.transform(sync_filter)
 ```
 
-See [`apairo_transform`](https://github.com/apairo/apairo_transform) for a collection of ready-made transforms.
+See [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) for a collection of ready-made transforms.
 
 ---
 

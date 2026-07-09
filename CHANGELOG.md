@@ -7,6 +7,51 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **Loading raw data never requires write access.** Constructing a
+  `RawDataset`/`TartanKittiDataset` on a bare tree bootstraps the `.apairo`
+  sidecar; on a read-only directory (shared cluster mount, ro container
+  volume) that write raised `PermissionError` and the load failed. The
+  bootstrapped config now falls back to memory with a warning -- run
+  `apairo init` on a writable copy to persist it. The committed test fixtures
+  stay bare (`test/assets/**/.apairo/` is ignored) so the smoke tests keep
+  exercising the bootstrap path.
+- **Datasets with transforms are picklable.** The pipeline steps built by
+  `transform(key, fn)` and `transform(preprocessor)` were local closures, so
+  any dataset carrying one could not be sent to spawn-based `DataLoader`
+  workers (macOS/Windows default). They are now small module-level step
+  objects; picklability is locked by a test and by the soak.
+
+### Added
+- **`transform(..., in_place=False)` -- branch instead of mutate.** The
+  default stays in place (the statement idiom `ds.transform(...)` keeps
+  working); `in_place=False` leaves `self` untouched and returns an
+  independent branch -- a lightweight copy sharing loaders and indices but
+  owning its pipeline. This closes the `v1 = ds.transform(a); v2 =
+  ds.transform(b)` trap where both ended up stacked on the same object.
+- **`benchmarks/soak.py` -- intensive-usage soak on synthetic data.** One
+  session exercising the whole surface end to end (bootstrap, reload,
+  timeline scan, `run_preprocess` persistence, lazy preview, synchronize,
+  filter/select/cache/join/window, shuffled epochs, pickle roundtrip), every
+  step asserting its contract. Runs in CI at small scale and via `make soak`;
+  scale it with `--sequences/--frames/--points`. Complements `bench.py`
+  (cost) with a correctness soak. Its first run caught the pickling bug above.
+- **PEP 561 `py.typed` marker** -- the type annotations are now visible to
+  consumers' type checkers. `[tool.mypy]` config and `make typecheck` track
+  the internal baseline (not a CI gate yet).
+- **Python 3.13 and 3.14** -- declared in the classifiers and tested in CI,
+  alongside new macOS and Windows jobs. Dependency floors are now explicit
+  (`numpy>=1.26`, `PyYAML>=6.0`); a dedicated CI job runs the suite against
+  the numpy floor.
+
+### Changed
+- **CI and lint hardened toward 1.0.** ruff bumped 0.4 -> 0.15 with an
+  explicit ruleset (defaults + import sorting `I`, modern syntax `UP`,
+  bugbear `B`) and the whole tree reformatted with `ruff format` (now
+  enforced with `--check` in CI); coverage is measured with a fail-under of
+  85% (currently ~89%). Legacy test helpers writing to a CWD-relative `tmp/`
+  (`test/paths.py`) were removed.
+
 ## [0.5.0] - 2026-07-06
 
 ### Fixed
@@ -313,6 +358,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/apairo-robotics/apairo/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/apairo-robotics/apairo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/apairo-robotics/apairo/compare/v0.2.1...v0.3.0
 [0.2.0]: https://github.com/apairo-robotics/apairo/compare/v0.1.0...v0.2.0
