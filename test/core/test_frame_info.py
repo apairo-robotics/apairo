@@ -5,7 +5,7 @@ public per-frame provenance accessor on the asynchronous dataset family.
 import numpy as np
 import pytest
 
-from apairo import FrameRef
+from apairo import ConcatDataset, FrameRef
 from apairo.core.abstract_dataset import AbstractDataset
 from apairo.core.profiled_dataset import _apply_lst_filter
 from apairo.core.sample import Sample
@@ -115,6 +115,102 @@ def test_lst_filter_now_works_on_rawdataset(root):
     view = _apply_lst_filter(ds, picked)
     got = {(view.frame_sequence_ids[j], view.frame_stems[j]) for j in range(len(view))}
     assert got == picked
+
+
+def test_frame_info_through_concat(tmp_path):
+    a, b = tmp_path / "seq_a", tmp_path / "seq_b"
+    _make_seq(a, n_lidar=3)
+    _make_seq(b, n_lidar=2)
+    RawDataset.init(a)
+    RawDataset.init(b)
+    ds_a, ds_b = RawDataset(a), RawDataset(b)
+    combined = ConcatDataset([ds_a, ds_b])
+
+    expected = ["seq_a"] * len(ds_a) + ["seq_b"] * len(ds_b)
+    assert list(combined.frame_sequence_ids) == expected
+    assert list(combined.frame_stems) == list(ds_a.frame_stems) + list(ds_b.frame_stems)
+    # frame_info dispatches to the child that owns the frame
+    assert combined.frame_info(0) == ds_a.frame_info(0)
+    assert combined.frame_info(len(ds_a)) == ds_b.frame_info(0)
+    assert combined.frame_info(len(combined) - 1) == ds_b.frame_info(len(ds_b) - 1)
+
+
+class _NoProvenance(AbstractDataset):
+    """Synchronous dataset exposing no sequence structure."""
+
+    def __init__(self):
+        self._set_keys(["a"])
+
+    def __len__(self):
+        return 3
+
+    def _load(self, idx):
+        return Sample(data={"a": np.zeros(1)}, timestamp=None)
+
+
+def test_concat_keeps_availability_probe(tmp_path):
+    combined = ConcatDataset([_NoProvenance(), _NoProvenance()])
+    assert getattr(combined, "frame_sequence_ids", None) is None
+    assert getattr(combined, "frame_stems", None) is None
+    assert combined.frame_info(1).sequence is None
+
+
+def test_frame_info_through_synchronize_single(seq):
+    ds = RawDataset(seq)
+    view = ds.synchronize(reference="lidar")
+    assert list(view.frame_sequence_ids) == ["seq_a"] * len(view)
+    for i in range(len(view)):
+        assert view.frame_info(i) == FrameRef(sequence="seq_a", channel=None, row=i)
+
+
+def test_synchronize_root_carries_sequence_ids(root):
+    # A root synchronizes each sequence independently and concats the views,
+    # so provenance flows through without any extra plumbing.
+    ds = RawDataset(root)
+    view = ds.synchronize(reference="lidar")
+    assert set(view.frame_sequence_ids) == {"seq_a", "seq_b"}
+    for i in range(len(view)):
+        assert view.frame_info(i).sequence == view.frame_sequence_ids[i]
+
+
+def test_synchronized_view_mixed_parent_keeps_probe():
+    # Direct view over a parent spanning several sequences: a composite frame
+    # has no single sequence, so the availability probe must stay negative.
+    class Mixed(AbstractDataset):
+        def __init__(self):
+            self._set_keys(["a"])
+
+        @property
+        def timestamps(self):
+            return {"a": np.array([0.0, 1.0])}
+
+        def __len__(self):
+            return 2
+
+        def _load(self, idx):
+            return Sample(data={"a": np.zeros(1)}, timestamp=float(idx))
+
+        @property
+        def frame_sequence_ids(self):
+            return np.array(["s0", "s1"], dtype=object)
+
+    view = Mixed().synchronize(reference="a")
+    assert getattr(view, "frame_sequence_ids", None) is None
+    assert view.frame_info(0).sequence is None
+
+
+def test_frame_info_synchronize_then_concat(tmp_path):
+    # The studio case: per-sequence synchronized views concatenated into one
+    # dataset -- provenance survives the whole chain.
+    a, b = tmp_path / "seq_a", tmp_path / "seq_b"
+    _make_seq(a, n_lidar=3)
+    _make_seq(b, n_lidar=2)
+    RawDataset.init(a)
+    RawDataset.init(b)
+    views = [RawDataset(p).synchronize(reference="lidar") for p in (a, b)]
+    combined = ConcatDataset(views)
+    assert set(combined.frame_sequence_ids) == {"seq_a", "seq_b"}
+    assert combined.frame_info(len(views[0])).sequence == "seq_b"
 
 
 def test_frame_info_default_is_synchronous(tmp_path):

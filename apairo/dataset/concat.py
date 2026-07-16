@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import functools
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from apairo.core import AbstractDataset
 from apairo.core.sample import Sample
+
+if TYPE_CHECKING:
+    from apairo.core.abstract_dataset import FrameRef
 
 
 class ConcatDataset(AbstractDataset):
@@ -79,6 +83,25 @@ class ConcatDataset(AbstractDataset):
 
     def __len__(self) -> int:
         return int(self._cumulative[-1])
+
+    def frame_info(self, idx: int) -> FrameRef:
+        """Provenance of frame *idx*, delegated to the dataset that owns it."""
+        ds_idx, offset = self._dataset_idx_and_offset(idx)
+        return self.datasets[ds_idx].frame_info(idx - offset)
+
+    @functools.cached_property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence id per global frame, concatenated from the children.
+
+        Ids are forwarded verbatim -- two children exposing the same id stay
+        indistinguishable. Raises ``AttributeError`` when any child exposes
+        none, so the availability probe keeps working."""
+        return np.concatenate([ds.frame_sequence_ids for ds in self.datasets])
+
+    @functools.cached_property
+    def frame_stems(self) -> np.ndarray:
+        """Filename stem per global frame, concatenated from the children."""
+        return np.concatenate([ds.frame_stems for ds in self.datasets])
 
     def _load(self, idx: int) -> Sample:
         ds_idx, offset = self._dataset_idx_and_offset(idx)

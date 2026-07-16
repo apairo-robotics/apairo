@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
@@ -310,13 +311,32 @@ class SynchronizedView(AbstractDataset):
         source event (see :attr:`frame_indices`), so there is no single origin
         channel -- ``channel`` is ``None`` and ``row`` is the **view index**, not
         an on-disk row (unlike a profiled dataset, where ``row`` addresses a file
-        on disk).
+        on disk). ``sequence`` is filled when the parent belongs to a single
+        sequence (see :attr:`frame_sequence_ids`), ``None`` otherwise.
 
         For real per-frame provenance use :attr:`frame_indices`;
         ``frame_indices[self.reference][idx]`` is the reference-clock event this
         tick was resampled onto.
         """
         return super().frame_info(idx)
+
+    @functools.cached_property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence id per synchronised frame, shape ``(n,)``.
+
+        A synchronised frame mixes events from several channels, so it only
+        carries a sequence id when the whole parent belongs to one sequence;
+        over a multi-sequence parent this raises ``AttributeError``, keeping
+        the availability probe of the base class."""
+        parent_ids = self._parent.frame_sequence_ids
+        if len(parent_ids) and (parent_ids != parent_ids[0]).any():
+            raise AttributeError(
+                f"{type(self).__name__} exposes frame_sequence_ids only over "
+                f"a single-sequence parent; this parent spans "
+                f"{len(set(parent_ids))} sequences."
+            )
+        seq = parent_ids[0] if len(parent_ids) else None
+        return np.full(len(self), seq, dtype=object)
 
     # ----------------------------------------------------------------- access
 

@@ -23,6 +23,18 @@ All notable changes to apairo are documented here. The format is based on
   objects; picklability is locked by a test and by the soak.
 
 ### Added
+- **Provenance flows through `ConcatDataset` and `SynchronizedView`.** The
+  `frame_info` / `frame_sequence_ids` / `frame_stems` contract, already
+  forwarded by `FilteredView`/`ChannelView`/`WindowView`, now covers the two
+  remaining views. `ConcatDataset` concatenates its children's ids and stems
+  and dispatches `frame_info` to the owning child (ids are forwarded verbatim
+  -- two children exposing the same id stay indistinguishable). A
+  `SynchronizedView` carries the parent's sequence id when the parent belongs
+  to a single sequence; since a root synchronizes per sequence and concats,
+  `RawDataset(root).synchronize(...)` now reports sequence identity
+  end-to-end. Both keep the availability probe: `AttributeError` when the
+  underlying dataset exposes none (or, for a directly-built view, spans
+  several sequences). Pure index arithmetic, no data reads.
 - **Camera intrinsics in the core calibration.** `calibration.yaml` gains an
   additive `cameras:` section (one entry per physical camera, keyed by its
   frame -- the `CameraInfo` `frame_id`; field names mirror `CameraInfo` so an
