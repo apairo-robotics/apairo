@@ -48,6 +48,10 @@ class ChannelView(AbstractDataset):
     def frame_stems(self) -> np.ndarray:
         return self._parent.frame_stems
 
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        return self._parent.frame_channel_ids
+
     def frame_info(self, idx: int):
         """Provenance of frame *idx* -- unchanged from the parent (same frames)."""
         return self._parent.frame_info(idx)

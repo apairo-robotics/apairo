@@ -1,5 +1,6 @@
-"""Tests for ``frame_info`` / ``frame_sequence_ids`` / ``frame_stems`` -- the
-public per-frame provenance accessor on the asynchronous dataset family.
+"""Tests for ``frame_info`` / ``frame_sequence_ids`` / ``frame_stems`` /
+``frame_channel_ids`` -- the public per-frame provenance accessor on the
+asynchronous dataset family.
 """
 
 import numpy as np
@@ -80,6 +81,22 @@ def test_frame_sequence_ids_and_stems_single(seq):
         assert stems[i] == expected
 
 
+def test_frame_channel_ids_single(seq):
+    ds = RawDataset(seq)
+    ids = ds.frame_channel_ids
+    for i in range(len(ds)):
+        assert ids[i] == next(iter(ds[i].data))
+        assert ids[i] == ds.frame_info(i).channel
+
+
+def test_frame_channel_ids_root(root):
+    ds = RawDataset(root)
+    ids = ds.frame_channel_ids
+    assert set(ids) == {"lidar", "imu"}
+    for i in range(len(ds)):
+        assert ids[i] == ds.frame_info(i).channel
+
+
 def test_frame_info_root_carries_sequence(root):
     ds = RawDataset(root)
     seqs = set(ds.frame_sequence_ids)
@@ -107,6 +124,19 @@ def test_frame_info_through_select(seq):
         assert view.frame_info(i) == ds.frame_info(i)
 
 
+def test_frame_channel_ids_through_filter(seq):
+    ds = RawDataset(seq)
+    keep = [5, 2, 7]
+    view = ds.filter(keep)
+    np.testing.assert_array_equal(view.frame_channel_ids, ds.frame_channel_ids[keep])
+
+
+def test_frame_channel_ids_through_select(seq):
+    ds = RawDataset(seq)
+    view = ds.select(["lidar", "imu"])
+    np.testing.assert_array_equal(view.frame_channel_ids, ds.frame_channel_ids)
+
+
 def test_lst_filter_now_works_on_rawdataset(root):
     # The convergence: a (seq, stem) frame filter -- previously impossible on a
     # generic RawDataset (no frame_sequence_ids/frame_stems) -- now applies.
@@ -129,6 +159,9 @@ def test_frame_info_through_concat(tmp_path):
     expected = ["seq_a"] * len(ds_a) + ["seq_b"] * len(ds_b)
     assert list(combined.frame_sequence_ids) == expected
     assert list(combined.frame_stems) == list(ds_a.frame_stems) + list(ds_b.frame_stems)
+    assert list(combined.frame_channel_ids) == list(ds_a.frame_channel_ids) + list(
+        ds_b.frame_channel_ids
+    )
     # frame_info dispatches to the child that owns the frame
     assert combined.frame_info(0) == ds_a.frame_info(0)
     assert combined.frame_info(len(ds_a)) == ds_b.frame_info(0)
@@ -152,6 +185,7 @@ def test_concat_keeps_availability_probe(tmp_path):
     combined = ConcatDataset([_NoProvenance(), _NoProvenance()])
     assert getattr(combined, "frame_sequence_ids", None) is None
     assert getattr(combined, "frame_stems", None) is None
+    assert getattr(combined, "frame_channel_ids", None) is None
     assert combined.frame_info(1).sequence is None
 
 
@@ -161,6 +195,17 @@ def test_frame_info_through_synchronize_single(seq):
     assert list(view.frame_sequence_ids) == ["seq_a"] * len(view)
     for i in range(len(view)):
         assert view.frame_info(i) == FrameRef(sequence="seq_a", channel=None, row=i)
+
+
+def test_synchronized_view_frame_channel_ids_always_raises(seq):
+    # Unlike frame_sequence_ids, which stays valid over a single-sequence
+    # parent, frame_channel_ids has no sensible answer here: a synchronised
+    # frame composites every channel, so it raises unconditionally.
+    ds = RawDataset(seq)
+    view = ds.synchronize(reference="lidar")
+    with pytest.raises(AttributeError):
+        _ = view.frame_channel_ids
+    assert getattr(view, "frame_channel_ids", None) is None
 
 
 def test_synchronize_root_carries_sequence_ids(root):

@@ -127,6 +127,11 @@ class WindowView(AbstractDataset):
         """Filename stem of each output frame -- the anchor's (delegated)."""
         return self._parent.frame_stems[self._anchors]
 
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel id of each output frame -- the anchor's (delegated)."""
+        return self._parent.frame_channel_ids[self._anchors]
+
     def __len__(self) -> int:
         return len(self._anchors)
 

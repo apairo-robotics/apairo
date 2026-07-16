@@ -624,5 +624,16 @@ class AbstractDataset(ABC):
         when unavailable, like :attr:`frame_sequence_ids`."""
         raise AttributeError(f"{type(self).__name__} exposes no frame_stems")
 
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel that produced each global frame, shape ``(len(self),)``.
+
+        Provided by asynchronous datasets and views over them, where a frame
+        is one channel's event. Raises ``AttributeError`` on synchronous data
+        (a frame there is *all* channels) and on composite frames (e.g. a
+        synchronized view, which has no single origin channel), like
+        :attr:`frame_sequence_ids`."""
+        raise AttributeError(f"{type(self).__name__} exposes no frame_channel_ids")
+
     @abstractmethod
     def __len__(self) -> int: ...

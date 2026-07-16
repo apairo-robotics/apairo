@@ -266,3 +266,13 @@ class RootSequenceMixin(_MixinBase):
         if not self._sequences:
             return np.empty(0, dtype=object)
         return np.concatenate([s.frame_stems for s in self._sequences])
+
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel that produced each global frame index, concatenated over
+        sequences."""
+        if not self._is_root:
+            return super().frame_channel_ids
+        if not self._sequences:
+            return np.empty(0, dtype=object)
+        return np.concatenate([s.frame_channel_ids for s in self._sequences])

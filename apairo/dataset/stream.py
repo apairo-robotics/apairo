@@ -84,6 +84,12 @@ class StreamDataset(AbstractDataset):
             timestamp=float(self.timestamps[key][frame]),
         )
 
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel that produced each global event. Object array of shape
+        ``(len(self),)``, vectorized from the merged timeline."""
+        return np.asarray(self._keys, dtype=object)[self._tl_key_idxs]
+
     def __repr__(self) -> str:
         sizes = {k: len(v) for k, v in self.loaders.items()}
         return f"StreamDataset(events={len(self)}, streams={sizes})"

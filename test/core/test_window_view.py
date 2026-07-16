@@ -13,9 +13,12 @@ class FakeDataset(AbstractDataset):
     exercise the single-sequence path.
     """
 
-    def __init__(self, n, seq_ids=None):
+    def __init__(self, n, seq_ids=None, channel_ids=None):
         self._n = n
         self._seq = np.asarray(seq_ids, dtype=object) if seq_ids is not None else None
+        self._chan = (
+            np.asarray(channel_ids, dtype=object) if channel_ids is not None else None
+        )
         self.loads = 0
 
     @property
@@ -27,6 +30,12 @@ class FakeDataset(AbstractDataset):
         if self._seq is None:
             raise AttributeError("frame_sequence_ids")
         return self._seq
+
+    @property
+    def frame_channel_ids(self):
+        if self._chan is None:
+            raise AttributeError("frame_channel_ids")
+        return self._chan
 
     def __len__(self):
         return self._n
@@ -129,6 +138,23 @@ def test_frame_sequence_ids_unavailable_on_single_sequence_parent():
     with pytest.raises(AttributeError):
         _ = view.frame_sequence_ids
     assert getattr(view, "frame_sequence_ids", None) is None  # getattr-friendly
+
+
+def test_output_frame_channel_ids_are_anchor_ids():
+    ds = FakeDataset(5, channel_ids=["lidar", "cam", "lidar", "cam", "cam"])
+    view = ds.window(size=3, stride=1, reduce=members_reducer)
+    np.testing.assert_array_equal(
+        view.frame_channel_ids,
+        np.asarray(["lidar", "cam", "lidar", "cam", "cam"], dtype=object),
+    )
+
+
+def test_frame_channel_ids_unavailable_propagates():
+    ds = FakeDataset(4)  # no frame_channel_ids
+    view = ds.window(size=2, stride=1, reduce=members_reducer)
+    with pytest.raises(AttributeError):
+        _ = view.frame_channel_ids
+    assert getattr(view, "frame_channel_ids", None) is None  # getattr-friendly
 
 
 def test_window_then_filter_chains():

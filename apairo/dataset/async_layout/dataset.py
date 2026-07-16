@@ -483,6 +483,12 @@ class AsyncLayoutDataset(AbstractDataset):
         return np.full(len(self), self._sequence_name(), dtype=object)
 
     @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel that produced each global event. Object array of shape
+        ``(len(self),)``, vectorized from the merged timeline."""
+        return np.asarray(self._keys, dtype=object)[self._tl_key_idxs]
+
+    @property
     def frame_stems(self) -> np.ndarray:
         """Filename stem backing each global event: the per-frame data file's
         stem, or the zero-padded row for stacked (single-file) channels."""

@@ -11,10 +11,11 @@ from apairo.core.sample import Sample
 class _SeqDataset(AbstractDataset):
     """Minimal dataset with sequence metadata for testing."""
 
-    def __init__(self, seq_ids, stems=None):
+    def __init__(self, seq_ids, stems=None, channel_ids=None):
         # seq_ids: list of sequence ID per frame (e.g. ["seq0", "seq0", "seq1"])
         self._seq_ids = list(seq_ids)
         self._stems = stems or [f"{i:06d}" for i in range(len(seq_ids))]
+        self._channel_ids = channel_ids or ["data"] * len(seq_ids)
         self._keys = ["data"]
 
     def __len__(self):
@@ -30,6 +31,10 @@ class _SeqDataset(AbstractDataset):
     @property
     def frame_stems(self):
         return np.array(self._stems, dtype=object)
+
+    @property
+    def frame_channel_ids(self):
+        return np.array(self._channel_ids, dtype=object)
 
 
 @pytest.fixture
@@ -113,6 +118,18 @@ def test_double_filtered_view_frame_sequence_ids(ds):
     inner = ds.filter([0, 1, 2, 3])  # seq0, seq0, seq1, seq1
     outer = inner.filter([1, 3])  # local 1→global 1 (seq0), local 3→global 3 (seq1)
     np.testing.assert_array_equal(outer.frame_sequence_ids, ["seq0", "seq1"])
+
+
+def test_filtered_view_frame_channel_ids(ds):
+    view = ds.filter([0, 2, 4])
+    np.testing.assert_array_equal(
+        view.frame_channel_ids, ds.frame_channel_ids[[0, 2, 4]]
+    )
+
+
+def test_channel_view_delegates_frame_channel_ids(ds):
+    cv = ds.select(["data"])
+    np.testing.assert_array_equal(cv.frame_channel_ids, ds.frame_channel_ids)
 
 
 # ---------------------------------------------------------------- CachedDataset.cache() warning

@@ -103,6 +103,12 @@ class ConcatDataset(AbstractDataset):
         """Filename stem per global frame, concatenated from the children."""
         return np.concatenate([ds.frame_stems for ds in self.datasets])
 
+    @functools.cached_property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel that produced each global frame, concatenated from the
+        children."""
+        return np.concatenate([ds.frame_channel_ids for ds in self.datasets])
+
     def _load(self, idx: int) -> Sample:
         ds_idx, offset = self._dataset_idx_and_offset(idx)
         sample = self.datasets[ds_idx][idx - offset]

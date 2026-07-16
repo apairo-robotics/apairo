@@ -31,14 +31,19 @@ ref.row                       # frame index within that channel
 ```
 
 - On a **synchronous** dataset a frame is *all* channels at the same row, so `channel` is `None` and `row` is the frame index.
-- The companion array properties cover the whole dataset at once: **`frame_sequence_ids`** (the sequence each frame belongs to) and **`frame_stems`** (the data-file stem backing each frame, or the zero-padded row for stacked channels). These also make a frozen, file-based split work on a generic `RawDataset` -- filter to a saved `(sequence, stem)` set, the same mechanism profiled datasets use.
+- The companion array properties cover the whole dataset at once: **`frame_sequence_ids`** (the sequence each frame belongs to), **`frame_stems`** (the data-file stem backing each frame, or the zero-padded row for stacked channels), and **`frame_channel_ids`** (the channel that produced each frame). These also make a frozen, file-based split work on a generic `RawDataset` -- filter to a saved `(sequence, stem)` set, the same mechanism profiled datasets use.
 
 ```python
 # Freeze an eval split to a set of (sequence, stem) pairs and reload it:
 keep = {(s, t) for s, t in zip(ds.frame_sequence_ids, ds.frame_stems) if (s, t) in eval_set}
 eval_ds = ds.filter([i for i, (s, t) in
                      enumerate(zip(ds.frame_sequence_ids, ds.frame_stems)) if (s, t) in keep])
+
+# Restrict a raw timeline to one channel's events -- no more per-frame scans:
+camera_only = ds.filter(np.nonzero(ds.frame_channel_ids == "camera")[0])
 ```
+
+`frame_channel_ids` raises `AttributeError` wherever a frame has no single origin channel: synchronous datasets (a frame is every channel) and `SynchronizedView` (a synchronised frame composites one event per channel -- use `frame_indices` there for real per-channel provenance).
 
 `frame_info` is read-only and delegates through `filter`/`select` views (the index is remapped for you).
 

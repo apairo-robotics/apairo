@@ -53,6 +53,11 @@ class FilteredView(AbstractDataset):
         """Filename stem for every frame in this view (delegated from parent)."""
         return self._parent.frame_stems[self._indices]
 
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Channel id for every frame in this view (delegated from parent)."""
+        return self._parent.frame_channel_ids[self._indices]
+
     def frame_info(self, idx: int):
         """Provenance of a view frame -- the parent's, at the remapped index."""
         return self._parent.frame_info(int(self._indices[idx]))

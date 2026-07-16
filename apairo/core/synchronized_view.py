@@ -338,6 +338,19 @@ class SynchronizedView(AbstractDataset):
         seq = parent_ids[0] if len(parent_ids) else None
         return np.full(len(self), seq, dtype=object)
 
+    @property
+    def frame_channel_ids(self) -> np.ndarray:
+        """Unavailable: a synchronised frame composites every channel (see
+        :meth:`frame_info`), so there is no single origin channel -- unlike
+        :attr:`frame_sequence_ids`, this raises unconditionally, even over a
+        single-sequence parent. Use :attr:`frame_indices` for real per-channel
+        provenance."""
+        raise AttributeError(
+            f"{type(self).__name__} exposes no frame_channel_ids: a "
+            "synchronised frame composites every channel, so there is no "
+            "single origin. Use frame_indices for per-channel provenance."
+        )
+
     # ----------------------------------------------------------------- access
 
     def __len__(self) -> int:
