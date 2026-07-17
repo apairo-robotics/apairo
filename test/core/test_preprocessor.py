@@ -140,3 +140,133 @@ def test_same_instance_previews_then_materializes(tartan_seq):
     TartanKittiDataset.run_preprocess(p, tartan_seq)
     persisted = TartanKittiDataset(tartan_seq, keys=["doubled"])[3].data["doubled"]
     np.testing.assert_array_equal(np.asarray(lazy), np.asarray(persisted))
+
+
+# ------------------------------------------------------------------ multi-output
+
+
+class _Split(FramePreprocessor):
+    output_keys = ["halved", "negated"]
+    output_loader = "npys"
+    input_keys = ["velodyne_0"]
+    timestamps_from = "velodyne_0"
+    sources = ["velodyne_0"]
+
+    def __call__(self, sample: Sample) -> dict[str, np.ndarray]:
+        pts = sample.data["velodyne_0"]
+        return {"halved": pts / 2, "negated": -pts}
+
+
+class _SplitStacked(SequencePreprocessor):
+    output_keys = ["means", "maxes"]
+    output_loader = "npy"
+    input_keys = ["velodyne_0"]
+    timestamps_from = "velodyne_0"
+
+    def __call__(self, frames) -> dict[str, np.ndarray]:
+        pts = [s.data["velodyne_0"] for s in frames]
+        return {
+            "means": np.stack([p.mean(axis=0) for p in pts]),
+            "maxes": np.stack([p.max(axis=0) for p in pts]),
+        }
+
+
+def test_output_key_and_output_keys_are_exclusive():
+    with pytest.raises(TypeError, match="exclusive"):
+
+        class _Both(FramePreprocessor):
+            output_key = "a"
+            output_keys = ["a", "b"]
+            output_loader = "npys"
+            input_keys = ["velodyne_0"]
+
+            def __call__(self, sample):
+                return {}
+
+
+def test_output_keys_must_be_unique_and_nonempty():
+    for bad in ([], ["a", "a"]):
+        with pytest.raises(TypeError, match="unique"):
+
+            class _Bad(FramePreprocessor):
+                output_keys = bad
+                output_loader = "npys"
+                input_keys = ["velodyne_0"]
+
+                def __call__(self, sample):
+                    return {}
+
+
+def test_multi_output_run_preprocess_registers_every_key(tartan_seq):
+    from apairo.core.config import read_config
+
+    TartanKittiDataset.run_preprocess(_Split(), tartan_seq)
+
+    channels = read_config(tartan_seq)["channels"]
+    for key in ("halved", "negated"):
+        assert channels[key]["kind"] == "preprocess"
+        assert channels[key]["timestamps_from"] == "velodyne_0"
+        assert channels[key]["sources"] == ["velodyne_0"]
+        assert (tartan_seq / key / "timestamps.txt").exists()
+
+    # each channel is individually selectable
+    src = TartanKittiDataset(tartan_seq, keys=["velodyne_0"])[2].data["velodyne_0"]
+    halved = TartanKittiDataset(tartan_seq, keys=["halved"])[2].data["halved"]
+    negated = TartanKittiDataset(tartan_seq, keys=["negated"])[2].data["negated"]
+    np.testing.assert_array_equal(np.asarray(halved), np.asarray(src) / 2)
+    np.testing.assert_array_equal(np.asarray(negated), -np.asarray(src))
+
+
+def test_multi_output_stacked_sequence_writes_one_file_per_key(tartan_seq):
+    TartanKittiDataset.run_preprocess(_SplitStacked(), tartan_seq)
+
+    for key in ("means", "maxes"):
+        assert (tartan_seq / key / f"{key}.npy").exists()
+    means = np.load(tartan_seq / "means" / "means.npy")
+    assert means.shape == (4, 4)
+
+
+def test_multi_output_wrong_keys_raises(tartan_seq):
+    class _Liar(FramePreprocessor):
+        output_keys = ["a", "b"]
+        output_loader = "npys"
+        input_keys = ["velodyne_0"]
+        timestamps_from = "velodyne_0"
+
+        def __call__(self, sample):
+            return {"a": sample.data["velodyne_0"]}  # missing "b"
+
+    with pytest.raises(ValueError, match="exactly those keys"):
+        TartanKittiDataset.run_preprocess(_Liar(), tartan_seq)
+
+
+def test_multi_output_overwrite_check_covers_every_key(tartan_seq):
+    # only the *second* key pre-exists: the run must still refuse
+    (tartan_seq / "negated").mkdir()
+    np.save(tartan_seq / "negated" / "000000.npy", np.zeros(3))
+
+    with pytest.raises(FileExistsError, match="negated"):
+        TartanKittiDataset.run_preprocess(_Split(), tartan_seq)
+
+
+def test_transform_multi_output_publishes_every_key(tartan_seq):
+    ds = TartanKittiDataset(tartan_seq, keys=["velodyne_0"])
+    s = ds.transform(_Split())[1]
+    np.testing.assert_array_equal(
+        np.asarray(s.data["halved"]), np.asarray(s.data["velodyne_0"]) / 2
+    )
+    assert "negated" in s.data
+    assert not (tartan_seq / "halved").exists()  # nothing written
+
+
+def test_transform_multi_output_rejects_output_override(tartan_seq):
+    ds = TartanKittiDataset(tartan_seq, keys=["velodyne_0"])
+    with pytest.raises(TypeError, match="output_keys"):
+        ds.transform(_Split(), output="alt")
+
+
+def test_transform_multi_output_keep_false_drops_every_key(tartan_seq):
+    ds = TartanKittiDataset(tartan_seq, keys=["velodyne_0"])
+    ds.transform(_Split(), keep=False)
+    s = ds[0]
+    assert "halved" not in s.data and "negated" not in s.data

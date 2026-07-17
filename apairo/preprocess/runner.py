@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from apairo.core.preprocessor import FramePreprocessor, SequencePreprocessor
+from apairo.core.preprocessor import (
+    FramePreprocessor,
+    SequencePreprocessor,
+    as_output_dict,
+)
 from apairo.writer import WRITERS
 
 if TYPE_CHECKING:
@@ -25,6 +29,10 @@ def _to_numpy(data) -> np.ndarray:
     if hasattr(data, "detach"):  # torch.Tensor
         return data.detach().cpu().numpy()
     return np.asarray(data)
+
+
+def _outputs_to_numpy(preprocessor, result) -> dict[str, np.ndarray]:
+    return {k: _to_numpy(v) for k, v in as_output_dict(preprocessor, result).items()}
 
 
 def run(
@@ -63,22 +71,21 @@ def run(
     # Per-frame output (any FramePreprocessor, or a SequencePreprocessor that
     # emits one row per frame via output_loader="npys") is placed per frame by
     # derived_path; a stacked SequencePreprocessor writes one file per sequence
-    # in that frame's channel directory (<seq>/<key>/<key>.ext).
-    if (
+    # in that frame's channel directory (<seq>/<key>/<key>.ext).  Every declared
+    # key is checked so a partially-written previous run cannot be half-skipped.
+    stacked = (
         isinstance(preprocessor, SequencePreprocessor)
         and preprocessor.output_loader != "npys"
-    ):
-        first_path = (
-            dataset.derived_path(0, preprocessor.output_key, ext).parent
-            / f"{preprocessor.output_key}.{ext}"
-        )
-    else:
-        first_path = dataset.derived_path(0, preprocessor.output_key, ext)
-    if first_path.exists() and not overwrite:
-        raise FileExistsError(
-            f"Derived key '{preprocessor.output_key}' already exists "
-            f"(e.g. {first_path}). Pass overwrite=True to recompute."
-        )
+    )
+    for key in preprocessor.outputs:
+        first_path = dataset.derived_path(0, key, ext)
+        if stacked:
+            first_path = first_path.parent / f"{key}.{ext}"
+        if first_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"Derived key '{key}' already exists "
+                f"(e.g. {first_path}). Pass overwrite=True to recompute."
+            )
 
     logger.info(
         "%-20s  %s  (%d frame%s)",
@@ -98,7 +105,8 @@ def run(
             f"got {type(preprocessor).__name__}."
         )
 
-    logger.info("Done  ->  '%s' registered in %s", preprocessor.output_key, root_dir)
+    keys = preprocessor.outputs
+    logger.info("Done  ->  '%s' registered in %s", "', '".join(keys), root_dir)
     # Files land per sequence (derived_path routes each frame to its sub-sequence),
     # so on a root the channel must be declared in *each* sequence's channels.yaml
     # -- a single root-level registration would be unloadable. A single sequence
@@ -108,13 +116,14 @@ def run(
     else:
         seq_dirs = [root_dir]
     for seq_dir in seq_dirs:
-        dataset_cls.register_channel(
-            seq_dir,
-            preprocessor.output_key,
-            preprocessor.output_loader,
-            timestamps_from=preprocessor.timestamps_from,
-            sources=preprocessor.sources,
-        )
+        for key in keys:
+            dataset_cls.register_channel(
+                seq_dir,
+                key,
+                preprocessor.output_loader,
+                timestamps_from=preprocessor.timestamps_from,
+                sources=preprocessor.sources,
+            )
 
 
 def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:
@@ -124,12 +133,13 @@ def _run_frame(preprocessor: FramePreprocessor, dataset, ext: str) -> None:
 
     for idx, sample in enumerate(dataset):
         logger.debug("[%d/%d]", idx + 1, n)
-        result = _to_numpy(preprocessor(sample))
-        path = dataset.derived_path(idx, preprocessor.output_key, ext)
-        writer.write(result, path)
+        outputs = _outputs_to_numpy(preprocessor, preprocessor(sample))
+        for key, result in outputs.items():
+            path = dataset.derived_path(idx, key, ext)
+            writer.write(result, path)
 
-        if sample.timestamp is not None:
-            seq_timestamps.setdefault(path.parent, []).append(sample.timestamp)
+            if sample.timestamp is not None:
+                seq_timestamps.setdefault(path.parent, []).append(sample.timestamp)
 
     for seq_dir, timestamps in seq_timestamps.items():
         np.savetxt(seq_dir / "timestamps.txt", timestamps)
@@ -161,16 +171,14 @@ def _run_sequence_stacked(
         if not indices:
             continue
         frames = [dataset[i] for i in indices]
-        result = _to_numpy(preprocessor(iter(frames)))
-        out = (
-            dataset.derived_path(indices[0], preprocessor.output_key, ext).parent
-            / f"{preprocessor.output_key}.{ext}"
-        )
-        writer.write(result, out)
-        # Synchronous datasets have no timestamps -- nothing to propagate.
-        if isinstance(parent_ts, dict):
-            ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
-            np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])
+        outputs = _outputs_to_numpy(preprocessor, preprocessor(iter(frames)))
+        for key, result in outputs.items():
+            out = dataset.derived_path(indices[0], key, ext).parent / f"{key}.{ext}"
+            writer.write(result, out)
+            # Synchronous datasets have no timestamps -- nothing to propagate.
+            if isinstance(parent_ts, dict):
+                ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
+                np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])
 
 
 def _run_sequence_per_frame(
@@ -191,20 +199,19 @@ def _run_sequence_per_frame(
 
     for indices in groups.values():
         frames = [dataset[i] for i in indices]
-        result = _to_numpy(preprocessor(iter(frames)))
-        if len(result) != len(indices):
-            raise ValueError(
-                f"{preprocessor.__class__.__name__} returned {len(result)} "
-                f"rows for a {len(indices)}-frame sequence; a per-frame "
-                f"(output_loader='npys') sequence preprocessor must return one row "
-                f"per input frame."
-            )
-        seq_timestamps: list = []
-        last_path = None
-        for row, idx, sample in zip(result, indices, frames, strict=True):
-            last_path = dataset.derived_path(idx, preprocessor.output_key, ext)
-            writer.write(_to_numpy(row), last_path)
-            if sample.timestamp is not None:
-                seq_timestamps.append(sample.timestamp)
-        if seq_timestamps and last_path is not None:
-            np.savetxt(last_path.parent / "timestamps.txt", seq_timestamps)
+        outputs = _outputs_to_numpy(preprocessor, preprocessor(iter(frames)))
+        seq_timestamps = [s.timestamp for s in frames if s.timestamp is not None]
+        for key, result in outputs.items():
+            if len(result) != len(indices):
+                raise ValueError(
+                    f"{preprocessor.__class__.__name__} returned {len(result)} "
+                    f"rows for key '{key}' on a {len(indices)}-frame sequence; "
+                    f"a per-frame (output_loader='npys') sequence preprocessor "
+                    f"must return one row per input frame."
+                )
+            last_path = None
+            for row, idx in zip(result, indices, strict=True):
+                last_path = dataset.derived_path(idx, key, ext)
+                writer.write(_to_numpy(row), last_path)
+            if seq_timestamps and last_path is not None:
+                np.savetxt(last_path.parent / "timestamps.txt", seq_timestamps)

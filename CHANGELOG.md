@@ -23,6 +23,17 @@ All notable changes to apairo are documented here. The format is based on
   objects; picklability is locked by a test and by the soak.
 
 ### Added
+- **Multi-output preprocessors.** A preprocessor can declare
+  `output_keys: list[str]` instead of `output_key` (exclusive, validated at
+  class definition) and return a `dict` with exactly those keys; one pass
+  then materializes N derived channels. `run_preprocess` writes one channel
+  per key (same `output_loader`) and registers all of them in `.apairo` with
+  shared `timestamps_from`/`sources` provenance, so each stays individually
+  selectable. Overwrite protection checks every declared key. The lazy
+  preview (`transform(preprocessor)`) publishes every key of the dict;
+  `output=` renaming and `keep=False` apply to the whole set (rename is
+  rejected, drop covers all keys). Ends the "run the expensive voxelization
+  N times or hand-write channels.yaml" workaround.
 - **Provenance flows through `ConcatDataset` and `SynchronizedView`.** The
   `frame_info` / `frame_sequence_ids` / `frame_stems` contract, already
   forwarded by `FilteredView`/`ChannelView`/`WindowView`, now covers the two

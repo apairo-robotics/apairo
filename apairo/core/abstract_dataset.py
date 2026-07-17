@@ -59,14 +59,18 @@ class _ChannelStep:
 
 class _PreprocessorStep:
     """Pipeline step for ``transform(preprocessor)`` -- lazy preview publishing
-    the result under *output*. Module-level for picklability, like _ChannelStep."""
+    the result under *output* (single-output, renameable) or under every
+    declared ``output_keys`` (multi-output). Module-level for picklability,
+    like _ChannelStep."""
 
     __slots__ = ("preprocessor", "output")
 
-    def __init__(self, preprocessor, output: str) -> None:
+    def __init__(self, preprocessor, output: str | None) -> None:
         self.preprocessor, self.output = preprocessor, output
 
     def __call__(self, sample: Sample) -> Sample:
+        from apairo.core.preprocessor import as_output_dict
+
         missing = [k for k in self.preprocessor.input_keys if k not in sample.data]
         if missing:
             raise KeyError(
@@ -74,7 +78,11 @@ class _PreprocessorStep:
                 f"{missing} absent from the sample (available: "
                 f"{sorted(sample.data)})."
             )
-        sample.data[self.output] = self.preprocessor(sample)
+        result = self.preprocessor(sample)
+        if self.output is not None:
+            sample.data[self.output] = result
+        else:
+            sample.data.update(as_output_dict(self.preprocessor, result))
         return sample
 
 
@@ -199,6 +207,9 @@ class AbstractDataset(ABC):
             preview[42].data["trav_label"]   # inspect, iterate on p
             ds.run_preprocess(p)             # materialize once satisfied
 
+        A multi-output preprocessor (``output_keys``) publishes every key of
+        its returned dict; ``output=`` cannot rename it.
+
         A :class:`~apairo.core.preprocessor.SequencePreprocessor` is rejected:
         it needs the full sequence at once, materialization is the point.
 
@@ -224,7 +235,7 @@ class AbstractDataset(ABC):
             ``in_place=False`` (or branch first, e.g. ``ds.filter(...)``).
         """
         step: Callable[[Sample], Sample]
-        drop_key = output
+        drop_key: str | list[str] | None = output
         if fn is None:
             from apairo.core.preprocessor import (
                 FramePreprocessor,
@@ -244,9 +255,14 @@ class AbstractDataset(ABC):
                     f"lazily. Materialize it with run_preprocess() instead."
                 )
             if isinstance(key_or_fn, FramePreprocessor):
-                out = output if output is not None else key_or_fn.output_key
-                drop_key = out
-                step = _PreprocessorStep(key_or_fn, out)
+                if output is not None and key_or_fn.output_keys is not None:
+                    raise TypeError(
+                        f"output= cannot rename the multi-output "
+                        f"{type(key_or_fn).__name__} (output_keys="
+                        f"{key_or_fn.output_keys})."
+                    )
+                drop_key = [output] if output is not None else key_or_fn.outputs
+                step = _PreprocessorStep(key_or_fn, output)
             elif not callable(key_or_fn):
                 raise TypeError(
                     f"transform(fn) expects a callable sample->sample or a "
@@ -273,7 +289,8 @@ class AbstractDataset(ABC):
         if drop_key is not None and not keep:
             if not hasattr(target, "_drop_keys"):
                 target._drop_keys = set()
-            target._drop_keys.add(drop_key)
+            keys = drop_key if isinstance(drop_key, list) else [drop_key]
+            target._drop_keys.update(keys)
 
         return target
 

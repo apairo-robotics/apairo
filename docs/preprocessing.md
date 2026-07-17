@@ -91,6 +91,7 @@ TartanKittiDataset.run_preprocess(GICPPoses(), "/data/tartan/seq_001")
 | Attribute | Type | Description |
 |---|---|---|
 | `output_key` | `str` | Subdirectory name for the output channel |
+| `output_keys` | `list[str]` | Multi-output alternative to `output_key` (exclusive). `__call__` returns a `dict` with exactly these keys; one derived channel is written and registered per key, all sharing `output_loader` and provenance. |
 | `output_loader` | `str` | Storage format: `"npys"` (one file/frame), `"npy"` (stacked), `"bin"` (raw binary/frame), `"pt"` |
 | `input_keys` | `list[str]` | Dataset channels required as input |
 | `timestamps_from` | `str \| None` | If set to a channel name, the output inherits that channel's timestamps and no `timestamps.txt` is written. If `None`, timestamps are written from the input sample timestamps. |
@@ -98,9 +99,35 @@ TartanKittiDataset.run_preprocess(GICPPoses(), "/data/tartan/seq_001")
 
 ---
 
+## Multi-output preprocessors
+
+One expensive pass sometimes produces several channels at once -- a voxel
+structure emits `cell_coords` and `cell_inv` together, a ray accumulator emits
+hits, throughs and variance from the same traversal. Declare `output_keys`
+instead of `output_key` and return a `dict` with exactly those keys:
+
+```python
+class VoxStructure(SequencePreprocessor):
+    output_keys   = ["cell_coords", "cell_inv"]
+    output_loader = "npys"
+    input_keys    = ["ouster_points", "pose"]
+
+    def __call__(self, frames):
+        coords, inv = voxelize([s.data["ouster_points"] for s in frames])
+        return {"cell_coords": coords, "cell_inv": inv}
+```
+
+The runner writes one derived channel per key (same `output_loader`) and
+registers all of them in `.apairo` with shared `timestamps_from`/`sources`
+provenance -- each channel stays individually selectable. The lazy preview
+(`ds.transform(prep)`, `FramePreprocessor` only) publishes every key of the
+dict; `output=` cannot rename a multi-output preprocessor.
+
+---
+
 ## Overwrite protection
 
-By default, `run_preprocess` raises `FileExistsError` if the first output file already exists. Pass `overwrite=True` to recompute:
+By default, `run_preprocess` raises `FileExistsError` if the first output file already exists (every declared key is checked). Pass `overwrite=True` to recompute:
 
 ```python
 Goose3DDataset.run_preprocess(preprocessor, "/data/goose", overwrite=True)

@@ -29,6 +29,13 @@ class Preprocessor(ABC):
     ----------------
     output_key : str
         Subdirectory name for the output channel (e.g. ``"trav_label"``).
+    output_keys : list[str]
+        Multi-output alternative to ``output_key`` (declaring both is an
+        error).  ``__call__`` must then return a ``dict`` with exactly these
+        keys; the runner writes one derived channel per key (same
+        ``output_loader``) and registers all of them with shared provenance.
+        Use this when one computation naturally produces several channels
+        (e.g. a voxel structure emitting ``cell_coords`` + ``cell_inv``).
     output_loader : str
         Storage format -- ``"npys"`` (one file per frame), ``"npy"`` (single
         stacked file), or ``"bin"`` (raw binary, one file per frame).
@@ -48,13 +55,30 @@ class Preprocessor(ABC):
     __call__: Callable[..., Any]
 
     output_key: ClassVar[str]
+    output_keys: ClassVar[list[str] | None] = None
     output_loader: ClassVar[str]
     input_keys: ClassVar[list[str]]
     timestamps_from: ClassVar[str | None] = None
     sources: ClassVar[list[str] | None] = None
 
+    @property
+    def outputs(self) -> list[str]:
+        """Declared output channel names -- ``output_keys`` or ``[output_key]``."""
+        return self.output_keys if self.output_keys is not None else [self.output_key]
+
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
+        if cls.output_keys is not None:
+            if getattr(cls, "output_key", None) is not None:
+                raise TypeError(
+                    f"{cls.__name__} declares both output_key and output_keys; "
+                    f"they are exclusive."
+                )
+            if not cls.output_keys or len(set(cls.output_keys)) != len(cls.output_keys):
+                raise TypeError(
+                    f"{cls.__name__}.output_keys must be a non-empty list of "
+                    f"unique channel names, got {cls.output_keys!r}."
+                )
         legacy = cls.__dict__.get("process")
         if (
             legacy is not None
@@ -78,6 +102,24 @@ class Preprocessor(ABC):
             stacklevel=2,
         )
         return self(*args, **kwargs)
+
+
+def as_output_dict(preprocessor: Preprocessor, result: Any) -> dict[str, Any]:
+    """Normalize a ``__call__`` result to ``{key: value}`` against the contract.
+
+    Single-output wraps the result under ``output_key``; multi-output requires
+    a ``dict`` with exactly the declared ``output_keys``.
+    """
+    if preprocessor.output_keys is None:
+        return {preprocessor.output_key: result}
+    if not isinstance(result, dict) or set(result) != set(preprocessor.output_keys):
+        got = sorted(result) if isinstance(result, dict) else type(result).__name__
+        raise ValueError(
+            f"{type(preprocessor).__name__} declares output_keys="
+            f"{preprocessor.output_keys} but returned {got}; __call__ must "
+            f"return a dict with exactly those keys."
+        )
+    return result
 
 
 class FramePreprocessor(Preprocessor):
