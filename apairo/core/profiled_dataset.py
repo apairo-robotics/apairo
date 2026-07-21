@@ -743,7 +743,11 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             return self._validate_clock("_clock_provider", provider(self))
         clock_spec = getattr(self, "_clock_spec", None)
         if clock_spec is not None:
-            return self._clock_from_spec(clock_spec, channels)
+            clock = self._clock_from_spec(clock_spec, channels)
+            if clock is not None:
+                return clock
+            # declared but its source is absent on disk -> fall through to an
+            # in-band channel key (a subset without the clock source stays usable).
 
         from apairo.core.keys import parse_filename_key
 
@@ -768,6 +772,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         (a camera-less subset stays clockless rather than failing)."""
         from apairo.core.keys import parse_filename_key
 
+        if "file" in spec and "dir" not in spec and "channel" not in spec:
+            return self._clock_from_sidecar(spec["file"])
         if "channel" in spec:
             ch = spec["channel"]
             if ch not in self._modalities:
@@ -807,6 +813,39 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 label=label,
             ),
         )
+
+    def _clock_from_sidecar(self, name: str, label: str = "clock") -> np.ndarray | None:
+        """A per-sequence sidecar clock: each sequence root holds *name* (one
+        timestamp per frame, in the sequence's full order) -- e.g. SemanticKITTI's
+        ``times.txt``. Aligned to the selected frames by ``(sequence, row)``.
+        Returns ``None`` when the sidecar is simply absent (clockless subset)."""
+        from apairo.loader import load_timestamps
+
+        seq_stamps: dict[str, np.ndarray] = {}
+        for seq_dir in self._sequence_dirs():
+            path = seq_dir / name
+            if path.exists():
+                seq_stamps[seq_dir.name] = load_timestamps(path)
+        if not seq_stamps:
+            return None
+        if self._ref_key is None or not self._seq_groups:
+            raise ValueError(
+                f"{label}: cannot align a sidecar clock without a per-frame anchor."
+            )
+        rows = self._full_anchor_rows()
+        seqs, stems = self.frame_sequence_ids, self.frame_stems
+        out: list[float] = []
+        for i in range(len(self)):
+            seq = seqs[i]
+            row = rows[seq][stems[i]]
+            arr = seq_stamps.get(seq)
+            if arr is None or row >= len(arr):
+                raise ValueError(
+                    f"{label}: sequence '{seq}' sidecar '{name}' is missing or shorter "
+                    f"than the frames (need row {row})."
+                )
+            out.append(float(arr[row]))
+        return self._validate_clock(label, np.asarray(out, dtype=float))
 
     def _align_clock_files(self, files_full: list[Path], label: str) -> list[Path]:
         """Map a clock channel's *full* (unfiltered) per-sequence files onto the

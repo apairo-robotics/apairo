@@ -14,3 +14,8 @@ modalities:
     dtype: int32
     mask: 65535
     cast_dtype: int64
+# Each sequence carries a `times.txt` (one timestamp per frame) -- the shared
+# frame clock, declared at one place. Optional: a sequence without it stays
+# clockless.
+clock:
+  file: times.txt

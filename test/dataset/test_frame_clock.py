@@ -135,3 +135,48 @@ def test_clock_provider_wrong_length_raises(tmp_path):
 
     with pytest.raises(ValueError, match="clock has 1 value"):
         _Bad(tmp_path, keys=["lidar", "labels"])
+
+
+# -- profile clock: {file} -- a per-sequence sidecar (SemanticKITTI times.txt) --
+
+
+def _make_kitti_with_times(root, stamps):
+    for seq, ts in stamps.items():
+        vel = root / "sequences" / seq / "velodyne"
+        lab = root / "sequences" / seq / "labels"
+        vel.mkdir(parents=True)
+        lab.mkdir(parents=True)
+        for i in range(len(ts)):
+            _bin(vel / f"{i:06d}.bin")
+            _label(lab / f"{i:06d}.label")
+        (root / "sequences" / seq / "times.txt").write_text(
+            "\n".join(str(t) for t in ts)
+        )
+
+
+def test_profile_clock_from_per_sequence_sidecar(tmp_path):
+    # semantic_kitti.yaml declares `clock: {file: times.txt}`. Positional frames,
+    # each sequence's times.txt is the shared clock (distinct epochs per sequence).
+    _make_kitti_with_times(
+        tmp_path, {"00": [0.0, 0.1, 0.2, 0.3], "01": [10.0, 10.1, 10.2, 10.3]}
+    )
+    ds = _KittiDS(tmp_path, keys=["lidar", "labels"])
+    assert ds.is_synchronous
+    np.testing.assert_allclose(
+        ds.timestamps, [0.0, 0.1, 0.2, 0.3, 10.0, 10.1, 10.2, 10.3]
+    )
+    assert ds[5].timestamp == pytest.approx(10.1)
+
+
+def test_profile_clock_sidecar_absent_is_clockless(tmp_path):
+    # A declared clock: whose sidecar is absent stays clockless -- not an error.
+    vel = tmp_path / "sequences" / "00" / "velodyne"
+    lab = tmp_path / "sequences" / "00" / "labels"
+    vel.mkdir(parents=True)
+    lab.mkdir(parents=True)
+    for i in range(2):
+        _bin(vel / f"{i:06d}.bin")
+        _label(lab / f"{i:06d}.label")
+    ds = _KittiDS(tmp_path, keys=["lidar", "labels"])
+    assert ds.timestamps is None
+    assert ds[0].timestamp is None

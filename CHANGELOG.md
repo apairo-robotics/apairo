@@ -16,13 +16,14 @@ All notable changes to apairo are documented here. The format is based on
   an explicit structural flag rather than `timestamps is None`. The clock's
   origin is a dataset concern, resolved most-specific first: a subclass
   `_clock_provider` callable, a profile-level `clock:` (`{dir, name/units, ext}`
-  self-contained or `{channel: X}`), or an in-band channel `key:`. A profile
-  `clock:` aligns to the selected frames by `(sequence, row)`, so the clock
-  source need not be among the loaded keys and still lines up under any split;
-  its clock resets per sequence and is validated per sequence. Rellis-3D now
-  derives its frame clock from the co-captured camera filenames without loading
-  the camera. Purely additive: a dataset that declares no clock stays clockless
-  (`timestamps is None`).
+  self-contained, a per-sequence sidecar `{file}`, or `{channel: X}`), or an
+  in-band channel `key:`. A profile `clock:` aligns to the selected frames by
+  `(sequence, row)`, so the clock source need not be among the loaded keys and
+  still lines up under any split; its clock resets per sequence and is validated
+  per sequence. Rellis-3D derives its clock from the co-captured camera filenames
+  (without loading the camera) and SemanticKITTI from each sequence's `times.txt`.
+  Purely additive: a dataset that declares no clock, or whose declared source is
+  absent, stays clockless (`timestamps is None`).
 - **`array_file` — colocated stacked-`npy` channels.** A directory holding two
   whole stacked arrays (e.g. `gicp_poses/poses.npy` beside `valid_mask.npy`, one
   row per pose) can now expose each as its own `npy` channel: declare
