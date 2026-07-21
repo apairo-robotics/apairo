@@ -23,6 +23,19 @@ All notable changes to apairo are documented here. The format is based on
   objects; picklability is locked by a test and by the soak.
 
 ### Added
+- **`export()` — materialize a dataset subset to a new self-contained root.**
+  `RawDataset(root, keys=[...]).filter_sequences([...]).export(dest)` (and
+  `apairo export <src> <dest> --keys ... --sequences ...`) copies a structural
+  subset -- whole sequences × whole channels of the asynchronous family -- to a
+  fresh root, regenerating the `.apairo` sidecars so the copy is self-contained
+  (`apairo status` on it reports exactly the exported channels, unlike an
+  `rsync` that leaves them stale). Each channel keeps its own `timestamps.txt`
+  and its provenance (`timestamps_from`/`sources`) trimmed to the subset,
+  `calibration.yaml` is copied verbatim, third-party sidecars are dropped, and
+  `--link` hardlinks data files on the same filesystem (near-free). Re-clocked
+  (`synchronize`), cached, windowed or frame-filtered views are rejected -- the
+  materializing export stays future work (see `IDEAS.md`). Ends the "rsync a
+  subset and get stale sidecars" workaround.
 - **Multi-output preprocessors.** A preprocessor can declare
   `output_keys: list[str]` instead of `output_key` (exclusive, validated at
   class definition) and return a `dict` with exactly those keys; one pass

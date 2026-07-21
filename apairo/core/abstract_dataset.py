@@ -11,6 +11,8 @@ from typing import (
 import numpy as np
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from apairo.core.filtered_view import FilteredView
     from apairo.core.synchronized_view import ChannelStrategy
 from . import abstract_loader
@@ -344,6 +346,48 @@ class AbstractDataset(ABC):
         from apairo.core.cached_dataset import CachedDataset
 
         return CachedDataset(self)
+
+    def export(
+        self,
+        dest: "str | Path",
+        *,
+        overwrite: bool = False,
+        link: bool = False,
+    ) -> "Path":
+        """Copy this dataset's sequences x channels into *dest* as a new root.
+
+        The write-side dual of loading: a structural subset (sequences from
+        :meth:`filter_sequences`, channels from the ``keys=`` a ``RawDataset``
+        was opened with) is copied out to a fresh, self-contained root, with the
+        ``.apairo`` sidecars regenerated so ``apairo status`` on the copy reports
+        exactly the exported channels -- unlike an ``rsync``, which leaves the
+        sidecars referencing channels that were not copied::
+
+            (RawDataset(root, keys=["lidar", "trav_gt"])
+                .filter_sequences(["s1", "s2"])
+                .export("/data/subset"))
+
+        Terminal (returns the destination path), not a chainable view.
+
+        v1 covers the asynchronous ``RawDataset`` family, whole sequences x
+        whole channels: a pure file copy plus regenerated sidecars. A re-clocked
+        (``synchronize``), cached, windowed or frame-filtered view is rejected --
+        rewriting samples through the writers is a separate regime.
+
+        Args:
+            dest: Destination root directory. Created if absent; must be empty
+                unless *overwrite* is set.
+            overwrite: Replace a non-empty *dest*.
+            link: Hardlink data files when *dest* is on the source filesystem
+                (near-free), falling back to a copy otherwise. Hardlinks share
+                inodes -- safe for apairo's write-once frames.
+
+        Returns:
+            The destination :class:`~pathlib.Path`.
+        """
+        from apairo.dataset.export import export_dataset
+
+        return export_dataset(self, dest, overwrite=overwrite, link=link)
 
     def concat(self, *others: "AbstractDataset") -> "AbstractDataset":
         """Concatenate this dataset with *others* along the frame axis.

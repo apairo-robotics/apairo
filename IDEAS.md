@@ -65,81 +65,37 @@ Not needed for current work — parked here. Distinct from `window()`: this is
 async multi-rate accumulation on a clock; `window()` is index-driven
 same-sensor neighbourhoods on an already-ordered (often synchronous) dataset.
 
-## Export a dataset subset as a new self-contained root
+## Materializing export of arbitrary views
 
-Nothing materializes a subset (sequences × channels) of a dataset to a new
-root. `.select()` / `.filter_sequences()` are lazy in-memory views; `cache()`
-goes to RAM; `run_preprocess` writes into the *same* root. So subsetting today
-means dropping to the filesystem (rsync with include/exclude on directory
-names), which leaves the copied `.apairo` sidecars stale — they reference
-channels that were not copied, breaking the "`.apairo` is the source of truth
-on disk" invariant (`apairo status` on the copy reports wrong channels).
+`export()` v1 ships the *structural* subset — whole sequences × whole channels
+of the async `RawDataset` family, a pure file copy (`--link` hardlinks on the
+same filesystem) with the `.apairo` sidecars regenerated so the copy is
+self-contained (`apairo status` on it reports exactly the exported channels).
+The remaining regime is exporting a **frame-filtered, transformed or
+synchronized** view, by *reading samples and rewriting through the writers* —
+renumbered stems, fresh `timestamps.txt`, re-encoded bytes. Powerful (export a
+cleaned or resampled dataset to a new root) but a different mechanism from the
+zero-read file copy; complementary to "persist a synchronize() result" above
+(persist-view is zero-copy inside the same root; export is a new self-contained
+root).
 
-The need is proven in-repo: `test/assets/extract_mini_datasets.py` is this
-feature hand-rolled (subsample real datasets into valid mini fixtures), and
-`benchmarks/soak.py` fabricates its tree by hand. Downstream consumers rsync.
+The v1 guard rejects such views with a pointer here, so the call site fails loud
+rather than silently copying the pre-filter data. The textbook case is
+`build_gt3d_pack` in apairo_experiments: select the real-GT frames, voxelize,
+and renumber into a fresh (97 GB) root — frame-filter + transform + renumber,
+exactly the v1-excluded path.
 
-The insight: export is the write-side dual of loading, and the write mechanics
-already live in the core (`apairo/writer`, `ChannelWriter` writes frames +
-timestamps + registers the channel). The actual feature is **sidecar
-regeneration over a selection**.
+Open, still deferred:
 
-Proposed surface — a terminal chainable operation, so selection stays the
-existing API instead of a parallel kwargs vocabulary (kwargs remain the natural
-form for the CLI):
-
-```python
-RawDataset(root, keys=["lidar", "trav_gt"]).filter_sequences(["s1", "s2"]).export(dest)
-```
-
-```bash
-apairo export <src> <dest> --keys lidar trav_gt --sequences s1 s2
-```
-
-**v1 scope — structural subset, async family only.** Whole sequences × whole
-channels, no transforms, no frame filter: a pure file copy (hardlink/reflink
-when same filesystem — near-free) plus regenerated sidecars:
-
-- `channels.yaml` per sequence limited to the exported channels (aliases and
-  suffix entries preserved);
-- `dataset.yaml` with the exported sequence list;
-- `calibration.yaml` copied verbatim (channel-independent);
-- third-party sidecar files (e.g. the extractor's `metadata.yaml`) are
-  **dropped** — they describe the source, not the subset, and copying them
-  reproduces the stale-sidecar problem one level up.
-
-**Derived channels are normalized to self-contained.** The exported channel
-always gets its own `timestamps.txt` (copied from the `timestamps_from` source
-when the channel has none — the same normalization `run_preprocess` applies to
-its outputs). `timestamps_from` is kept as pure provenance ("same clock as"),
-so a subset never has dangling clock dependencies regardless of the selection.
-
-**Extension (not v1): materializing export of arbitrary views.** A
-frame-filtered, transformed or synchronized view exported by *reading samples
-and rewriting through the writers* — renumbered stems, fresh `timestamps.txt`,
-re-encoded bytes. Powerful (export a cleaned dataset) but a different regime
-from the file-copy path. Complementary to "persist a synchronize() result"
-above: persist-view is zero-copy inside the same root; export is a new
-self-contained root.
-
-Open design questions, by priority:
-
-- **Suffixed sub-channels.** Exporting `velodyne_0_intensity` without
-  `velodyne_0` means copying only `*_<suffix>.npy` plus the shared clock into
-  the base directory name — feasible; decide fail-loud vs auto-include.
-- **Destination collision.** Refuse a non-empty `dest`? `--merge` /
-  `overwrite=` semantics mirroring `init`?
 - **Provenance block.** An additive `provenance:` entry in the exported
   `dataset.yaml` (source path, selection) would make circulating subsets
-  auditable; the tolerant v1 schema allows it. Utility debated — parked, not
-  committed.
+  auditable; the tolerant schema allows it. Utility debated — parked.
 
-Validation criterion: the day `extract_mini_datasets.py` rewrites as a single
-`export` call, the feature is right.
+Validation criterion: the day `test/assets/extract_mini_datasets.py` (which
+frame-windows *and* point-subsamples, and handles synchronous Rellis) rewrites
+as a single `export` call, the extension is right.
 
-Placement: apairo core (it touches the canonical layout and the sidecars) plus
-the `apairo export` CLI. Additive API and schema — post-1.0, same treatment as
-`apairo add`.
+Placement: apairo core + the `apairo export` CLI — both already carry v1.
 
 ## Multi-channel preprocess on asynchronous datasets
 

@@ -688,6 +688,26 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── export ────────────────────────────────────────────────────────────────────
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    src = Path(args.src).expanduser()
+    if not src.is_dir():
+        print(f"Not a directory: {src}", file=sys.stderr)
+        return 2
+    try:
+        ds: Any = RawDataset(src, keys=args.keys) if args.keys else RawDataset(src)
+        if args.sequences:
+            ds = ds.filter_sequences(args.sequences)
+        out = ds.export(args.dest, overwrite=args.overwrite, link=args.link)
+    except (FileNotFoundError, ValueError, FileExistsError, KeyError) as exc:
+        print(f"export failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"exported {out}")
+    return 0
+
+
 # ── alias ─────────────────────────────────────────────────────────────────────
 
 
@@ -976,6 +996,35 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
         action="store_true",
         help="skip the confirmation prompt for raw channels / --purge",
     )
+
+    p_export = sub.add_parser(
+        "export",
+        help="copy a subset (sequences x channels) to a new self-contained root",
+    )
+    p_export.add_argument("src", help="source dataset root or sequence directory")
+    p_export.add_argument(
+        "dest", help="destination root (created; must be empty unless --overwrite)"
+    )
+    p_export.add_argument(
+        "--keys",
+        nargs="+",
+        metavar="CHANNEL",
+        help="channels to include (default: all)",
+    )
+    p_export.add_argument(
+        "--sequences",
+        nargs="+",
+        metavar="ID",
+        help="sequence ids to include (default: all)",
+    )
+    p_export.add_argument(
+        "--overwrite", action="store_true", help="replace a non-empty destination"
+    )
+    p_export.add_argument(
+        "--link",
+        action="store_true",
+        help="hardlink data files on the same filesystem (near-free; falls back to copy)",
+    )
     return parser
 
 
@@ -997,6 +1046,7 @@ def main(argv: list[str] | None = None) -> None:
         "check": cmd_check,
         "alias": cmd_alias,
         "channel": cmd_channel_remove,  # only sub-action is `remove`
+        "export": cmd_export,
     }[args.command]
     sys.exit(handler(args))
 
