@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from apairo.core.config import write_config
+from apairo.core.config import verify_config, write_config
 from apairo.dataset.raw import RawDataset
 
 TS_KEY = r"frame\d+-(\d+)_(\d+)"  # frame<N>-<sec>_<ms> -> <sec>.<ms>
@@ -191,9 +191,9 @@ def test_key_spec_beats_on_disk_timestamps(tmp_path):
     )
 
 
-def test_non_monotonic_key_errors(tmp_path):
+def test_out_of_order_files_sorted_by_key(tmp_path):
     root = tmp_path / "seq"
-    # frame order ascending, but the captured key descends -> caught at construction.
+    # captured key descends with frame number -> enumerated in KEY order, not name order.
     _frames(
         root / "cam", ["frame000000-30.npy", "frame000001-20.npy", "frame000002-10.npy"]
     )
@@ -201,8 +201,22 @@ def test_non_monotonic_key_errors(tmp_path):
         root,
         {"cam": {"kind": "raw", "loader": "npys", "key": {"name": r"frame\d+-(\d+)"}}},
     )
+    np.testing.assert_array_equal(
+        RawDataset(root, keys=["cam"]).timestamps["cam"], [10.0, 20.0, 30.0]
+    )
+
+
+def test_non_monotonic_key_provider_rejected(tmp_path):
+    # the callable path has no sort -- a non-monotonic array is caught at construction.
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"{i:06d}.npy" for i in range(3)])
+    _write(root, {"cam": {"kind": "raw", "loader": "npys"}})
     with pytest.raises(ValueError, match="non-decreasing"):
-        RawDataset(root, keys=["cam"])
+        _CallableKeyDataset(
+            root,
+            keys=["cam"],
+            key_providers={"cam": lambda f: np.array([3.0, 1.0, 2.0])},
+        )
 
 
 class _CallableKeyDataset(RawDataset):
@@ -221,3 +235,98 @@ def test_callable_key_provider(tmp_path):
         key_providers={"cam": lambda files: np.arange(len(files)) * 2.0},
     )
     np.testing.assert_array_equal(ds.timestamps["cam"], [0.0, 2.0, 4.0, 6.0])
+
+
+def test_callable_key_provider_overrides_yaml(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-x.npy" for i in range(3)])
+    _write(root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": IDX_KEY}}})
+    ds = _CallableKeyDataset(
+        root,
+        keys=["cam"],
+        key_providers={"cam": lambda files: np.arange(len(files)) + 100.0},
+    )
+    np.testing.assert_array_equal(
+        ds.timestamps["cam"], [100.0, 101.0, 102.0]
+    )  # callable wins
+
+
+# ── hardening (adversarial edge cases) ────────────────────────────────────────
+
+
+def test_non_zero_padded_index_ordered_numerically(tmp_path):
+    root = tmp_path / "seq"
+    # lexicographic would give frame1, frame10, frame2 -> non-monotonic keys.
+    _frames(root / "cam", ["frame1-x.npy", "frame2-x.npy", "frame10-x.npy"])
+    _write(root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": IDX_KEY}}})
+    np.testing.assert_array_equal(
+        RawDataset(root, keys=["cam"]).timestamps["cam"], [1.0, 2.0, 10.0]
+    )
+
+
+def test_stray_files_excluded_from_enumeration(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-{i}.npy" for i in range(3)])
+    (root / "cam" / "notes2.md").write_text(
+        "junk"
+    )  # stem 'notes2' matches a loose regex
+    np.savetxt(root / "cam" / "timestamps.txt", [9, 9, 9])  # shadowed, wrong ext anyway
+    _write(
+        root,
+        {"cam": {"kind": "raw", "loader": "npys", "key": {"name": r"frame\d+-(\d+)"}}},
+    )
+    ds = RawDataset(root, keys=["cam"])
+    assert len(ds) == 3  # notes2.md + timestamps.txt excluded
+    np.testing.assert_array_equal(ds.timestamps["cam"], [0.0, 1.0, 2.0])
+
+
+def test_more_than_two_groups_needs_scale(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", ["frame000000-1-2-3.npy"])
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": r"(\d+)-(\d+)-(\d+)"},
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="scale"):
+        RawDataset(root, keys=["cam"])
+
+
+def test_non_numeric_group_clear_error(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", ["camABC.npy", "camDEF.npy"])
+    _write(
+        root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": r"cam(.+)"}}}
+    )
+    with pytest.raises(ValueError, match="non-numeric"):
+        RawDataset(root, keys=["cam"])
+
+
+def test_verify_config_flags_bad_key_specs(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", ["000000.npy"])
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": r"(\d+)-(\d+)-(\d+)"},
+            }
+        },
+    )  # 3 groups, no scale
+    assert any("scale" in i for i in verify_config(root))
+
+
+def test_verify_config_flags_invalid_regex(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", ["000000.npy"])
+    _write(
+        root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": r"frame(\d+"}}}
+    )
+    assert any("valid regex" in i for i in verify_config(root))

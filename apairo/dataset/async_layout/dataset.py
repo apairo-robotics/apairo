@@ -417,11 +417,13 @@ class AsyncLayoutDataset(AbstractDataset):
 
     def _enumerate(self, key: str, directory: str) -> list[str]:
         """Ordered filenames for a channel with a declarative enumeration policy:
-        the files whose stem matches its ``order`` regex (else its ``key`` regex),
-        sorted lexicographically (= frame order for zero-padded names). This is the
-        ``order`` contract -- it lets a channel whose names carry a '_' (a Rellis
-        ``<epoch>_<ms>``, which the default frame-file convention reserves for
-        suffixes) enumerate anyway, and bypasses the loader's own name sort."""
+        the loader-extension files whose stem matches its ``order`` regex (else its
+        ``key`` regex), sorted by the numeric value of the regex's first capture
+        group (else lexicographically). This is the ``order`` contract -- it lets a
+        channel whose names carry a '_' (a Rellis ``<epoch>_<ms>``, which the default
+        frame-file convention reserves for suffixes) enumerate anyway, filters out
+        strays (a ``timestamps.txt``, a dotfile, a wrong-extension note), and orders
+        even non-zero-padded frame indices correctly."""
         import re
 
         spec = self._order_spec.get(key) or self._key_spec.get(key, {})
@@ -432,10 +434,27 @@ class AsyncLayoutDataset(AbstractDataset):
                 f"enumerate by; got {spec!r}."
             )
         regex = re.compile(pattern)
+        exts = {
+            "npys": {".npy"},
+            "npy": {".npy"},
+            "bin": {".bin"},
+            "img": {".png", ".jpg", ".jpeg", ".bmp"},
+        }.get(self._profile[key])
+
+        def matched(p: Path) -> bool:
+            if not p.is_file() or p.name == "timestamps.txt" or p.name.startswith("."):
+                return False
+            if exts is not None and p.suffix.lower() not in exts:
+                return False
+            return regex.search(p.stem) is not None
+
+        def order_key(name: str) -> tuple[int, str]:
+            match = regex.search(Path(name).stem)
+            first = match.groups()[0] if (match and match.groups()) else None
+            return (int(first) if (first and first.isdigit()) else 0, name)
+
         names = sorted(
-            p.name
-            for p in Path(directory).iterdir()
-            if p.is_file() and regex.search(p.stem)
+            (p.name for p in Path(directory).iterdir() if matched(p)), key=order_key
         )
         if not names:
             raise FileNotFoundError(
@@ -559,26 +578,45 @@ class AsyncLayoutDataset(AbstractDataset):
             )
         regex = re.compile(pattern)
         scale = spec.get("scale")
+        if regex.groups == 0:
+            raise ValueError(
+                f"Channel '{key}': key regex {pattern!r} has no capture group."
+            )
+        if scale is not None and len(scale) != regex.groups:
+            raise ValueError(
+                f"Channel '{key}': key 'scale' has {len(scale)} entr(ies) but the "
+                f"regex has {regex.groups} capture group(s)."
+            )
+        if scale is None and regex.groups > 2:
+            raise ValueError(
+                f"Channel '{key}': key regex has {regex.groups} capture groups; give "
+                f"a 'scale' to combine more than two."
+            )
         out = np.empty(len(files), dtype=float)
         for i, name in enumerate(files):
             match = regex.search(Path(name).stem)
-            if match is None or not match.groups():
+            if match is None:
                 raise ValueError(
-                    f"Channel '{key}': key regex {pattern!r} matched no capture group "
-                    f"in filename '{name}'."
+                    f"Channel '{key}': key regex {pattern!r} did not match '{name}'."
                 )
             groups = match.groups()
-            if scale is None:
-                out[i] = float(".".join(groups))
-            else:
-                if len(scale) != len(groups):
-                    raise ValueError(
-                        f"Channel '{key}': key 'scale' has {len(scale)} entr(ies) but "
-                        f"the regex has {len(groups)} capture group(s)."
-                    )
-                out[i] = sum(
-                    int(g) * float(s) for g, s in zip(groups, scale, strict=True)
+            if any(g is None for g in groups):
+                raise ValueError(
+                    f"Channel '{key}': key regex {pattern!r} left an optional group "
+                    f"unmatched in '{name}'."
                 )
+            try:
+                if scale is None:
+                    out[i] = float(".".join(groups))
+                else:
+                    out[i] = sum(
+                        int(g) * float(s) for g, s in zip(groups, scale, strict=True)
+                    )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Channel '{key}': non-numeric key field in '{name}' "
+                    f"(regex {pattern!r}): {exc}"
+                ) from exc
         return out
 
     def _init_timeline(self) -> None:

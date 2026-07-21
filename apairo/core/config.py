@@ -70,6 +70,90 @@ def _unknown(present, known: frozenset[str], where: str) -> list[str]:
     ]
 
 
+def _regex_groups(pattern) -> int | None:
+    """Number of capture groups in *pattern*, or ``None`` if it is not a string
+    or does not compile as a regex."""
+    import re
+
+    if not isinstance(pattern, str):
+        return None
+    try:
+        return re.compile(pattern).groups
+    except re.error:
+        return None
+
+
+def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
+    """Validate a channel's ``key`` / ``order`` alignment specs (the filename-key
+    contract). Returns issue strings; never raises."""
+    out: list[str] = []
+    spec = meta.get("key")
+    if spec is not None:
+        if not isinstance(spec, dict):
+            out.append(f"channel '{key}': 'key' is not a mapping")
+        else:
+            has_name, has_file = "name" in spec, "file" in spec
+            if has_name == has_file:  # both, or neither
+                out.append(
+                    f"channel '{key}': 'key' must specify exactly one of 'name' or 'file'"
+                )
+            if has_name:
+                groups = _regex_groups(spec["name"])
+                scale = spec.get("scale")
+                if groups is None:
+                    out.append(f"channel '{key}': 'key.name' is not a valid regex")
+                elif groups == 0:
+                    out.append(f"channel '{key}': 'key.name' needs a capture group")
+                if scale is not None:
+                    if not (
+                        isinstance(scale, list)
+                        and all(isinstance(x, (int, float)) for x in scale)
+                    ):
+                        out.append(
+                            f"channel '{key}': 'key.scale' must be a list of numbers"
+                        )
+                    elif groups is not None and len(scale) != groups:
+                        out.append(
+                            f"channel '{key}': 'key.scale' has {len(scale)} entr(ies) "
+                            f"but 'key.name' has {groups} capture group(s)"
+                        )
+                elif groups is not None and groups > 2:
+                    out.append(
+                        f"channel '{key}': 'key.name' has {groups} capture groups; add "
+                        f"'key.scale' to combine more than two"
+                    )
+            if has_file:
+                if spec.get("scale") is not None:
+                    out.append(
+                        f"channel '{key}': 'key.scale' requires 'key.name', not 'key.file'"
+                    )
+                if not (storage_dir / str(spec["file"])).is_file():
+                    out.append(
+                        f"channel '{key}': 'key.file' {spec['file']!r} not found in "
+                        f"{storage_dir}"
+                    )
+        if (storage_dir / "timestamps.txt").is_file():
+            out.append(
+                f"channel '{key}': 'key' overrides the timestamps.txt present in "
+                f"{storage_dir}, which is ignored"
+            )
+        if meta.get("timestamps_from") or meta.get("suffix"):
+            out.append(
+                f"channel '{key}': 'key' cannot be combined with timestamps_from/suffix "
+                f"(they would be ignored)"
+            )
+    order = meta.get("order")
+    if order is not None and (
+        not isinstance(order, dict)
+        or "name" not in order
+        or _regex_groups(order["name"]) is None
+    ):
+        out.append(
+            f"channel '{key}': 'order' must be a mapping with a valid 'name' regex"
+        )
+    return out
+
+
 def _apairo_dir(root_dir: Path) -> Path:
     return root_dir / CONFIG_DIR
 
@@ -756,6 +840,8 @@ def verify_config(root_dir: str | Path) -> list[str]:
                             f"Channel '{key}': transform is missing '{field}'"
                         )
                 issues += _unknown(tf, _TRANSFORM_FIELDS, f"channel '{key}' transform")
+
+        issues += _verify_key_order(key, meta, storage_dir)
 
         ts_from = meta.get("timestamps_from")
         if ts_from and ts_from not in channels:
