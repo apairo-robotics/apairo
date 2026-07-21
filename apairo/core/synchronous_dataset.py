@@ -9,9 +9,15 @@ from apairo.core.abstract_dataset import AbstractDataset
 class SynchronousDataset(AbstractDataset):
     """Base class for datasets where index ``i`` returns a complete synchronous frame.
 
-    All modalities at index ``i`` are co-captured -- no timestamps, no interleaving.
-    ``sample.timestamp`` is always ``None``.  Random access and standard PyTorch
-    ``DataLoader`` shuffling work without any additional wrappers.
+    All modalities at index ``i`` are co-captured -- one row is one sample across
+    every channel, no interleaving. That co-capture is what *synchronous* means;
+    it is independent of whether the frame carries a timestamp. Random access and
+    standard PyTorch ``DataLoader`` shuffling work without any additional wrappers.
+
+    A synchronous dataset may still expose a **shared per-frame clock** in
+    :attr:`timestamps` (one entry per global frame, so ``sample.timestamp`` is
+    that frame's tick); it defaults to ``None`` -- clockless -- and subclasses
+    populate it when the frames carry a timestamp.
 
     Subclasses must implement ``__len__`` and ``_load``.
 
@@ -20,9 +26,11 @@ class SynchronousDataset(AbstractDataset):
     rather than subclassing this directly.
 
     Attributes:
-        timestamps: Always ``None`` -- marks this dataset as synchronous.
+        synchronous: Always ``True`` -- marks the co-captured (structural) family.
+        timestamps: The shared per-frame clock array, or ``None`` when clockless.
     """
 
+    synchronous = True
     timestamps = None
 
     # Provided by the concrete dataset (see ProfiledDataset.__init__).

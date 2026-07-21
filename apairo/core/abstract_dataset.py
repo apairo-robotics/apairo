@@ -100,7 +100,12 @@ class AbstractDataset(ABC):
     Attributes:
         available_keys: Frozenset of channel names this dataset type can provide.
         keys: Active channels loaded for this instance.
-        timestamps: Per-channel timestamp arrays, or ``None`` for synchronous datasets.
+        timestamps: The dataset's clock. Per-channel timestamp arrays
+            (asynchronous), a single shared per-frame array (synchronous with a
+            clock), or ``None`` when the dataset carries no clock.
+        synchronous: Structural flag -- ``True`` when index ``i`` is a co-captured
+            frame across all channels. Backs :attr:`is_synchronous`; independent
+            of whether :attr:`timestamps` is set.
         loaders: Per-channel loader objects.
         calibration: Sensor extrinsics -- see :attr:`calibration`.
     """
@@ -108,7 +113,7 @@ class AbstractDataset(ABC):
     available_keys: ClassVar[frozenset[str]] = frozenset()
     """Channels this dataset type can provide.  Override in each concrete class."""
 
-    timestamps: dict | None
+    timestamps: dict | np.ndarray | None
     loaders: dict[_Key, abstract_loader.AbstractLoader]
     synchronous: bool
     profile: dict[_Key, str] | None
@@ -133,8 +138,19 @@ class AbstractDataset(ABC):
 
     @property
     def is_synchronous(self) -> bool:
-        """True if this dataset has no timestamps (synchronous frame access)."""
-        return getattr(self, "timestamps", None) is None
+        """True when index ``i`` addresses a co-captured frame across all channels
+        (no cross-channel matching needed).
+
+        This is a **structural** property -- it does *not* mean the frame is
+        clockless. A synchronous dataset may still expose a per-frame clock via
+        :attr:`timestamps` (e.g. Rellis-3D frames carry a timestamp yet
+        ``lidar[i]`` and ``labels[i]`` are the same sample). Alignment and the
+        presence of a clock are orthogonal.
+        """
+        synchronous = getattr(self, "synchronous", None)
+        if synchronous is None:  # legacy leaves predating the explicit flag
+            synchronous = getattr(self, "timestamps", None) is None
+        return synchronous
 
     @property
     def calibration(self) -> Calibration:
