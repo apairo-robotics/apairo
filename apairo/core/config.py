@@ -34,6 +34,7 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
         "alias",
         "directory",
         "suffix",
+        "recipe",
     }
 )
 _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
@@ -129,6 +130,7 @@ def register_channel(
     timestamps_from: str | None = None,
     sources: list[str] | None = None,
     frame: str | None = None,
+    recipe: str | None = None,
 ) -> None:
     """Register a preprocessed channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -148,6 +150,9 @@ def register_channel(
         sources: Provenance -- raw channels this channel was derived from.
         frame: Coordinate frame the channel's data is expressed in (descriptive
             metadata only; apairo does not apply transforms).
+        recipe: Content hash of the producing preprocessor's declared config, so
+            a later ``run_preprocess(..., reuse=True)`` can tell an identical
+            recipe (skip) from a changed one (regenerate). Provenance only.
     """
     root_dir = Path(root_dir)
     # Read existing config to preserve all other channels (raw + preprocessed).
@@ -164,6 +169,8 @@ def register_channel(
         entry["sources"] = list(sources)
     if frame is not None:
         entry["frame"] = frame
+    if recipe is not None:
+        entry["recipe"] = recipe
 
     config["channels"][key] = entry
     write_config(root_dir, config)

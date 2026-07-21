@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -35,12 +37,46 @@ def _outputs_to_numpy(preprocessor, result) -> dict[str, np.ndarray]:
     return {k: _to_numpy(v) for k, v in as_output_dict(preprocessor, result).items()}
 
 
+def _recipe_key(preprocessor) -> str:
+    """A content hash of the preprocessor's *declared* configuration -- the
+    identity of what it produces. Only explicit, serializable attributes go in
+    (class name, declared I/O, and scalar constructor params -- never code, never
+    array-valued attributes), so an identical recipe hits and a declared-param
+    change mints a fresh one."""
+    scalar = (int, float, str, bool, type(None))
+    spec = {
+        "class": type(preprocessor).__qualname__,
+        "input_keys": list(preprocessor.input_keys),
+        "outputs": list(preprocessor.outputs),
+        "output_loader": preprocessor.output_loader,
+        "timestamps_from": preprocessor.timestamps_from,
+        "sources": list(preprocessor.sources or []),
+        "params": {
+            k: v
+            for k, v in sorted(vars(preprocessor).items())
+            if not k.startswith("_") and isinstance(v, scalar)
+        },
+    }
+    blob = json.dumps(spec, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+def _registered_recipe(seq_dir: Path, key: str) -> str | None:
+    """The recipe hash recorded for *key* in *seq_dir*'s channels.yaml, if any."""
+    from apairo.core.config import config_exists, read_config
+
+    if not config_exists(seq_dir):
+        return None
+    return read_config(seq_dir).get("channels", {}).get(key, {}).get("recipe")
+
+
 def run(
     preprocessor: Preprocessor,
     dataset_cls: type[Any],
     root_dir: str | Path,
     *,
     overwrite: bool = False,
+    reuse: bool = False,
     **dataset_kwargs,
 ) -> None:
     """Run a preprocessor on a dataset and persist the output channel.
@@ -56,9 +92,17 @@ def run(
         root_dir: Dataset root directory (passed to ``dataset_cls.__init__``).
         overwrite: If ``False`` (default) and the first output file already
             exists, raise :exc:`FileExistsError`.
+        reuse: Recipe-addressed idempotency. When ``True``, an output already on
+            disk whose registered recipe matches this preprocessor's declared
+            config is left untouched (the run is a no-op); a *changed* recipe is
+            regenerated. The recipe hashes only declared attributes (never code),
+            so it catches a scalar-parameter change but not an edit to
+            ``__call__`` or an array-valued attribute -- use ``overwrite=True``
+            after changing the body.
 
     Raises:
-        FileExistsError: If output already exists and ``overwrite`` is ``False``.
+        FileExistsError: If output already exists and neither ``overwrite`` nor
+            ``reuse`` is set.
         TypeError: If ``preprocessor`` is neither ``FramePreprocessor`` nor
             ``SequencePreprocessor``.
     """
@@ -77,14 +121,33 @@ def run(
         isinstance(preprocessor, SequencePreprocessor)
         and preprocessor.output_loader != "npys"
     )
+    recipe = _recipe_key(preprocessor)
+    first_paths: dict[str, Path] = {}
     for key in preprocessor.outputs:
         first_path = dataset.derived_path(0, key, ext)
         if stacked:
             first_path = first_path.parent / f"{key}.{ext}"
-        if first_path.exists() and not overwrite:
+        first_paths[key] = first_path
+
+    # reuse: an output already on disk under an identical recipe is a no-op; a
+    # changed recipe regenerates (the old output is stale). Without reuse, any
+    # existing output still raises unless overwrite is set.
+    if reuse and all(
+        p.exists() and _registered_recipe(p.parent.parent, key) == recipe
+        for key, p in first_paths.items()
+    ):
+        logger.info(
+            "%-20s  %s  up to date (recipe match) -- skipped",
+            preprocessor.__class__.__name__,
+            root_dir.name,
+        )
+        return
+    for key, first_path in first_paths.items():
+        if first_path.exists() and not (overwrite or reuse):
             raise FileExistsError(
-                f"Derived key '{key}' already exists "
-                f"(e.g. {first_path}). Pass overwrite=True to recompute."
+                f"Derived key '{key}' already exists (e.g. {first_path}). Pass "
+                f"overwrite=True to recompute, or reuse=True to skip when the "
+                f"recipe is unchanged."
             )
 
     logger.info(
@@ -123,6 +186,7 @@ def run(
                 preprocessor.output_loader,
                 timestamps_from=preprocessor.timestamps_from,
                 sources=preprocessor.sources,
+                recipe=recipe,
             )
 
 
