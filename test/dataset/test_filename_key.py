@@ -108,14 +108,116 @@ def test_sparse_subset_synchronizes_to_labeled_frames(tmp_path):
 def test_key_regex_matching_nothing_is_a_clear_error(tmp_path):
     root = tmp_path / "seq"
     _frames(root / "cam", ["000000.npy"])  # no 'frame' prefix -> regex matches nothing
-    write_config(
+    _write(root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": IDX_KEY}}})
+    with pytest.raises(FileNotFoundError, match="enumeration regex"):
+        RawDataset(root, keys=["cam"])
+
+
+# ── scale, sidecar file, order-only, callable, guards ─────────────────────────
+
+
+def _write(root, channels):
+    write_config(root, {"version": 1, "channels": channels})
+
+
+def test_scale_combines_groups(tmp_path):
+    # unpadded ms -> the join-dot rule would mis-scale; `scale` is explicit.
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-1000_{i * 10}.npy" for i in range(4)])
+    _write(
         root,
         {
-            "version": 1,
-            "channels": {
-                "cam": {"kind": "raw", "loader": "npys", "key": {"name": IDX_KEY}}
-            },
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": TS_KEY, "scale": [1, 0.001]},
+            }
         },
     )
-    with pytest.raises(FileNotFoundError, match="match key regex"):
+    ds = RawDataset(root, keys=["cam"])
+    np.testing.assert_allclose(
+        ds.timestamps["cam"], [1000.0, 1000.01, 1000.02, 1000.03]
+    )
+
+
+def test_scale_length_mismatch_errors(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-1000_0.npy" for i in range(2)])
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": TS_KEY, "scale": [1]},
+            }
+        },
+    )  # 1 scale, 2 groups
+    with pytest.raises(ValueError, match="scale"):
         RawDataset(root, keys=["cam"])
+
+
+def test_sidecar_key_file(tmp_path):
+    # a differently-named timestamps file; default (numeric) enumeration is fine.
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"{i:06d}.npy" for i in range(4)])
+    np.savetxt(root / "cam" / "clock.txt", [10.0, 11.0, 12.0, 13.0])
+    _write(
+        root, {"cam": {"kind": "raw", "loader": "npys", "key": {"file": "clock.txt"}}}
+    )
+    np.testing.assert_array_equal(
+        RawDataset(root, keys=["cam"]).timestamps["cam"], [10.0, 11.0, 12.0, 13.0]
+    )
+
+
+def test_order_only_enumerates_key_from_timestamps(tmp_path):
+    # `order` (no key): enumerate the '_'-named files; key still from timestamps.txt.
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-x_y.npy" for i in range(4)])
+    np.savetxt(root / "cam" / "timestamps.txt", [5.0, 6.0, 7.0, 8.0])
+    _write(root, {"cam": {"kind": "raw", "loader": "npys", "order": {"name": IDX_KEY}}})
+    ds = RawDataset(root, keys=["cam"])
+    assert len(ds) == 4
+    np.testing.assert_array_equal(ds.timestamps["cam"], [5.0, 6.0, 7.0, 8.0])
+
+
+def test_key_spec_beats_on_disk_timestamps(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-x.npy" for i in range(3)])
+    np.savetxt(root / "cam" / "timestamps.txt", [99.0, 98.0, 97.0])  # ignored
+    _write(root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": IDX_KEY}}})
+    np.testing.assert_array_equal(
+        RawDataset(root, keys=["cam"]).timestamps["cam"], [0.0, 1.0, 2.0]
+    )
+
+
+def test_non_monotonic_key_errors(tmp_path):
+    root = tmp_path / "seq"
+    # frame order ascending, but the captured key descends -> caught at construction.
+    _frames(
+        root / "cam", ["frame000000-30.npy", "frame000001-20.npy", "frame000002-10.npy"]
+    )
+    _write(
+        root,
+        {"cam": {"kind": "raw", "loader": "npys", "key": {"name": r"frame\d+-(\d+)"}}},
+    )
+    with pytest.raises(ValueError, match="non-decreasing"):
+        RawDataset(root, keys=["cam"])
+
+
+class _CallableKeyDataset(RawDataset):
+    def __init__(self, directory, keys=None, key_providers=None):
+        self._key_providers = key_providers or {}
+        super().__init__(directory, keys=keys)
+
+
+def test_callable_key_provider(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"{i:06d}.npy" for i in range(4)])
+    _write(root, {"cam": {"kind": "raw", "loader": "npys"}})  # no key spec
+    ds = _CallableKeyDataset(
+        root,
+        keys=["cam"],
+        key_providers={"cam": lambda files: np.arange(len(files)) * 2.0},
+    )
+    np.testing.assert_array_equal(ds.timestamps["cam"], [0.0, 2.0, 4.0, 6.0])

@@ -159,6 +159,12 @@ class AsyncLayoutDataset(AbstractDataset):
         self._key_spec: dict[str, dict] = {
             self._public(k): v["key"] for k, v in channels.items() if v.get("key")
         }
+        # ...and how those files are enumerated/ordered, when the default frame-file
+        # convention doesn't fit its naming. Separate from `key`; when absent it
+        # defaults to the key's own regex.
+        self._order_spec: dict[str, dict] = {
+            self._public(k): v["order"] for k, v in channels.items() if v.get("order")
+        }
 
         if dataset_profile is not None:
             self._profile: dict[str, str] = load_profile(dataset_profile)
@@ -382,12 +388,21 @@ class AsyncLayoutDataset(AbstractDataset):
             loader_cls = str_to_loader[self._profile[key]]
             directory = self._files[key]
             suffix = self._suffix_of.get(key)
-            if key in self._key_spec:
-                # The key regex doubles as the enumeration policy: it selects and
-                # orders this channel's files, so a name apairo's default frame-file
-                # convention rejects (a '_' in a Rellis <epoch>_<ms>) still loads.
+            order_provider = getattr(self, "_order_providers", {}).get(key)
+            enumerate_by_regex = key in self._order_spec or (
+                key in self._key_spec and "name" in self._key_spec[key]
+            )
+            if order_provider is not None:  # subclass callable: directory -> filenames
                 loaders[key] = loader_cls(
-                    directory, files=self._files_matching_key(key, directory)
+                    directory, files=list(order_provider(directory))
+                )
+            elif enumerate_by_regex:
+                # Declarative enumeration policy (the `order` regex, else the `key`
+                # regex): a channel whose names carry a '_' (a Rellis <epoch>_<ms>),
+                # which the default frame-file convention reserves for suffixes, still
+                # enumerates, and the loader's own name sort is bypassed.
+                loaders[key] = loader_cls(
+                    directory, files=self._enumerate(key, directory)
                 )
             elif suffix:
                 loaders[key] = loader_cls(
@@ -400,19 +415,21 @@ class AsyncLayoutDataset(AbstractDataset):
         self._check_suffix_coverage()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
 
-    def _files_matching_key(self, key: str, directory: str) -> list[str]:
-        """Ordered filenames for a key-declaring channel: files whose stem matches
-        its key regex, sorted lexicographically (= frame order for zero-padded
-        names). The key regex is the enumeration policy, so a channel whose names
-        carry a '_' (a Rellis ``<epoch>_<ms>``) -- which the default frame-file
-        convention would skip -- still loads, and the loader's own name sort is
-        bypassed."""
+    def _enumerate(self, key: str, directory: str) -> list[str]:
+        """Ordered filenames for a channel with a declarative enumeration policy:
+        the files whose stem matches its ``order`` regex (else its ``key`` regex),
+        sorted lexicographically (= frame order for zero-padded names). This is the
+        ``order`` contract -- it lets a channel whose names carry a '_' (a Rellis
+        ``<epoch>_<ms>``, which the default frame-file convention reserves for
+        suffixes) enumerate anyway, and bypasses the loader's own name sort."""
         import re
 
-        pattern = self._key_spec[key].get("name")
+        spec = self._order_spec.get(key) or self._key_spec.get(key, {})
+        pattern = spec.get("name")
         if pattern is None:
             raise ValueError(
-                f"Channel '{key}' has a 'key' spec without a 'name' regex."
+                f"Channel '{key}' needs an 'order' or 'key' regex ('name') to "
+                f"enumerate by; got {spec!r}."
             )
         regex = re.compile(pattern)
         names = sorted(
@@ -422,9 +439,29 @@ class AsyncLayoutDataset(AbstractDataset):
         )
         if not names:
             raise FileNotFoundError(
-                f"Channel '{key}': no files in '{directory}' match key regex {pattern!r}."
+                f"Channel '{key}': no files in '{directory}' match the enumeration "
+                f"regex {pattern!r}."
             )
         return names
+
+    def _as_key_array(self, key: str, values) -> np.ndarray:
+        """Validate + normalize a channel's key array: 1-D float, one value per
+        frame, non-decreasing -- the timeline and ``synchronize()`` need each
+        channel's keys in ascending order."""
+        arr = np.atleast_1d(np.asarray(values, dtype=float)).ravel()
+        n = len(self.loaders[key])
+        if len(arr) != n:
+            raise ValueError(
+                f"Channel '{key}': its key provider returned {len(arr)} value(s) for "
+                f"{n} frame(s)."
+            )
+        if arr.size > 1 and np.any(np.diff(arr) < 0):
+            raise ValueError(
+                f"Channel '{key}': keys are not non-decreasing. The timeline and "
+                f"synchronize() need each channel's keys ascending -- check the "
+                f"key/order regex captures the frame-ordering field."
+            )
+        return arr
 
     def _check_suffix_coverage(self) -> None:
         """A suffixed sub-channel borrows the base channel's clock (shared
@@ -455,8 +492,16 @@ class AsyncLayoutDataset(AbstractDataset):
         timestamps: dict[str, np.ndarray] = {}
         fallback: list[str] = []
         for key in self._keys:
-            if key in self._key_spec:  # highest priority: key parsed from filenames
-                timestamps[key] = self._keys_from_filenames(key)
+            provider = getattr(self, "_key_providers", {}).get(key)
+            if provider is not None:  # subclass callable: filenames -> key array
+                timestamps[key] = self._as_key_array(
+                    key, provider(getattr(self.loaders[key], "files", None))
+                )
+                continue
+            if (
+                key in self._key_spec
+            ):  # declarative key, parsed in memory (nothing written)
+                timestamps[key] = self._as_key_array(key, self._parse_key(key))
                 continue
             ts_path = Path(self._files[key]) / "timestamps.txt"
             if ts_path.exists():
@@ -478,39 +523,63 @@ class AsyncLayoutDataset(AbstractDataset):
             timestamps.update(loads_timestamps(fallback, self._files))
         return timestamps
 
-    def _keys_from_filenames(self, key: str) -> np.ndarray:
-        r"""Alignment key parsed from a channel's own filenames, computed in memory
-        (no ``timestamps.txt``, nothing written). The channel's ``key`` spec gives a
-        regex; each file's stem is matched and the capture groups are joined into a
-        decimal number -- one group is an integer index (``frame(\d+)-``), two are
-        ``<seconds>.<frac>`` (``frame\d+-(\d+)_(\d+)``). One built-in provider of the
-        general "a channel supplies its own key" contract; the source is read-only."""
+    def _parse_key(self, key: str) -> np.ndarray:
+        r"""A channel's alignment key from its ``key`` spec, computed in memory --
+        nothing is written. Two forms:
+
+        - ``{name: '<regex>'}``: parse the key from each filename stem. Capture
+          groups become a number: with ``scale: [s0, s1, ...]`` as
+          ``sum(int(group_i) * s_i)`` (e.g. ``<sec>_<ms>`` with ``scale [1, 0.001]``),
+          else ``float('.'.join(groups))`` (one group = an index; two = ``<int>.<frac>``).
+        - ``{file: '<name>'}``: read the keys from a named sidecar in the channel
+          directory (one float per line -- a differently-named ``timestamps.txt``).
+        """
         import re
 
         spec = self._key_spec[key]
+        directory = Path(self._files[key])
+        if "file" in spec:
+            path = directory / spec["file"]
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Channel '{key}': key file '{spec['file']}' not found in '{directory}'."
+                )
+            return load_timestamps(path)
         pattern = spec.get("name")
         if pattern is None:
             raise ValueError(
-                f"Channel '{key}' has a 'key' spec without a 'name' regex: {spec!r}."
+                f"Channel '{key}': 'key' spec needs a 'name' regex or a 'file'; got {spec!r}."
             )
         files = getattr(self.loaders[key], "files", None)
         if files is None:
             raise ValueError(
                 f"Channel '{key}' declares a filename-parsed key but its loader "
-                f"('{self._profile[key]}') is stacked and exposes no per-frame "
-                f"filenames. Filename keys need a per-frame loader (npys/img/bin)."
+                f"('{self._profile[key]}') is stacked and has no per-frame filenames. "
+                f"Filename keys need a per-frame loader (npys/img/bin)."
             )
         regex = re.compile(pattern)
-        keys = np.empty(len(files), dtype=float)
+        scale = spec.get("scale")
+        out = np.empty(len(files), dtype=float)
         for i, name in enumerate(files):
             match = regex.search(Path(name).stem)
             if match is None or not match.groups():
                 raise ValueError(
-                    f"Channel '{key}': key regex {pattern!r} matched no capture "
-                    f"group in filename '{name}'."
+                    f"Channel '{key}': key regex {pattern!r} matched no capture group "
+                    f"in filename '{name}'."
                 )
-            keys[i] = float(".".join(match.groups()))
-        return keys
+            groups = match.groups()
+            if scale is None:
+                out[i] = float(".".join(groups))
+            else:
+                if len(scale) != len(groups):
+                    raise ValueError(
+                        f"Channel '{key}': key 'scale' has {len(scale)} entr(ies) but "
+                        f"the regex has {len(groups)} capture group(s)."
+                    )
+                out[i] = sum(
+                    int(g) * float(s) for g, s in zip(groups, scale, strict=True)
+                )
+        return out
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
