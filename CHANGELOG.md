@@ -7,6 +7,19 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`array_file` — colocated stacked-`npy` channels.** A directory holding two
+  whole stacked arrays (e.g. `gicp_poses/poses.npy` beside `valid_mask.npy`, one
+  row per pose) can now expose each as its own `npy` channel: declare
+  `array_file: <name>` to name the exact file, and `directory:` to share another
+  channel's directory — the whole-array analogue of the per-frame `suffix`
+  idiom. Without it, `npy` still loads the sole `.npy` in the directory
+  (unchanged). The filename lives in `channels.yaml`, never in the loader;
+  `verify_config` checks the file exists and that `array_file` is used only with
+  the `npy` loader; `apairo status` resolves the shared directory. Purely
+  additive. Auto-detection of such a directory is unchanged (still declare it
+  explicitly); no apairo writer yet emits a colocated pair.
+
 ## [0.6.2] — 2026-07-21
 
 ### Added

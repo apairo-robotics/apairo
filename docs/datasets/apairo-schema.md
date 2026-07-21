@@ -48,6 +48,15 @@ channels:
       child: base_link     #   (required inside transform)
       static: false        #   (optional)
       format: t_xyz_q_xyzw #   (optional)
+  gicp_poses:              # two stacked arrays colocated in one directory
+    kind: raw
+    loader: npy
+    array_file: poses.npy  # the exact .npy this channel loads           (optional)
+  gicp_valid_mask:
+    kind: raw
+    loader: npy
+    directory: gicp_poses  # share gicp_poses/ rather than own a dir     (optional)
+    array_file: valid_mask.npy
 ```
 
 | Field | Required | Meaning |
@@ -59,6 +68,9 @@ channels:
 | `frame` | no | Coordinate frame the data is expressed in. Descriptive only — apairo never applies transforms. |
 | `transform` | no | Declares the channel *is* a transform stream: `{parent, child, [static], [format]}`. Descriptive only. |
 | `alias` | no | Public name the channel loads under (the directory keeps its real name). Must be unique and must not shadow a real channel directory. |
+| `directory` | no | On-disk subdirectory the channel's files live in, when different from its key — lets a channel share another channel's directory. Defaults to the key. |
+| `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). `npys` only. |
+| `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`). `npy` only. |
 
 ## `dataset.yaml` (root manifest, optional)
 

@@ -170,6 +170,14 @@ class AsyncLayoutDataset(AbstractDataset):
         self._order_spec: dict[str, dict] = {
             self._public(k): v["order"] for k, v in channels.items() if v.get("order")
         }
+        # A stacked `npy` channel may name the exact `.npy` it loads when its
+        # directory colocates several (poses.npy beside valid_mask.npy) -- the
+        # whole-array analogue of `suffix`. The name lives here, in the layout.
+        self._array_file_of: dict[str, str] = {
+            self._public(k): v["array_file"]
+            for k, v in channels.items()
+            if v.get("array_file")
+        }
 
         if dataset_profile is not None:
             self._profile: dict[str, str] = load_profile(dataset_profile)
@@ -207,10 +215,12 @@ class AsyncLayoutDataset(AbstractDataset):
                 )
             self._files[public] = path
 
-        # Suffixed sub-channels have no directory of their own on disk -- they
-        # share the directory of the channel named by their "directory" field.
+        # Sub-channels that share another channel's directory instead of owning
+        # one: a suffixed per-frame variant (*_intensity.npy), or a colocated
+        # stacked array named by `array_file` (valid_mask.npy beside poses.npy).
+        # Both read out of the directory named by their "directory" field.
         for real, meta in channels.items():
-            if not meta.get("suffix"):
+            if not (meta.get("suffix") or meta.get("array_file")):
                 continue
             public = self._public(real)
             source_public = self._public(meta.get("directory", real))
@@ -413,6 +423,10 @@ class AsyncLayoutDataset(AbstractDataset):
                 loaders[key] = loader_cls(
                     directory, files=suffixed_frame_files(directory, suffix)
                 )
+            elif self._array_file_of.get(key) and self._profile[key] == "npy":
+                # A colocated stacked array named explicitly (valid_mask.npy in a
+                # shared gicp_poses/): load that file, not the directory's glob[0].
+                loaders[key] = loader_cls(directory, file=self._array_file_of[key])
             else:
                 loaders[key] = loader_cls(directory)
         self.loaders: dict[str, AbstractLoader] = loaders

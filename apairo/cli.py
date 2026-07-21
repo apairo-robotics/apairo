@@ -84,9 +84,19 @@ def _rate_span(ts):
     return rate, (t0, t1)
 
 
-def _channel_shape(channel_dir: Path, loader: str | None):
-    """Per-frame shape + dtype from a ``.npy`` header (mmap -- no data read)."""
-    npys = sorted(channel_dir.glob("*.npy"))
+def _channel_shape(
+    channel_dir: Path, loader: str | None, array_file: str | None = None
+):
+    """Per-frame shape + dtype from a ``.npy`` header (mmap -- no data read).
+
+    When *array_file* is given (a channel colocated with others in one directory),
+    read that exact stacked file rather than the directory's first ``.npy``.
+    """
+    if array_file is not None:
+        target = channel_dir / array_file
+        npys = [target] if target.is_file() else []
+    else:
+        npys = sorted(channel_dir.glob("*.npy"))
     if not npys:
         return None, None
     try:
@@ -107,8 +117,13 @@ def _count_files(channel_dir: Path) -> int:
 
 
 def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
-    """Per-channel facts for the channel directory ``seq_dir/channel``."""
-    return _channel_detail_dir(seq_dir / channel, meta)
+    """Per-channel facts for the channel directory ``seq_dir/channel``.
+
+    A sub-channel that shares another channel's directory (a suffixed variant, or
+    a colocated ``array_file``) is resolved through its ``directory`` field rather
+    than the non-existent ``seq_dir/channel``."""
+    subdir = meta.get("directory", channel) if meta else channel
+    return _channel_detail_dir(seq_dir / subdir, meta)
 
 
 def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
@@ -119,7 +134,9 @@ def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
     ts = _read_timestamps(cdir)
     rate, span = _rate_span(ts)
     loader = meta.get("loader") if meta else _detect_loader(cdir)
-    shape, dtype = _channel_shape(cdir, loader)
+    shape, dtype = _channel_shape(
+        cdir, loader, meta.get("array_file") if meta else None
+    )
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,

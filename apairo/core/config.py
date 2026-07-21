@@ -38,6 +38,7 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
         "alias",
         "directory",
         "suffix",
+        "array_file",
         "key",
         "order",
         "recipe",
@@ -297,6 +298,7 @@ def register_raw_channel(
     alias: str | None = None,
     directory: str | None = None,
     suffix: str | None = None,
+    array_file: str | None = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -332,6 +334,13 @@ def register_raw_channel(
             inside *directory* are loaded for this channel (see
             :func:`apairo.core.naming.suffixed_frame_files`). Pairs with
             *directory*; only meaningful for the ``"npys"`` loader.
+        array_file: The exact stacked ``.npy`` file this channel loads within its
+            directory, when the directory colocates more than one (e.g. read
+            ``valid_mask.npy`` from a ``gicp_poses/`` that also holds
+            ``poses.npy``). The whole-array analogue of *suffix*; pairs with
+            *directory* to share another channel's directory, and only meaningful
+            for the ``"npy"`` loader. Without it, ``npy`` loads the sole ``.npy``
+            in the directory.
     """
     root_dir = Path(root_dir)
     config: dict = (
@@ -354,6 +363,8 @@ def register_raw_channel(
         entry["directory"] = directory
     if suffix is not None:
         entry["suffix"] = suffix
+    if array_file is not None:
+        entry["array_file"] = array_file
     config["channels"][key] = entry
     write_config(root_dir, config)
 
@@ -860,6 +871,19 @@ def verify_config(root_dir: str | Path) -> list[str]:
         loader = meta.get("loader")
         if loader and loader not in KNOWN_LOADERS:
             issues.append(f"Channel '{key}': unknown loader '{loader}'")
+
+        array_file = meta.get("array_file")
+        if array_file is not None:
+            if loader is not None and loader != "npy":
+                issues.append(
+                    f"Channel '{key}': 'array_file' selects a stacked array and is "
+                    f"only meaningful for the 'npy' loader (got '{loader}')"
+                )
+            elif not (storage_dir / str(array_file)).is_file():
+                issues.append(
+                    f"Channel '{key}': array_file '{array_file}' not found in "
+                    f"{storage_dir}"
+                )
 
         tf = meta.get("transform")
         if tf is not None:
