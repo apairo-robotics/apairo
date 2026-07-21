@@ -7,6 +7,19 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-07-21
+
+### Added
+- **`key: {units: [...]}` — readable sugar for `scale`.** When every capture
+  group of a filename `key` regex is a time field, name the units
+  (`s` / `ms` / `us` / `ns`) instead of raw multipliers: `units: [s, ms]`
+  compiles to `scale: [1, 0.001]`, self-documenting and steering off the
+  default-join footgun for non-zero-padded fractional fields. `units` and
+  `scale` are mutually exclusive; unknown units and a length ≠ capture-group
+  count are flagged by `verify_config` and at load. Documents the heterogeneous
+  `camera_<sec>_<index>` pattern: capture only the key field and let `order` sort
+  by the index (an index is not a duration, so it never folds into the key).
+
 ## [0.6.1] — 2026-07-21
 
 ### Added
