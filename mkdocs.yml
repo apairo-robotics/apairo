@@ -75,6 +75,7 @@ nav:
     - The .apairo Schema: datasets/apairo-schema.md
     - YAML Profiles: datasets/yaml-profiles.md
     - Adding a Dataset: datasets/adding-a-dataset.md
+    - Bring Your Own Dataset: datasets/bring-your-own-dataset.md
     - Async Datasets: async-datasets.md
   - The dataset API:
     - Frames & Calibration: frames.md

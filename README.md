@@ -64,6 +64,41 @@ code change.
 
 ---
 
+## Bring your own dataset — keys in the filenames
+
+Point apairo at a directory of files and it loads. When each frame's alignment
+clock is encoded in its **filename** — a timestamp, an index — declare it in
+`channels.yaml`; apairo parses the key in memory at read time and **never writes
+into your data**:
+
+```yaml
+# .apairo/channels.yaml
+channels:
+  camera: {loader: img, key: {name: 'frame\d+-(\d+)_(\d+)'}}   # timestamp from frame000123-1581624652_750.jpg
+  labels: {loader: img, key: {name: 'frame\d+-(\d+)_(\d+)'}}   # same clock; a sparse subset of frames
+```
+
+```python
+ds   = apairo.RawDataset(seq_dir, keys=["camera", "labels"])
+view = ds.synchronize(reference="camera", method="nearest", tolerance=0.0)  # labels attach where they exist
+```
+
+- `key: {name: <regex>}` parses the key from the filename stem (`scale: [...]`
+  for an explicit unit combine); `key: {file: <name>}` reads it from a sidecar.
+- A separate `order:` controls enumeration; a subclass can hand in
+  `_key_providers` / `_order_providers` callables for anything the DSL can't
+  express.
+- No `key` → today's behavior (`timestamps.txt`, or frame position). Fully
+  additive, opt-in, read-only.
+
+This turns the Rellis-3D camera (2847 frames @ 10 Hz, plus 1200 half-rate
+image-labels) into two lines of `channels.yaml` — no subclass, no
+filename→`timestamps.txt` transcode. See the
+[Bring your own dataset](https://apairo-robotics.github.io/apairo/datasets/bring-your-own-dataset/)
+guide.
+
+---
+
 ## Command line
 
 Installing apairo provides the `apairo` command to inspect and initialize

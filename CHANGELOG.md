@@ -23,6 +23,26 @@ All notable changes to apairo are documented here. The format is based on
   objects; picklability is locked by a test and by the soak.
 
 ### Added
+- **Filename-encoded and sidecar keys — an async channel supplies its own
+  alignment clock.** A channel in `channels.yaml` can now declare
+  `key: {name: <regex>}` to parse its alignment key from each filename's stem
+  (one capture group → an integer index, two → `<sec>.<frac>`, or an explicit
+  `scale: [...]` unit combine), or `key: {file: <name>}` to read it from a named
+  sidecar — generalizing the hardwired `timestamps.txt`. A separate
+  `order: {name: <regex>}` sets the enumeration policy (defaulting to the key's
+  regex, else the frame-file convention), so filenames carrying a `_` the default
+  convention rejects — a Rellis `<epoch>_<ms>` stem — still load. Keys are
+  computed in memory at read time; **nothing is ever written** into the source
+  tree, so a filename-keyed channel needs no sidecar at all. The parsed key feeds
+  `synchronize()` unchanged (nearest/previous/next, tolerance, sparse subsets
+  included). Both fields are additive and opt-in — a channel with neither keeps
+  today's behavior (`timestamps.txt` / `timestamps_from` / frame position). A
+  subclass can override either with `self._key_providers[channel]` /
+  `self._order_providers[channel]` callables set before `super().__init__()`.
+  Lands the Rellis-3D camera (2847 frames @ 10 Hz plus 1200 sparse image-labels)
+  in two lines of `channels.yaml` — ends the "transcode filenames into a
+  `timestamps.txt` before apairo can read the channel" workaround. See
+  [Bring your own dataset](docs/datasets/bring-your-own-dataset.md).
 - **`export()` — materialize a dataset subset to a new self-contained root.**
   `RawDataset(root, keys=[...]).filter_sequences([...]).export(dest)` (and
   `apairo export <src> <dest> --keys ... --sequences ...`) copies a structural

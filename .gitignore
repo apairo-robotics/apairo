@@ -33,3 +33,5 @@ test/assets/**/.apairo/
 benchmarks/*.png
 # Local cache written by examples/join_persisted_prior.py (disposable)
 examples/_cache/
+# Scratch sequence staged by examples/rellis_camera_sync.py (disposable)
+examples/_rellis_scratch/

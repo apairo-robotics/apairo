@@ -1,5 +1,39 @@
 # Idea For Apairo
 
+## Bring your own dataset: the key / order contract
+
+Landed for the asynchronous family (see CHANGELOG). apairo reads a dataset as a
+set of channels governed by three per-channel contracts — **order** (list +
+order the frames), **load** (decode one frame), **key** (each frame's alignment
+value). `load` and `order` were always there; `key` used to be hardwired to a
+`timestamps.txt` on disk. It is now pluggable and opt-in in `channels.yaml`:
+
+- `key: {name: <regex>}` — parse the key from the filename stem (groups combined,
+  or an explicit `scale: [...]` unit combine); `key: {file: <name>}` — read it
+  from a named sidecar. Computed in memory at read time, nothing written.
+- `order: {name: <regex>}` — enumeration policy, a contract separate from `key`;
+  defaults to the key regex when `key: {name}` is set, else the frame-file
+  convention. Required when filenames carry a `_` the default convention rejects
+  (a Rellis `<epoch>_<ms>` stem).
+- Escape hatch: `self._key_providers[channel]` / `self._order_providers[channel]`
+  callables (subclass, set before `super().__init__()`, checked before the YAML
+  specs).
+
+This unbricks datasets whose clock lives in the filenames — the Rellis-3D camera
+(2847 frames @ 10 Hz) and its ~half-rate image-labels (1200, sparse) now load in
+two lines of `channels.yaml`, no subclass, no transcode, zero writes.
+
+Remaining, parked:
+
+- **Unify the synchronous family behind the same key (position-as-default).** The
+  `ProfiledDataset` datasets (SemanticKITTI, Rellis, GOOSE) are still a separate
+  family from the async `key`-driven one. The end state is *position-as-default*:
+  a synchronous dataset is simply the case where every channel's `key` is its row
+  position, so "synchronous" stops being a distinct dataset family and becomes
+  one setting of the single order/load/key contract. The engine already aligns
+  per-channel key arrays regardless of what the key means; collapsing the two
+  families into one is the larger architectural step, and is deferred.
+
 ## Persist a synchronize() result as a reloadable synchronous view
 
 `.synchronize()` recomputes the matching every session, and nothing lets us
