@@ -7,6 +7,8 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-21
+
 ### Fixed
 - **Loading raw data never requires write access.** Constructing a
   `RawDataset`/`TartanKittiDataset` on a bare tree bootstraps the `.apairo`
