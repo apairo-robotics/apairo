@@ -1,7 +1,7 @@
 
 # Makefile for Apairo Project
 
-.PHONY: env install test coverage lint format typecheck soak clean help
+.PHONY: env install test coverage lint format typecheck soak bench-h2h clean help
 
 help:
 	@echo "Available commands:"
@@ -13,6 +13,7 @@ help:
 	@echo "  make format    : Format the codebase with ruff"
 	@echo "  make typecheck : Run mypy (CI gate -- must stay at zero errors)"
 	@echo "  make soak      : Run the synthetic intensive-usage soak (benchmarks/soak.py)"
+	@echo "  make bench-h2h : Hand-rolled loader vs apairo (LOC + throughput, benchmarks/headtohead.py)"
 	@echo "  make clean     : Remove build artifacts and cache"
 
 env:
@@ -41,6 +42,9 @@ typecheck:
 
 soak:
 	python3 benchmarks/soak.py
+
+bench-h2h:
+	python3 benchmarks/headtohead.py
 
 clean:
 	rm -rf build dist *.egg-info
