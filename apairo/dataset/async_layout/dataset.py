@@ -79,8 +79,12 @@ class AsyncLayoutDataset(AbstractDataset):
     It describes *how* channels are stored, never *which* channels exist: each
     channel is a subdirectory with its own ``timestamps.txt`` and data files in
     a format known to the loader registry (``npys``, ``npy``, ``bin``, ``img``,
-    ``zarr``). The set of channels is per-instance state, read from
-    ``.apairo/channels.yaml`` (or an explicit ``dataset_profile``). Datasets
+    ``zarr``). A channel may instead carry its alignment key in its filenames --
+    a ``key: {name: <regex>}`` / ``{file: <name>}`` spec parses it in memory at
+    read time (nothing written), with an optional ``order`` enumeration policy;
+    see ``docs/datasets/bring-your-own-dataset.md``. The set of channels is
+    per-instance state, read from ``.apairo/channels.yaml`` (or an explicit
+    ``dataset_profile``). Datasets
     with a *fixed* channel set layer a profile on top (e.g.
     :class:`~apairo.dataset.tartan_kitti.TartanKittiDataset`); datasets with
     *dynamic* channels (e.g. ``apairo-extractor`` output) use
