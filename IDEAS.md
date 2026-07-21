@@ -25,14 +25,26 @@ two lines of `channels.yaml`, no subclass, no transcode, zero writes.
 
 Remaining, parked:
 
-- **Unify the synchronous family behind the same key (position-as-default).** The
-  `ProfiledDataset` datasets (SemanticKITTI, Rellis, GOOSE) are still a separate
-  family from the async `key`-driven one. The end state is *position-as-default*:
-  a synchronous dataset is simply the case where every channel's `key` is its row
-  position, so "synchronous" stops being a distinct dataset family and becomes
-  one setting of the single order/load/key contract. The engine already aligns
-  per-channel key arrays regardless of what the key means; collapsing the two
-  families into one is the larger architectural step, and is deferred.
+- **Unify the synchronous family behind the same key (position-as-default).**
+
+  *First step landed* (see CHANGELOG, "synchronous per-frame clock"): synchrony
+  and the presence of a clock are now orthogonal. `is_synchronous` is a
+  **structural** flag (co-captured frames — `ds[i]` is one sample across all
+  channels), decoupled from `timestamps is None`; and a synchronous
+  `ProfiledDataset` now speaks the same key/clock contract as the async family
+  for its frame clock — the clock's origin is resolved from a `_clock_provider`
+  callable, a profile `clock:` (`{dir, name/units}` / `{file}` per-sequence
+  sidecar / `{channel: X}`), or an in-band channel `key:`, always aligned to the
+  selected frames by `(sequence, row)`. Rellis carries the co-captured camera's
+  clock (without loading the camera); SemanticKITTI its `times.txt`.
+
+  *Remaining:* collapse the two class hierarchies. The end state is
+  *position-as-default* — a synchronous dataset is simply the case where every
+  channel's `key` is its row position, so `ProfiledDataset` / `SynchronousDataset`
+  and `AsyncLayoutDataset` become one order/load/key contract instead of two
+  families (and `ds.timestamps` becomes the uniform per-channel form). The engine
+  already aligns per-channel key arrays regardless of what the key means; this
+  collapse is the larger architectural step, and is deferred.
 
 ## Persist a synchronize() result as a reloadable synchronous view
 
