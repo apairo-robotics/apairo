@@ -23,3 +23,12 @@ splits:
   train: pt_train.lst
   val: pt_val.lst
   test: pt_test.lst
+# The lidar/labels frames are positional, but each is co-captured with a camera
+# frame whose filename carries the timestamp -- so the camera IS the frame clock,
+# shared by lidar and labels even when the camera is not among the loaded keys.
+# Optional: a Rellis subset without the camera directory stays clockless.
+clock:
+  dir: pylon_camera_node
+  ext: .jpg
+  name: 'frame\d+-(\d+)_(\d+)'
+  units: [s, ms]

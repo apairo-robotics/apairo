@@ -54,11 +54,33 @@ def test_rellis_load(rellis_root):
     assert len(ds) == 10  # 2 sequences x 5 frames
 
     sample = ds[0]
-    assert sample.timestamp is None
+    # Rellis is synchronous AND clocked: lidar/labels are positional, but each is
+    # co-captured with a timestamped camera frame, so the camera IS the shared
+    # frame clock (profile `clock:`) -- present even though the camera is not
+    # among the loaded keys.
+    assert sample.timestamp is not None
+    assert "pylon_camera_node" not in sample.data  # clock without loading the source
+    assert ds.timestamps is not None and len(ds.timestamps) == 10
     assert sample.data["lidar"].shape == (1024, 4)
     assert sample.data["lidar"].dtype == np.float32
     assert sample.data["labels"].shape == (1024,)
     assert sample.data["labels"].dtype == np.int64  # cast_dtype from profile
+
+
+def test_rellis_frame_clock(rellis_root):
+    # The camera (profile `clock:`) provides the shared frame clock without being
+    # loaded as a channel. Each sequence carries its own epoch, and the clock
+    # realigns to the SELECTED frames under a split.
+    ds = Rellis3DDataset(rellis_root, keys=["lidar", "labels"])
+    assert ds.timestamps is not None and len(ds.timestamps) == 10
+    assert list(ds.timestamps[:5]) == sorted(ds.timestamps[:5])  # seq 00000 ascends
+    assert list(ds.timestamps[5:]) == sorted(ds.timestamps[5:])  # seq 00001 ascends
+    assert ds[0].timestamp != ds[5].timestamp  # distinct per-sequence epochs
+
+    train = Rellis3DDataset(rellis_root, keys=["lidar", "labels"], split="train")
+    assert len(train.timestamps) == len(train)
+    full = set(np.round(ds.timestamps, 3))
+    assert set(np.round(train.timestamps, 3)).issubset(full)  # realigned subset
 
 
 def test_rellis_poses(rellis_root):

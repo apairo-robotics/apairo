@@ -94,3 +94,44 @@ def test_frame_clock_rejects_a_non_monotonic_sequence(tmp_path):
     _make_clocked_kitti(tmp_path, {"00": [(100, 500), (100, 0)]})  # decreasing
     with pytest.raises(ValueError, match="non-decreasing within a sequence"):
         _KittiDS(tmp_path, keys=["lidar", "labels"])
+
+
+# -- the clock's origin is a concrete-dataset concern: a subclass provider ------
+
+
+def test_clock_provider_escape_hatch(tmp_path):
+    # No channel declares a key; the concrete dataset computes its own clock.
+    _make_clocked_kitti(tmp_path, {"00": [(100, 0), (100, 500)]}, key_on=None)
+
+    class _Provided(_KittiDS):
+        def __init__(self, root, **kw):
+            self._clock_provider = lambda ds: np.arange(len(ds), dtype=float) * 10.0
+            super().__init__(root, **kw)
+
+    ds = _Provided(tmp_path, keys=["lidar", "labels"])
+    np.testing.assert_allclose(ds.timestamps, [0.0, 10.0])
+    assert ds[1].timestamp == pytest.approx(10.0)
+
+
+def test_clock_provider_takes_precedence_over_a_channel_key(tmp_path):
+    _make_clocked_kitti(tmp_path, {"00": [(100, 0), (100, 500)]})  # lidar HAS a key
+
+    class _Provided(_KittiDS):
+        def __init__(self, root, **kw):
+            self._clock_provider = lambda ds: np.array([7.0, 8.0])
+            super().__init__(root, **kw)
+
+    ds = _Provided(tmp_path, keys=["lidar", "labels"])
+    np.testing.assert_allclose(ds.timestamps, [7.0, 8.0])  # provider wins
+
+
+def test_clock_provider_wrong_length_raises(tmp_path):
+    _make_clocked_kitti(tmp_path, {"00": [(100, 0), (100, 500)]}, key_on=None)
+
+    class _Bad(_KittiDS):
+        def __init__(self, root, **kw):
+            self._clock_provider = lambda ds: np.array([1.0])  # 1 value for 2 frames
+            super().__init__(root, **kw)
+
+    with pytest.raises(ValueError, match="clock has 1 value"):
+        _Bad(tmp_path, keys=["lidar", "labels"])

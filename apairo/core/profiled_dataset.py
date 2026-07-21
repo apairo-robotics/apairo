@@ -334,6 +334,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         # the profile geometry is fully described without file discovery (used by
         # init/inventory, not only __init__).
         self._splits_spec: SplitSpec | None = _parse_splits_spec(raw.get("splits", {}))
+        # A dataset-level clock declaration (the clock's origin is dataset-
+        # specific -- see _collect_frame_clock). Structural, so set here.
+        self._clock_spec: dict | None = raw.get("clock")
 
         self._root = Path(root_dir)
         return raw
@@ -719,13 +722,29 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def _collect_frame_clock(self, channels: dict) -> np.ndarray | None:
         """The dataset's shared per-frame clock, or ``None`` when clockless.
 
-        The first loaded per-frame channel that declares a ``key`` (the
-        form-agnostic clock contract, parsed by
-        :func:`~apairo.core.keys.parse_filename_key`) provides it. The array is
-        already in the selected frame order -- splits and sequence selection are
-        applied, because the clock channel went through the same file discovery
-        as the data channels.
+        The clock's *origin* is a concrete-dataset concern, so it is resolved from
+        the most specific declaration down -- mirroring the async family's
+        ``_key_providers`` layering:
+
+        1. ``self._clock_provider`` -- a subclass callable ``(dataset) -> ndarray``
+           (the escape hatch, for a computed or otherwise-shaped clock);
+        2. the profile's ``clock:`` block -- a dataset-level declaration
+           (``{dir, name/units/scale, ext?}`` self-contained, or ``{channel: X}``
+           reusing channel *X*'s ``key``), so the clock is available even when its
+           source channel is not among the loaded keys;
+        3. a loaded channel that declares a ``key`` in ``channels.yaml`` (in-band);
+        4. otherwise ``None`` -- clockless.
+
+        The array is always in the selected frame order (splits and sequence
+        selection applied) and validated per sequence.
         """
+        provider = getattr(self, "_clock_provider", None)
+        if provider is not None:
+            return self._validate_clock("_clock_provider", provider(self))
+        clock_spec = getattr(self, "_clock_spec", None)
+        if clock_spec is not None:
+            return self._clock_from_spec(clock_spec, channels)
+
         from apairo.core.keys import parse_filename_key
 
         for real_key, files in self._files.items():
@@ -738,11 +757,95 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 directory=files[0].parent,
                 label=f"Channel '{real_key}'",
             )
-            self._check_clock_monotonic(real_key, arr)
-            return arr
+            return self._validate_clock(f"Channel '{real_key}'", arr)
         return None
 
-    def _check_clock_monotonic(self, key: str, arr: np.ndarray) -> None:
+    def _clock_from_spec(self, spec: dict, channels: dict) -> np.ndarray | None:
+        """Resolve a profile ``clock:`` declaration to the per-frame array, aligned
+        to the selected frames -- so the clock channel need not be loaded, and
+        splits still line up (alignment is by ``(sequence, row)``, not filename).
+        Returns ``None`` when the declared clock source is simply absent on disk
+        (a camera-less subset stays clockless rather than failing)."""
+        from apairo.core.keys import parse_filename_key
+
+        if "channel" in spec:
+            ch = spec["channel"]
+            if ch not in self._modalities:
+                raise ValueError(
+                    f"clock: channel '{ch}' is not a modality of {type(self).__name__}."
+                )
+            key_spec = channels.get(ch, {}).get("key")
+            if key_spec is None:
+                raise ValueError(
+                    f"clock: channel '{ch}' declares no 'key' to read the clock from."
+                )
+            files_full = self._discover_native(ch, apply_frame_filter=False)
+            label = f"clock (channel '{ch}')"
+        else:
+            directory = spec.get("dir")
+            if directory is None:
+                raise ValueError(
+                    "clock: needs a 'channel', or a 'dir' with a 'name'/'file' key."
+                )
+            ext = spec.get("ext", "")
+            pattern = f"**/{directory}/**/*{ext}" if ext else f"**/{directory}/**/*"
+            files_full = sorted(p for p in self._root.glob(pattern) if p.is_file())
+            key_spec = {
+                k: spec[k] for k in ("name", "file", "scale", "units") if k in spec
+            }
+            label = "clock"
+
+        if not files_full:  # declared but absent -> clockless (not an error)
+            return None
+        aligned = self._align_clock_files(files_full, label)
+        return self._validate_clock(
+            label,
+            parse_filename_key(
+                [p.name for p in aligned],
+                key_spec,
+                directory=aligned[0].parent,
+                label=label,
+            ),
+        )
+
+    def _align_clock_files(self, files_full: list[Path], label: str) -> list[Path]:
+        """Map a clock channel's *full* (unfiltered) per-sequence files onto the
+        selected frames by ``(sequence, row)`` -- the same alignment the stacked
+        sequence-file loaders use, so the clock lines up under any split/filter
+        even when its filenames differ from the anchor's."""
+        if self._ref_key is None or not self._seq_groups:
+            raise ValueError(
+                f"{label}: cannot align a clock without a per-frame anchor channel."
+            )
+        by_seq: dict[str, list[Path]] = {}
+        for f in files_full:
+            by_seq.setdefault(self._seq_root(f).name, []).append(f)
+        rows = self._full_anchor_rows()
+        seqs, stems = self.frame_sequence_ids, self.frame_stems
+        out: list[Path] = []
+        for i in range(len(self)):
+            seq = seqs[i]
+            row = rows[seq][stems[i]]
+            seq_files = by_seq.get(seq, [])
+            if row >= len(seq_files):
+                raise ValueError(
+                    f"{label}: sequence '{seq}' has {len(seq_files)} clock file(s) "
+                    f"but the frames need row {row} -- the clock source must be 1:1 "
+                    f"co-indexed with the frames."
+                )
+            out.append(seq_files[row])
+        return out
+
+    def _validate_clock(self, label: str, arr) -> np.ndarray:
+        arr = np.asarray(arr, dtype=float).ravel()
+        if len(arr) != len(self):
+            raise ValueError(
+                f"{label}: clock has {len(arr)} value(s) for {len(self)} frame(s)."
+            )
+        self._check_clock_monotonic(label, arr)
+        return arr
+
+    def _check_clock_monotonic(self, label: str, arr: np.ndarray) -> None:
         """A frame clock must be non-decreasing *within each sequence*; it resets
         across sequences (each recording carries its own timeline), so the flat
         array is validated per sequence, never globally."""
@@ -751,8 +854,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             seq = arr[np.asarray(idxs, dtype=int)]
             if seq.size > 1 and np.any(np.diff(seq) < 0):
                 raise ValueError(
-                    f"Channel '{key}': frame clock is not non-decreasing within a "
-                    f"sequence -- check the key regex captures the time field."
+                    f"{label}: frame clock is not non-decreasing within a sequence "
+                    f"-- check the key captures the time field."
                 )
 
     def _seq_root(self, path: Path) -> Path:
