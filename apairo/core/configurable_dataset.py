@@ -38,13 +38,31 @@ class _RunPreprocessDescriptor:
         if obj is not None:
             root_dir = obj.root_dir
 
-            def _instance_run(preprocessor, *, overwrite=False, **dataset_kwargs):
-                run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+            def _instance_run(
+                preprocessor, *, overwrite=False, reuse=False, **dataset_kwargs
+            ):
+                run(
+                    preprocessor,
+                    cls,
+                    root_dir,
+                    overwrite=overwrite,
+                    reuse=reuse,
+                    **dataset_kwargs,
+                )
 
             return _instance_run
 
-        def _class_run(preprocessor, root_dir, *, overwrite=False, **dataset_kwargs):
-            run(preprocessor, cls, root_dir, overwrite=overwrite, **dataset_kwargs)
+        def _class_run(
+            preprocessor, root_dir, *, overwrite=False, reuse=False, **dataset_kwargs
+        ):
+            run(
+                preprocessor,
+                cls,
+                root_dir,
+                overwrite=overwrite,
+                reuse=reuse,
+                **dataset_kwargs,
+            )
 
         return _class_run
 
@@ -82,6 +100,7 @@ class ConfigurableDataset:
         *,
         timestamps_from: str | None = None,
         sources: list[str] | None = None,
+        recipe: str | None = None,
     ) -> None:
         """Register a preprocessed channel in ``sequence_dir/.apairo``.
 
@@ -92,6 +111,8 @@ class ConfigurableDataset:
             timestamps_from: Channel whose timestamps to share when this channel
                 has no ``timestamps.txt`` of its own.
             sources: Provenance -- channels this channel was derived from.
+            recipe: Content hash of the producing preprocessor's declared config
+                (set by ``run_preprocess``; enables ``reuse=True`` skip/regenerate).
         """
         _register_channel(
             sequence_dir,
@@ -99,6 +120,7 @@ class ConfigurableDataset:
             loader,
             timestamps_from=timestamps_from,
             sources=sources,
+            recipe=recipe,
         )
 
     @classmethod

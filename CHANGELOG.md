@@ -7,6 +7,19 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-07-21
+
+### Added
+- **`run_preprocess(..., reuse=True)` — recipe-addressed idempotency.** Each
+  materialized channel now records a `recipe` hash of its producing
+  preprocessor's *declared* config (class, declared I/O, scalar constructor
+  params -- never code). With `reuse=True`, re-running a preprocessor whose
+  output is already on disk under an identical recipe is a no-op, and a *changed*
+  scalar parameter regenerates it -- so a branching experiment reuses unchanged
+  derived channels and never silently loads output from a different recipe. The
+  default is unchanged (an existing output still raises without `overwrite`); the
+  new `recipe` sidecar field is additive and provenance-only.
+
 ## [0.6.0] — 2026-07-21
 
 ### Fixed
