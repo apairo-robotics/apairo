@@ -34,6 +34,7 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
         "alias",
         "directory",
         "suffix",
+        "key",
     }
 )
 _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})

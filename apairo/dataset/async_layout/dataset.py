@@ -153,6 +153,12 @@ class AsyncLayoutDataset(AbstractDataset):
         self._suffix_of: dict[str, str] = {
             self._public(k): v["suffix"] for k, v in channels.items() if v.get("suffix")
         }
+        # A channel may declare that its alignment key is parsed from its own
+        # filenames (e.g. Rellis camera frame<N>-<epoch>_<ms>.jpg) instead of a
+        # timestamps.txt -- the key is then computed in memory, nothing is written.
+        self._key_spec: dict[str, dict] = {
+            self._public(k): v["key"] for k, v in channels.items() if v.get("key")
+        }
 
         if dataset_profile is not None:
             self._profile: dict[str, str] = load_profile(dataset_profile)
@@ -376,15 +382,49 @@ class AsyncLayoutDataset(AbstractDataset):
             loader_cls = str_to_loader[self._profile[key]]
             directory = self._files[key]
             suffix = self._suffix_of.get(key)
-            loaders[key] = (
-                loader_cls(directory, files=suffixed_frame_files(directory, suffix))
-                if suffix
-                else loader_cls(directory)
-            )
+            if key in self._key_spec:
+                # The key regex doubles as the enumeration policy: it selects and
+                # orders this channel's files, so a name apairo's default frame-file
+                # convention rejects (a '_' in a Rellis <epoch>_<ms>) still loads.
+                loaders[key] = loader_cls(
+                    directory, files=self._files_matching_key(key, directory)
+                )
+            elif suffix:
+                loaders[key] = loader_cls(
+                    directory, files=suffixed_frame_files(directory, suffix)
+                )
+            else:
+                loaders[key] = loader_cls(directory)
         self.loaders: dict[str, AbstractLoader] = loaders
         self.timestamps: dict[str, np.ndarray] = self._collect_timestamps()
         self._check_suffix_coverage()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
+
+    def _files_matching_key(self, key: str, directory: str) -> list[str]:
+        """Ordered filenames for a key-declaring channel: files whose stem matches
+        its key regex, sorted lexicographically (= frame order for zero-padded
+        names). The key regex is the enumeration policy, so a channel whose names
+        carry a '_' (a Rellis ``<epoch>_<ms>``) -- which the default frame-file
+        convention would skip -- still loads, and the loader's own name sort is
+        bypassed."""
+        import re
+
+        pattern = self._key_spec[key].get("name")
+        if pattern is None:
+            raise ValueError(
+                f"Channel '{key}' has a 'key' spec without a 'name' regex."
+            )
+        regex = re.compile(pattern)
+        names = sorted(
+            p.name
+            for p in Path(directory).iterdir()
+            if p.is_file() and regex.search(p.stem)
+        )
+        if not names:
+            raise FileNotFoundError(
+                f"Channel '{key}': no files in '{directory}' match key regex {pattern!r}."
+            )
+        return names
 
     def _check_suffix_coverage(self) -> None:
         """A suffixed sub-channel borrows the base channel's clock (shared
@@ -415,6 +455,9 @@ class AsyncLayoutDataset(AbstractDataset):
         timestamps: dict[str, np.ndarray] = {}
         fallback: list[str] = []
         for key in self._keys:
+            if key in self._key_spec:  # highest priority: key parsed from filenames
+                timestamps[key] = self._keys_from_filenames(key)
+                continue
             ts_path = Path(self._files[key]) / "timestamps.txt"
             if ts_path.exists():
                 timestamps[key] = load_timestamps(ts_path)
@@ -434,6 +477,40 @@ class AsyncLayoutDataset(AbstractDataset):
         if fallback:
             timestamps.update(loads_timestamps(fallback, self._files))
         return timestamps
+
+    def _keys_from_filenames(self, key: str) -> np.ndarray:
+        r"""Alignment key parsed from a channel's own filenames, computed in memory
+        (no ``timestamps.txt``, nothing written). The channel's ``key`` spec gives a
+        regex; each file's stem is matched and the capture groups are joined into a
+        decimal number -- one group is an integer index (``frame(\d+)-``), two are
+        ``<seconds>.<frac>`` (``frame\d+-(\d+)_(\d+)``). One built-in provider of the
+        general "a channel supplies its own key" contract; the source is read-only."""
+        import re
+
+        spec = self._key_spec[key]
+        pattern = spec.get("name")
+        if pattern is None:
+            raise ValueError(
+                f"Channel '{key}' has a 'key' spec without a 'name' regex: {spec!r}."
+            )
+        files = getattr(self.loaders[key], "files", None)
+        if files is None:
+            raise ValueError(
+                f"Channel '{key}' declares a filename-parsed key but its loader "
+                f"('{self._profile[key]}') is stacked and exposes no per-frame "
+                f"filenames. Filename keys need a per-frame loader (npys/img/bin)."
+            )
+        regex = re.compile(pattern)
+        keys = np.empty(len(files), dtype=float)
+        for i, name in enumerate(files):
+            match = regex.search(Path(name).stem)
+            if match is None or not match.groups():
+                raise ValueError(
+                    f"Channel '{key}': key regex {pattern!r} matched no capture "
+                    f"group in filename '{name}'."
+                )
+            keys[i] = float(".".join(match.groups()))
+        return keys
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
