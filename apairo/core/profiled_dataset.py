@@ -710,6 +710,51 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         self._set_keys([self._public_of[k] for k in loaded_real])
 
+        # Shared frame clock (synchronous): frame `i` is the same co-captured
+        # sample across every channel, so a timestamp carried by ANY loaded
+        # channel is the frame's clock -- shared by the whole sample. ``None``
+        # when no channel carries one (clockless, e.g. positional SemanticKITTI).
+        self.timestamps = self._collect_frame_clock(channels)
+
+    def _collect_frame_clock(self, channels: dict) -> np.ndarray | None:
+        """The dataset's shared per-frame clock, or ``None`` when clockless.
+
+        The first loaded per-frame channel that declares a ``key`` (the
+        form-agnostic clock contract, parsed by
+        :func:`~apairo.core.keys.parse_filename_key`) provides it. The array is
+        already in the selected frame order -- splits and sequence selection are
+        applied, because the clock channel went through the same file discovery
+        as the data channels.
+        """
+        from apairo.core.keys import parse_filename_key
+
+        for real_key, files in self._files.items():
+            spec = channels.get(real_key, {}).get("key")
+            if spec is None or not files:
+                continue
+            arr = parse_filename_key(
+                [p.name for p in files],
+                spec,
+                directory=files[0].parent,
+                label=f"Channel '{real_key}'",
+            )
+            self._check_clock_monotonic(real_key, arr)
+            return arr
+        return None
+
+    def _check_clock_monotonic(self, key: str, arr: np.ndarray) -> None:
+        """A frame clock must be non-decreasing *within each sequence*; it resets
+        across sequences (each recording carries its own timeline), so the flat
+        array is validated per sequence, never globally."""
+        groups = list(self._seq_groups.values()) or [list(range(len(arr)))]
+        for idxs in groups:
+            seq = arr[np.asarray(idxs, dtype=int)]
+            if seq.size > 1 and np.any(np.diff(seq) < 0):
+                raise ValueError(
+                    f"Channel '{key}': frame clock is not non-decreasing within a "
+                    f"sequence -- check the key regex captures the time field."
+                )
+
     def _seq_root(self, path: Path) -> Path:
         d = path
         for _ in range(self._seq_depth):
@@ -1131,4 +1176,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             return self._load(view._indices[local_idx])
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
-        return Sample(data={key: self._loaders[key][idx] for key in self._keys})
+        return Sample(
+            data={key: self._loaders[key][idx] for key in self._keys},
+            timestamp=None if self.timestamps is None else float(self.timestamps[idx]),
+        )

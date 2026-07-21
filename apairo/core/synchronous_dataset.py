@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from pathlib import Path
 
+import numpy as np
+
 from apairo.core.abstract_dataset import AbstractDataset
 
 
@@ -31,7 +33,7 @@ class SynchronousDataset(AbstractDataset):
     """
 
     synchronous = True
-    timestamps = None
+    timestamps: dict | np.ndarray | None = None
 
     # Provided by the concrete dataset (see ProfiledDataset.__init__).
     _root: Path

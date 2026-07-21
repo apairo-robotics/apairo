@@ -8,7 +8,6 @@ from apairo.core import AbstractDataset, AbstractLoader, FrameRef
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
-    KEY_UNITS,
     config_exists,
     read_config,
     write_config,
@@ -572,87 +571,20 @@ class AsyncLayoutDataset(AbstractDataset):
         - ``{file: '<name>'}``: read the keys from a named sidecar in the channel
           directory (one float per line -- a differently-named ``timestamps.txt``).
         """
-        import re
+        from apairo.core.keys import parse_filename_key
 
         spec = self._key_spec[key]
         directory = Path(self._files[key])
-        if "file" in spec:
-            path = directory / spec["file"]
-            if not path.exists():
-                raise FileNotFoundError(
-                    f"Channel '{key}': key file '{spec['file']}' not found in '{directory}'."
-                )
-            return load_timestamps(path)
-        pattern = spec.get("name")
-        if pattern is None:
-            raise ValueError(
-                f"Channel '{key}': 'key' spec needs a 'name' regex or a 'file'; got {spec!r}."
-            )
         files = getattr(self.loaders[key], "files", None)
-        if files is None:
+        if "file" not in spec and files is None:
             raise ValueError(
                 f"Channel '{key}' declares a filename-parsed key but its loader "
                 f"('{self._profile[key]}') is stacked and has no per-frame filenames. "
                 f"Filename keys need a per-frame loader (npys/img/bin)."
             )
-        regex = re.compile(pattern)
-        scale = spec.get("scale")
-        units = spec.get("units")
-        if units is not None:
-            # `units` is self-documenting sugar for `scale`: each capture group is a
-            # time field (s / ms / us / ns) folded to seconds.
-            if scale is not None:
-                raise ValueError(
-                    f"Channel '{key}': key has both 'units' and 'scale' -- 'units' "
-                    f"is sugar for 'scale', give one."
-                )
-            try:
-                scale = [KEY_UNITS[u] for u in units]
-            except (KeyError, TypeError) as exc:
-                raise ValueError(
-                    f"Channel '{key}': unknown key unit in {units!r}; known: "
-                    f"{sorted(KEY_UNITS)}."
-                ) from exc
-        if regex.groups == 0:
-            raise ValueError(
-                f"Channel '{key}': key regex {pattern!r} has no capture group."
-            )
-        if scale is not None and len(scale) != regex.groups:
-            raise ValueError(
-                f"Channel '{key}': key 'scale'/'units' has {len(scale)} entr(ies) but "
-                f"the regex has {regex.groups} capture group(s)."
-            )
-        if scale is None and regex.groups > 2:
-            raise ValueError(
-                f"Channel '{key}': key regex has {regex.groups} capture groups; give "
-                f"a 'scale' or 'units' to combine more than two."
-            )
-        out = np.empty(len(files), dtype=float)
-        for i, name in enumerate(files):
-            match = regex.search(Path(name).stem)
-            if match is None:
-                raise ValueError(
-                    f"Channel '{key}': key regex {pattern!r} did not match '{name}'."
-                )
-            groups = match.groups()
-            if any(g is None for g in groups):
-                raise ValueError(
-                    f"Channel '{key}': key regex {pattern!r} left an optional group "
-                    f"unmatched in '{name}'."
-                )
-            try:
-                if scale is None:
-                    out[i] = float(".".join(groups))
-                else:
-                    out[i] = sum(
-                        int(g) * float(s) for g, s in zip(groups, scale, strict=True)
-                    )
-            except ValueError as exc:
-                raise ValueError(
-                    f"Channel '{key}': non-numeric key field in '{name}' "
-                    f"(regex {pattern!r}): {exc}"
-                ) from exc
-        return out
+        return parse_filename_key(
+            files or [], spec, directory=directory, label=f"Channel '{key}'"
+        )
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""
