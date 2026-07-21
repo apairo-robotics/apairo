@@ -16,6 +16,10 @@ CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path /
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
 KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "bin", "img", "zarr"})
 
+# Time units for a filename-parsed key's `units:` sugar (each maps to a factor in
+# seconds; `units` compiles to `scale`). See docs/datasets/bring-your-own-dataset.md.
+KEY_UNITS: dict[str, float] = {"s": 1.0, "ms": 1e-3, "us": 1e-6, "ns": 1e-9}
+
 # ── .apairo schema, version 1 ────────────────────────────────────────────────
 # The on-disk contract. Validation is tolerant: an unknown field is reported as a
 # warning and otherwise ignored, so a sidecar written by a newer apairo still
@@ -101,10 +105,31 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
             if has_name:
                 groups = _regex_groups(spec["name"])
                 scale = spec.get("scale")
+                units = spec.get("units")
                 if groups is None:
                     out.append(f"channel '{key}': 'key.name' is not a valid regex")
                 elif groups == 0:
                     out.append(f"channel '{key}': 'key.name' needs a capture group")
+                if scale is not None and units is not None:
+                    out.append(
+                        f"channel '{key}': 'key' has both 'units' and 'scale' -- "
+                        f"'units' is sugar for 'scale', give one"
+                    )
+                if units is not None:
+                    if not isinstance(units, list):
+                        out.append(f"channel '{key}': 'key.units' must be a list")
+                    else:
+                        unknown = [u for u in units if u not in KEY_UNITS]
+                        if unknown:
+                            out.append(
+                                f"channel '{key}': 'key.units' has unknown unit(s) "
+                                f"{unknown}; known: {sorted(KEY_UNITS)}"
+                            )
+                        elif groups is not None and len(units) != groups:
+                            out.append(
+                                f"channel '{key}': 'key.units' has {len(units)} entr(ies) "
+                                f"but 'key.name' has {groups} capture group(s)"
+                            )
                 if scale is not None:
                     if not (
                         isinstance(scale, list)
@@ -118,10 +143,10 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
                             f"channel '{key}': 'key.scale' has {len(scale)} entr(ies) "
                             f"but 'key.name' has {groups} capture group(s)"
                         )
-                elif groups is not None and groups > 2:
+                elif units is None and groups is not None and groups > 2:
                     out.append(
                         f"channel '{key}': 'key.name' has {groups} capture groups; add "
-                        f"'key.scale' to combine more than two"
+                        f"'key.scale' or 'key.units' to combine more than two"
                     )
             if has_file:
                 if spec.get("scale") is not None:

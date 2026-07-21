@@ -91,6 +91,36 @@ camera:
 becomes `1581624652 + 750 * 0.001 = 1581624652.750` regardless of how the
 millisecond field is padded.
 
+#### `units:` — the readable form of `scale`
+
+Raw `scale` factors are terse. When every capture group is a **time field**, name
+the units instead — `units:` compiles to `scale` (`s` → 1, `ms` → 1e-3,
+`us` → 1e-6, `ns` → 1e-9):
+
+```yaml
+camera: {loader: img, key: {name: 'frame\d+-(\d+)_(\d+)', units: [s, ms]}}
+```
+
+reads exactly as `scale: [1, 0.001]` but says what it means. `units` and `scale`
+are mutually exclusive.
+
+!!! note "Heterogeneous names — a timestamp *and* an index"
+    `units` only combines **time** fields. A stem like `camera_<sec>_<frame-index>`
+    mixes a clock with a counter, and an index is not a duration — don't fold it
+    into the key. Capture **only the key field** and let `order` handle the rest:
+
+    ```yaml
+    camera:
+      loader: img
+      key:   {name: 'camera_(\d+)_\d+', units: [s]}   # the seconds are the key
+      order: {name: 'camera_\d+_(\d+)'}                # the index only sorts
+    ```
+
+    The index never pollutes the alignment key. Frames that share a second then
+    share a key — `synchronize()` treats them as simultaneous; if you need
+    sub-second ordering *from* the index, a `_key_providers` callable is the
+    escape hatch.
+
 ### `key: {file: <name>}` — read the key from a sidecar
 
 Read the key array from a named file inside the channel directory, one float per

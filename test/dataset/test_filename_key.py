@@ -330,3 +330,102 @@ def test_verify_config_flags_invalid_regex(tmp_path):
         root, {"cam": {"kind": "raw", "loader": "npys", "key": {"name": r"frame(\d+"}}}
     )
     assert any("valid regex" in i for i in verify_config(root))
+
+
+# ── units: sugar over scale ───────────────────────────────────────────────────
+
+
+def test_units_sugar_matches_scale(tmp_path):
+    root = tmp_path / "seq"
+    _frames(
+        root / "cam", [f"frame{i:06d}-1000_{i * 10}.npy" for i in range(4)]
+    )  # unpadded ms
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": TS_KEY, "units": ["s", "ms"]},
+            }
+        },
+    )
+    np.testing.assert_allclose(
+        RawDataset(root, keys=["cam"]).timestamps["cam"],
+        [1000.0, 1000.01, 1000.02, 1000.03],
+    )
+
+
+def test_units_and_scale_are_mutually_exclusive(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-1000_0.npy" for i in range(2)])
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": TS_KEY, "units": ["s", "ms"], "scale": [1, 0.001]},
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="both 'units' and 'scale'"):
+        RawDataset(root, keys=["cam"])
+
+
+def test_unknown_unit_errors(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", [f"frame{i:06d}-1000_0.npy" for i in range(2)])
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": TS_KEY, "units": ["s", "furlongs"]},
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="unknown key unit"):
+        RawDataset(root, keys=["cam"])
+
+
+def test_verify_config_flags_units_length(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "cam", ["000000.npy"])
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": TS_KEY, "units": ["s"]},
+            }
+        },
+    )  # 1 unit, 2 groups
+    assert any("units" in i for i in verify_config(root))
+
+
+def test_heterogeneous_name_captures_only_the_key(tmp_path):
+    # camera_<seconds>_<frame-index>: the index is NOT the alignment key. Capture
+    # only the seconds into the key; `order` uses the index for sorting. No summing
+    # an index into a timestamp.
+    root = tmp_path / "seq"
+    _frames(
+        root / "cam",
+        ["camera_1000_000041.npy", "camera_1000_000042.npy", "camera_1001_000043.npy"],
+    )
+    _write(
+        root,
+        {
+            "cam": {
+                "kind": "raw",
+                "loader": "npys",
+                "key": {"name": r"camera_(\d+)_\d+", "units": ["s"]},
+                "order": {"name": r"camera_\d+_(\d+)"},
+            }
+        },
+    )
+    np.testing.assert_array_equal(
+        RawDataset(root, keys=["cam"]).timestamps["cam"], [1000.0, 1000.0, 1001.0]
+    )

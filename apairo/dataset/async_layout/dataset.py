@@ -8,6 +8,7 @@ from apairo.core import AbstractDataset, AbstractLoader, FrameRef
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
+    KEY_UNITS,
     config_exists,
     read_config,
     write_config,
@@ -582,19 +583,35 @@ class AsyncLayoutDataset(AbstractDataset):
             )
         regex = re.compile(pattern)
         scale = spec.get("scale")
+        units = spec.get("units")
+        if units is not None:
+            # `units` is self-documenting sugar for `scale`: each capture group is a
+            # time field (s / ms / us / ns) folded to seconds.
+            if scale is not None:
+                raise ValueError(
+                    f"Channel '{key}': key has both 'units' and 'scale' -- 'units' "
+                    f"is sugar for 'scale', give one."
+                )
+            try:
+                scale = [KEY_UNITS[u] for u in units]
+            except (KeyError, TypeError) as exc:
+                raise ValueError(
+                    f"Channel '{key}': unknown key unit in {units!r}; known: "
+                    f"{sorted(KEY_UNITS)}."
+                ) from exc
         if regex.groups == 0:
             raise ValueError(
                 f"Channel '{key}': key regex {pattern!r} has no capture group."
             )
         if scale is not None and len(scale) != regex.groups:
             raise ValueError(
-                f"Channel '{key}': key 'scale' has {len(scale)} entr(ies) but the "
-                f"regex has {regex.groups} capture group(s)."
+                f"Channel '{key}': key 'scale'/'units' has {len(scale)} entr(ies) but "
+                f"the regex has {regex.groups} capture group(s)."
             )
         if scale is None and regex.groups > 2:
             raise ValueError(
                 f"Channel '{key}': key regex has {regex.groups} capture groups; give "
-                f"a 'scale' to combine more than two."
+                f"a 'scale' or 'units' to combine more than two."
             )
         out = np.empty(len(files), dtype=float)
         for i, name in enumerate(files):
