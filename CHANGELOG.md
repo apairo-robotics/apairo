@@ -36,6 +36,72 @@ All notable changes to apairo are documented here. The format is based on
   additive. Auto-detection of such a directory is unchanged (still declare it
   explicitly); no apairo writer yet emits a colocated pair.
 
+### Fixed
+
+An audit (a self-review of the clock/`array_file` changes plus a broad
+multi-dimension pass) fixed 35 defects across correctness, crashes, security,
+docs and performance.
+
+- **Silent data corruption**
+  - Profiled datasets sorted per-frame files lexicographically and used that
+    position as the row index into stacked per-sequence files (poses) and sidecar
+    clocks (`times.txt`); non-zero-padded names (`0, 1, 10, 2, …`) silently
+    misaligned. Discovery now uses a natural (numeric) sort, matching the async
+    family — identical for zero-padded names.
+  - Stacked loaders (`NPYLoader` / the new `array_file`, `_StackedSequenceLoader`)
+    returned views into their persistent cache, so an in-place transform corrupted
+    the dataset and two reads aliased; they now return copies, like the per-frame
+    loaders.
+  - `cache()` dropped the parent's sequence provenance, so `cache().window()` built
+    windows across sequence boundaries; `CachedDataset` now snapshots
+    `frame_sequence_ids` / `frame_stems` / `frame_channel_ids` / `timestamps`.
+  - `SequencePreprocessor` on an asynchronous `RawDataset` root ignored sequence
+    boundaries (only `ProfiledDataset` had `_seq_groups`); the root now exposes
+    per-sequence groups, so a global preprocessor runs once per sequence, writes
+    one output per sequence, and no longer registers a channel whose file exists
+    only in the first sequence.
+- **Crashes on valid input**
+  - `ConcatDataset` misread a synchronous dataset that carries a per-frame clock
+    (reported it asynchronous, `IndexError`'d indexing an ndarray clock by channel
+    name, and `AttributeError`'d on view children); it now uses the
+    `is_synchronous` protocol. `ZipDataset` gained a `timestamps` attribute.
+  - A profile `clock:` with no per-frame anchor (`keys=['poses']`) or partial
+    per-sequence coverage now stays clockless instead of aborting construction.
+  - A `timestamps_from` source whose clock is filename-parsed no longer crashes
+    order-dependently — the source's clock is resolved through the same precedence
+    (provider / `key` / `timestamps.txt`).
+  - `bin` / `zarr` / `npy` channels with a `key` / `order` regex no longer raise a
+    bare `TypeError`: `BINLoader` accepts frame-ordered `files=`, and a filename
+    key/order on a stacked loader is rejected clearly at `verify_config` time.
+  - `synchronize()` no longer collapses to a single frame when a channel has one
+    event (a NaN frequency was picked as the reference clock).
+  - `IMGLoader` matches `png` / `jpg` / `jpeg` / `bmp` case-insensitively and sorts
+    numeric-first with a lexicographic fallback (was case-sensitive `png` / `jpg`
+    plus an `int()` sort that crashed on timestamped names).
+  - `read_calibration`, `get_end_of_time`, and `BINLoader` / the profiled per-frame
+    reshape now fail with a clear entry/channel/file-named error instead of a bare
+    `KeyError` / `IndexError` / reshape `ValueError` on a malformed input.
+  - `assert`-based invariants in `derived_path` / `_full_anchor_rows` are now
+    explicit raises (they survive `python -O`).
+- **Security** — a config-supplied path (`directory`, `array_file`, `clock: {file}`,
+  a sidecar name) from an untrusted `channels.yaml` / profile is validated: absolute
+  paths, drives, root anchors and `..` escapes are rejected under both POSIX and
+  Windows rules, so a downloaded dataset cannot read or write outside its own tree.
+- **`export()`** — `overwrite=True` now replaces the destination (clears it first)
+  instead of silently merging stale sequences into the regenerated manifest, and a
+  channel selected by its real name while carrying an alias is no longer dropped.
+- **Validation & docs** — `verify_calibration` accepts a null `D` / `R` / `P`;
+  `verify_config` no longer flags a self-alias; `_verify_key_order` tolerates a
+  non-string `units`. `filter_split()` now supports directory-layer splits (GOOSE),
+  and the `filter` / `split` contracts are documented (filter reads the stored
+  channel before transforms; `split` re-instantiates, `filter_split` preserves
+  transforms). Docs corrected to the numpy (not `torch.Tensor`) sample contract,
+  dropping the nonexistent `TartanDataset` / `Torch*Dataset` / `.pt` entries and the
+  phantom PyTorch dependency and `apairo[viz]` extra.
+- **Performance** — `_full_anchor_rows` is memoized and `frame_sequence_ids` /
+  `frame_stems` are cached, avoiding repeated full-tree globs and O(n) rebuilds
+  during construction.
+
 ## [0.6.2] — 2026-07-21
 
 ### Added
