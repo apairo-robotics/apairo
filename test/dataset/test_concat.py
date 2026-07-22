@@ -11,6 +11,7 @@ def _make_mock_dataset(n: int, key: str = "imu"):
     ds = MagicMock()
     ds.keys = [key]
     ds.timestamps = {key: np.arange(n, dtype=float)}
+    ds.is_synchronous = False  # per-channel timestamps -> asynchronous
     ds.__len__ = MagicMock(return_value=n)
     ds.__getitem__ = MagicMock(
         side_effect=lambda i: Sample(data={key: np.zeros(3)}, timestamp=float(i))

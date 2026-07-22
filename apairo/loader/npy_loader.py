@@ -33,7 +33,10 @@ class NPYLoader(AbstractLoader):
         return len(self.array)
 
     def __getitem__(self, idx: int) -> np.ndarray:
-        return self.array[idx]
+        # Copy: self.array is a persistent whole-array cache, so a bare view would
+        # let an in-place transform corrupt it and alias repeated reads. The
+        # per-frame loaders read a fresh array each call -- match that contract.
+        return self.array[idx].copy()
 
     @property
     def shape(self) -> tuple[int, ...]:

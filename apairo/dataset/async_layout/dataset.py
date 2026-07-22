@@ -520,6 +520,22 @@ class AsyncLayoutDataset(AbstractDataset):
                     f"{n_clock} frame(s): a suffixed variant must cover every base "
                     f"frame. Check for missing or extra '_{suffix}.npy' files."
                 )
+        # A colocated `array_file` sub-channel borrows its shared directory's
+        # clock the same way a suffix channel does, but its stacked array's row
+        # count is never validated -- a short array would only surface as a
+        # cryptic IndexError deep in _load. Fail here at construction instead.
+        for key in self._keys:
+            array_file = self._array_file_of.get(key)
+            if array_file is None:
+                continue
+            n_rows = len(self.loaders[key])
+            n_clock = len(self.timestamps[key])
+            if n_rows != n_clock:
+                raise ValueError(
+                    f"Colocated array_file sub-channel '{key}' has {n_rows} row(s) "
+                    f"in '{array_file}' but shares a clock of {n_clock} frame(s): a "
+                    f"colocated array must cover every frame."
+                )
 
     def _collect_timestamps(self) -> dict[str, np.ndarray]:
         """Timestamps per loaded key: its own ``timestamps.txt`` when present,

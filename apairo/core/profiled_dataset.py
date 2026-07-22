@@ -256,7 +256,10 @@ class _StackedSequenceLoader:
     def __getitem__(self, idx: int) -> np.ndarray:
         seq_id, row = self._index[idx]
         value = self._array(seq_id)[row]
-        return value.reshape(self._reshape) if self._reshape is not None else value
+        value = value.reshape(self._reshape) if self._reshape is not None else value
+        # Copy: _array caches the per-sequence array for the loader's lifetime, so
+        # returning a view lets an in-place transform corrupt the cache.
+        return value.copy()
 
 
 class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
@@ -804,6 +807,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if not files_full:  # declared but absent -> clockless (not an error)
             return None
         aligned = self._align_clock_files(files_full, label)
+        if aligned is None:  # no per-frame anchor or partial coverage -> clockless
+            return None
         return self._validate_clock(
             label,
             parse_filename_key(
@@ -829,9 +834,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if not seq_stamps:
             return None
         if self._ref_key is None or not self._seq_groups:
-            raise ValueError(
-                f"{label}: cannot align a sidecar clock without a per-frame anchor."
-            )
+            return None  # no per-frame anchor -> clockless
         rows = self._full_anchor_rows()
         seqs, stems = self.frame_sequence_ids, self.frame_stems
         out: list[float] = []
@@ -839,23 +842,28 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             seq = seqs[i]
             row = rows[seq][stems[i]]
             arr = seq_stamps.get(seq)
-            if arr is None or row >= len(arr):
+            if arr is None:  # a loaded sequence has no sidecar -> clockless
+                return None
+            if row >= len(arr):
                 raise ValueError(
-                    f"{label}: sequence '{seq}' sidecar '{name}' is missing or shorter "
-                    f"than the frames (need row {row})."
+                    f"{label}: sequence '{seq}' sidecar '{name}' is shorter than its "
+                    f"frames (need row {row}, have {len(arr)})."
                 )
             out.append(float(arr[row]))
         return self._validate_clock(label, np.asarray(out, dtype=float))
 
-    def _align_clock_files(self, files_full: list[Path], label: str) -> list[Path]:
+    def _align_clock_files(
+        self, files_full: list[Path], label: str
+    ) -> list[Path] | None:
         """Map a clock channel's *full* (unfiltered) per-sequence files onto the
         selected frames by ``(sequence, row)`` -- the same alignment the stacked
         sequence-file loaders use, so the clock lines up under any split/filter
-        even when its filenames differ from the anchor's."""
+        even when its filenames differ from the anchor's. Returns ``None``
+        (clockless) when there is no per-frame anchor, or when a loaded sequence
+        carries no clock source at all -- partial coverage stays clockless rather
+        than crashing an otherwise-valid load."""
         if self._ref_key is None or not self._seq_groups:
-            raise ValueError(
-                f"{label}: cannot align a clock without a per-frame anchor channel."
-            )
+            return None
         by_seq: dict[str, list[Path]] = {}
         for f in files_full:
             by_seq.setdefault(self._seq_root(f).name, []).append(f)
@@ -866,6 +874,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             seq = seqs[i]
             row = rows[seq][stems[i]]
             seq_files = by_seq.get(seq, [])
+            if not seq_files:  # a loaded sequence has no clock source -> clockless
+                return None
             if row >= len(seq_files):
                 raise ValueError(
                     f"{label}: sequence '{seq}' has {len(seq_files)} clock file(s) "

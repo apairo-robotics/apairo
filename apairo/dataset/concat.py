@@ -59,20 +59,35 @@ class ConcatDataset(AbstractDataset):
         self.__dict__.pop("timestamps", None)
 
     @functools.cached_property
-    def timestamps(self) -> dict[str, np.ndarray] | None:  # type: ignore[override]
-        """None for synchronous datasets, concatenated arrays for temporal ones."""
-        if self.datasets[0].timestamps is None:
-            return None
+    def timestamps(self) -> dict[str, np.ndarray] | np.ndarray | None:  # type: ignore[override]
+        """The concatenated clock. Gated on the structural ``is_synchronous``
+        protocol -- every view implements it, whereas the view wrappers do not
+        all define a bare ``.timestamps`` attribute. A synchronous child exposes a
+        shared per-frame ndarray clock (or ``None``); an asynchronous child a
+        per-channel dict."""
+        if self.is_synchronous:
+            clocks = []
+            for ds in self.datasets:
+                ts = getattr(ds, "timestamps", None)
+                if ts is None:  # a clockless synchronous child -> clockless concat
+                    return None
+                clocks.append(ts)
+            return np.concatenate(clocks)
         result: dict[str, list[np.ndarray]] = {k: [] for k in self._keys}
         for ds in self.datasets:
-            assert ds.timestamps is not None  # parents share sync-ness
+            ts = getattr(ds, "timestamps", None)
+            if ts is None:  # an async child without a clock -> clockless concat
+                return None
             for k in self._keys:
-                result[k].append(ds.timestamps[k])
+                result[k].append(ts[k])
         return {k: np.concatenate(v) for k, v in result.items()}
 
     @property
     def is_synchronous(self) -> bool:
-        return self.datasets[0].timestamps is None
+        # Structural, delegated to the children (mirrors ZipDataset) -- NOT
+        # `timestamps is None`, which misreads a clocked synchronous dataset as
+        # asynchronous now that synchronous datasets can carry a per-frame clock.
+        return all(ds.is_synchronous for ds in self.datasets)
 
     def _dataset_idx_and_offset(self, idx: int) -> tuple[int, int]:
         if idx < 0 or idx >= self._cumulative[-1]:
