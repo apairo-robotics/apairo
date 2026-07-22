@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from apairo.core import AbstractDataset, Sample
+from apairo.core import AbstractDataset, FrameRef, Sample
 
 
 class StreamDataset(AbstractDataset):
@@ -89,6 +89,17 @@ class StreamDataset(AbstractDataset):
         """Channel that produced each global event. Object array of shape
         ``(len(self),)``, vectorized from the merged timeline."""
         return np.asarray(self._keys, dtype=object)[self._tl_key_idxs]
+
+    def frame_info(self, idx: int) -> FrameRef:
+        """Channel + per-channel row each interleaved event came from -- async, so
+        it mirrors AsyncLayoutDataset rather than the synchronous default."""
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        return FrameRef(
+            sequence=None,
+            channel=self._keys[self._tl_key_idxs[idx]],
+            row=int(self._tl_frame_idxs[idx]),
+        )
 
     def __repr__(self) -> str:
         sizes = {k: len(v) for k, v in self.loaders.items()}

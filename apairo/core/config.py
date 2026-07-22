@@ -120,7 +120,11 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
                     if not isinstance(units, list):
                         out.append(f"channel '{key}': 'key.units' must be a list")
                     else:
-                        unknown = [u for u in units if u not in KEY_UNITS]
+                        unknown = [
+                            u
+                            for u in units
+                            if not isinstance(u, str) or u not in KEY_UNITS
+                        ]
                         if unknown:
                             out.append(
                                 f"channel '{key}': 'key.units' has unknown unit(s) "
@@ -682,6 +686,8 @@ def read_calibration(root_dir: str | Path) -> Calibration:
     with open(path) as f:
         data = yaml.safe_load(f) or {}
     for key, entry in (data.get("transforms") or {}).items():
+        if isinstance(entry, dict) and "matrix" not in entry:
+            continue  # malformed -> skip; verify_calibration reports it
         matrix = entry["matrix"] if isinstance(entry, dict) else entry
         out[key] = np.asarray(matrix, dtype=np.float64)
     for name, entry in (data.get("cameras") or {}).items():

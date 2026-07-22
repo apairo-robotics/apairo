@@ -1261,8 +1261,11 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         return []
 
     def split(self, name: str) -> ProfiledDataset:
-        """Return a new dataset instance filtered to the named split."""
-        return type(self)(
+        """Return a new dataset instance filtered to the named split.
+
+        Registered transforms are carried onto the new instance, so ``split()``
+        after a ``transform()`` does not silently drop the pipeline."""
+        ds = type(self)(
             self._root,
             keys=list(self._keys),
             split=name,
@@ -1270,6 +1273,11 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             if self._sequence_ids_filter
             else None,
         )
+        if getattr(self, "_pipeline", None):
+            ds._pipeline = list(self._pipeline)
+        if getattr(self, "_drop_keys", None):
+            ds._drop_keys = set(self._drop_keys)
+        return ds
 
     @property
     def sequence_ids(self) -> list[str]:

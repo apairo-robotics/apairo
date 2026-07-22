@@ -132,6 +132,11 @@ class WindowView(AbstractDataset):
         """Channel id of each output frame -- the anchor's (delegated)."""
         return self._parent.frame_channel_ids[self._anchors]
 
+    def frame_info(self, idx: int):
+        """Provenance of output frame *idx* -- the anchor's, delegated to the
+        parent, so ``row`` is the anchor's parent frame (not the window index)."""
+        return self._parent.frame_info(int(self._anchors[idx]))
+
     def __len__(self) -> int:
         return len(self._anchors)
 

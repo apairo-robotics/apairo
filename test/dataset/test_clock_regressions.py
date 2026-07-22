@@ -199,3 +199,65 @@ def test_timestamps_from_a_filename_key_source(tmp_path):
     ds = RawDataset(str(root), keys=["lidar", "camera"])
     np.testing.assert_array_equal(ds.timestamps["lidar"], np.arange(5, dtype=float))
     np.testing.assert_array_equal(ds.timestamps["camera"], np.arange(5, dtype=float))
+
+
+# -- MEDIUM batch: M3, M4, M6, M7 ----------------------------------------------
+
+
+def test_read_calibration_skips_malformed_transform(tmp_path):  # M3
+    import yaml
+
+    from apairo.core.config import read_calibration
+
+    ap = tmp_path / ".apairo"
+    ap.mkdir()
+    (ap / "calibration.yaml").write_text(
+        yaml.safe_dump({"transforms": {"base_to_lidar": {"parent": "b", "child": "l"}}})
+    )
+    cal = read_calibration(str(tmp_path))  # was KeyError('matrix')
+    assert "base_to_lidar" not in cal
+
+
+def test_verify_key_order_no_crash_on_unhashable_units(tmp_path):  # M4
+    from apairo.core.config import verify_config, write_config
+
+    write_config(
+        tmp_path,
+        {
+            "version": 1,
+            "channels": {
+                "cam": {"loader": "img", "key": {"name": r"(\d+)", "units": [[0]]}}
+            },
+        },
+    )
+    issues = verify_config(str(tmp_path))  # was TypeError: unhashable type
+    assert any("units" in s for s in issues)
+
+
+def test_stream_frame_info_reports_channel_and_row():  # M6 (async)
+    from apairo.dataset.stream import StreamDataset
+
+    ds = StreamDataset(
+        {
+            "image": (np.array([0.0, 2.0]), [np.zeros(1), np.zeros(1)]),
+            "lidar": (np.array([1.0, 3.0]), [np.zeros(3), np.zeros(3)]),
+        }
+    )
+    fi = ds.frame_info(3)  # merged: image0, lidar0, image1, lidar1 -> 3 = lidar row 1
+    assert fi.channel == "lidar" and fi.row == 1
+
+
+def test_window_frame_info_uses_anchor_row(rellis):  # M6 (window)
+    ds = Rellis3DDataset(rellis, keys=["lidar", "labels"])
+    w = ds.window(size=2, stride=1, reduce=lambda samples: samples[-1])
+    k = len(w) - 1
+    # frame_info(k).row must be the anchor's parent row, not the window index
+    assert w.frame_info(k).row == ds.frame_info(int(w.anchors[k])).row
+
+
+def test_split_preserves_transforms(rellis):  # M7
+    ds = Rellis3DDataset(rellis, keys=["lidar", "labels"]).transform(
+        "lidar", lambda p: p[:1]
+    )
+    tr = ds.split("train")
+    assert tr[0].data["lidar"].shape[0] == 1  # transform kept, not silently dropped
