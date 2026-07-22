@@ -244,6 +244,32 @@ def test_export_keeps_channel_selected_by_its_real_name(root, tmp_path):
     assert set(read_config(dest / "seq_a")["channels"]) == {"lidar", "imu"}
 
 
+# ── SequencePreprocessor on an async root respects sequence boundaries (H12) ───
+
+
+def test_sequence_preprocessor_on_async_root_runs_per_sequence(root):
+    from apairo.core.preprocessor import SequencePreprocessor
+
+    class _SeqPos(SequencePreprocessor):
+        # each frame's index within its own sequence -- resets to 0 at every seam
+        output_key = "seq_pos"
+        output_loader = "npys"
+        input_keys = ["lidar"]
+        timestamps_from = "lidar"
+        sources = ["lidar"]
+
+        def __call__(self, frames):
+            return np.arange(len(list(frames)), dtype=np.int64)
+
+    RawDataset(root, keys=["lidar"]).run_preprocess(_SeqPos())
+    # each sequence gets its own output (seq_a=3 frames, seq_b=2), not one file
+    assert len(list((root / "seq_a" / "seq_pos").glob("*.npy"))) == 3
+    assert len(list((root / "seq_b" / "seq_pos").glob("*.npy"))) == 2
+    ds = RawDataset(root, keys=["seq_pos"])
+    pos = [int(ds[i].data["seq_pos"]) for i in range(len(ds))]
+    assert pos == [0, 1, 2, 0, 1]  # resets at the seq_a->seq_b boundary (not 0..4)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 

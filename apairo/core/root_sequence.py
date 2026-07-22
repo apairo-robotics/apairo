@@ -156,6 +156,23 @@ class RootSequenceMixin(_MixinBase):
             raise AttributeError("'sequence_ids' is only available on root datasets.")
         return [seq._sequence_dir.name for seq in self._sequences]
 
+    @property
+    def _seq_groups(self) -> dict[str, list[int]] | None:
+        """Per-sequence global frame indices ``{seq_name: [i, ...]}`` -- what the
+        preprocess runner partitions on, so a ``SequencePreprocessor`` runs once
+        per sequence (never across a seam) and writes one output per sequence.
+        ``None`` for a single-sequence dataset (the runner treats it as one group)
+        or before ``keys`` are set."""
+        if not getattr(self, "_is_root", False) or not hasattr(
+            self, "_cumulative_lengths"
+        ):
+            return None
+        cum = self._cumulative_lengths
+        return {
+            seq._sequence_dir.name: list(range(int(cum[i]), int(cum[i + 1])))
+            for i, seq in enumerate(self._sequences)
+        }
+
     def sequence(self, seq_id: str) -> SequenceView:
         """Return a :class:`~apairo.core.sequence_view.SequenceView` for *seq_id*."""
         if not self._is_root:

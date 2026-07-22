@@ -229,20 +229,21 @@ def _run_sequence_stacked(
     """
     writer = WRITERS[preprocessor.output_loader]()
     groups = getattr(dataset, "_seq_groups", None) or {None: list(range(len(dataset)))}
-    parent_ts = getattr(dataset, "timestamps", None)
 
     for indices in groups.values():
         if not indices:
             continue
         frames = [dataset[i] for i in indices]
         outputs = _outputs_to_numpy(preprocessor, preprocessor(iter(frames)))
+        # Per-sequence clock, taken from the frames themselves (not the whole
+        # dataset's clock), so each sequence's output gets its own timestamps.txt
+        # of the right length. Empty for a clockless dataset -> nothing written.
+        seq_ts = [s.timestamp for s in frames if s.timestamp is not None]
         for key, result in outputs.items():
             out = dataset.derived_path(indices[0], key, ext).parent / f"{key}.{ext}"
             writer.write(result, out)
-            # Synchronous datasets have no timestamps -- nothing to propagate.
-            if isinstance(parent_ts, dict):
-                ts_key = preprocessor.timestamps_from or preprocessor.input_keys[0]
-                np.savetxt(out.parent / "timestamps.txt", parent_ts[ts_key])
+            if seq_ts and len(seq_ts) == len(result):
+                np.savetxt(out.parent / "timestamps.txt", seq_ts)
 
 
 def _run_sequence_per_frame(
