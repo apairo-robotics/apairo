@@ -510,10 +510,11 @@ class AbstractDataset(ABC):
 
         **Per-channel** -- ``filter(key, fn)``
 
-        ``fn`` receives the channel value and returns ``True`` to keep the
-        frame.  When the dataset exposes per-frame loaders, only the specified
-        channel is read during the sweep (raw, before transforms); views
-        without loaders fall back to loading the full sample::
+        ``fn`` receives *key*'s value and returns ``True`` to keep the frame. The
+        predicate evaluates the channel's **stored data, before access-time
+        transforms** -- filtering operates on channels, not on transformed views.
+        To filter on a *derived* version of a channel, materialize it first
+        (``transform(key, fn, output="derived")``) and filter on that channel::
 
             ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
 

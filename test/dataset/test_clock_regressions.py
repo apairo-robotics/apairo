@@ -255,12 +255,14 @@ def test_window_frame_info_uses_anchor_row(rellis):  # M6 (window)
     assert w.frame_info(k).row == ds.frame_info(int(w.anchors[k])).row
 
 
-def test_split_preserves_transforms(rellis):  # M7
+def test_split_drops_transforms_filter_split_keeps_them(rellis):  # intended contract
     ds = Rellis3DDataset(rellis, keys=["lidar", "labels"]).transform(
         "lidar", lambda p: p[:1]
     )
-    tr = ds.split("train")
-    assert tr[0].data["lidar"].shape[0] == 1  # transform kept, not silently dropped
+    # split() re-instantiates -> a fresh pipeline (transforms dropped, by design)
+    assert ds.split("train")[0].data["lidar"].shape[0] > 1
+    # filter_split() is the transform-preserving mid-chain variant
+    assert ds.filter_split("train")[0].data["lidar"].shape[0] == 1
 
 
 # -- Security (M5/L3) + robustness (L1/L2/M2) ----------------------------------
