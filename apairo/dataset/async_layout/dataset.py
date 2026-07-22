@@ -415,6 +415,12 @@ class AsyncLayoutDataset(AbstractDataset):
                 # regex): a channel whose names carry a '_' (a Rellis <epoch>_<ms>),
                 # which the default frame-file convention reserves for suffixes, still
                 # enumerates, and the loader's own name sort is bypassed.
+                if self._profile[key] not in {"npys", "img", "bin"}:
+                    raise ValueError(
+                        f"Channel '{key}' declares a filename key/order but its loader "
+                        f"'{self._profile[key]}' has no per-frame files -- filename "
+                        f"keys/order need a per-frame loader (npys, img, bin)."
+                    )
                 loaders[key] = loader_cls(
                     directory, files=self._enumerate(key, directory)
                 )

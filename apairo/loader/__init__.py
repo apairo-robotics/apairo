@@ -61,31 +61,23 @@ def load_timestamps(file):
 
 
 def loads_timestamps(keys: list, files: dict) -> dict:
-    r"""Load timestamps for each key from its subdirectory's ``timestamps.txt``."""
-    timestamps_replacement = {
-        "depth_left": "image_left",
-        "local_dino_map": "local_gridmap",
-        "stereo_colored_point_cloud_gmf": "stereo_colored_point_cloud",
-    }
+    r"""Load each key's clock from its subdirectory's ``timestamps.txt``.
+
+    The last-resort fallback for a channel with no declared ``key`` /
+    ``timestamps_from``: it must have a physical ``timestamps.txt``, else it is an
+    error. A channel's clock origin belongs in ``channels.yaml`` (a ``key`` or
+    ``timestamps_from``), never hardcoded in this loader."""
     timestamps = {}
-    no_ts_dirs = []
     for key in keys:
-        if key not in str_to_loader:
-            if "timestamps.txt" in os.listdir(files[key]):
-                timestamps[key] = load_timestamps(
-                    os.path.join(files[key], "timestamps.txt")
-                )
-            else:
-                no_ts_dirs.append(key)
-
-    for key in no_ts_dirs:
-        if key not in timestamps_replacement:
+        if key in str_to_loader:
+            continue
+        if "timestamps.txt" not in os.listdir(files[key]):
             raise ValueError(
-                f"No timestamps.txt for '{key}' and no alias declared. "
-                f"If this is a preprocessed channel, declare it via register_channel(..., timestamps_from=...)."
+                f"No timestamps.txt for '{key}' and no clock declared. Declare its "
+                f"clock in channels.yaml (a `key` or `timestamps_from`), or via "
+                f"register_channel(..., timestamps_from=...) for a preprocessed channel."
             )
-        timestamps[key] = timestamps[timestamps_replacement[key]]
-
+        timestamps[key] = load_timestamps(os.path.join(files[key], "timestamps.txt"))
     return timestamps
 
 

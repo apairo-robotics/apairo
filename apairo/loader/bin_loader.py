@@ -6,8 +6,13 @@ from apairo.core import AbstractLoader
 
 
 class BINLoader(AbstractLoader):
-    def __init__(self, directory: str):
-        self.files = sorted([f for f in os.listdir(directory) if f.endswith(".bin")])
+    def __init__(self, directory: str, files: list[str] | None = None):
+        # `files` = frame-ordered names resolved by the dataset (a key/order regex
+        # enumeration); otherwise the legacy default -- all `.bin`, sorted.
+        if files is not None:
+            self.files = list(files)
+        else:
+            self.files = sorted(f for f in os.listdir(directory) if f.endswith(".bin"))
         self.directory = directory
         self._shape = (4,)  # (x, y, z, intensity)
 

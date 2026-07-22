@@ -139,3 +139,29 @@ def test_synchronize_does_not_collapse_on_single_event_channel():
     # Before the fix the one-shot (NaN frequency) was picked as the reference and
     # the view collapsed to its single frame; now 'lidar' is the reference.
     assert len(view) > 1
+
+
+# -- H7: a per-frame .bin channel can be enumerated by a key/order regex --------
+
+
+def test_bin_loader_accepts_frame_ordered_files(tmp_path):
+    from apairo.loader.bin_loader import BINLoader
+
+    for name in ["b.bin", "a.bin"]:
+        np.arange(4, dtype=np.float32).tofile(tmp_path / name)
+    ld = BINLoader(str(tmp_path), files=["a.bin", "b.bin"])  # frame order, not sorted
+    assert ld.files == ["a.bin", "b.bin"]
+    assert ld[0].shape == (1, 4)
+
+
+# -- H13: loads_timestamps carries no hardcoded dataset-specific channel names --
+
+
+def test_loads_timestamps_no_hardcoded_dataset_names(tmp_path):
+    from apairo.loader import loads_timestamps
+
+    d = tmp_path / "depth_left"  # a name the deleted TartanDrive map used to alias
+    d.mkdir()
+    np.save(d / "0.npy", np.zeros(3))  # data present, but no timestamps.txt
+    with pytest.raises(ValueError, match="No timestamps.txt"):
+        loads_timestamps(["depth_left"], {"depth_left": str(d)})
