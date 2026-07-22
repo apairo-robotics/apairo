@@ -109,3 +109,33 @@ def test_non_zero_padded_frames_align_with_stacked_clock(tmp_path):
     for k in range(n):
         assert ds[k].data["lidar"][0, 0] == pytest.approx(float(k))  # frame k, in order
         assert ds[k].timestamp == pytest.approx(k / 10)  # clock line k, aligned
+
+
+# -- H10: cache() must keep the parent's sequence provenance --------------------
+
+
+def test_cache_preserves_sequence_provenance(rellis):
+    ds = Rellis3DDataset(rellis, keys=["lidar", "labels"])  # 2 sequences of 5
+    cached = ds.cache()
+    np.testing.assert_array_equal(cached.frame_sequence_ids, ds.frame_sequence_ids)
+    np.testing.assert_array_equal(cached.frame_stems, ds.frame_stems)
+    # frame_info through the cache keeps the right sequence, not one big blob
+    assert cached.frame_info(6).sequence == ds.frame_info(6).sequence == "00001"
+
+
+# -- H9: synchronize() must not collapse onto a single-event channel -----------
+
+
+def test_synchronize_does_not_collapse_on_single_event_channel():
+    from apairo.dataset.stream import StreamDataset
+
+    ds = StreamDataset(
+        {
+            "oneshot": (np.array([0.5]), [np.zeros(1)]),
+            "lidar": (np.arange(0.0, 1.0, 0.1), [np.zeros((3, 4)) for _ in range(10)]),
+        }
+    )
+    view = ds.synchronize()  # reference=None -> lowest-frequency channel
+    # Before the fix the one-shot (NaN frequency) was picked as the reference and
+    # the view collapsed to its single frame; now 'lidar' is the reference.
+    assert len(view) > 1

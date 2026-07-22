@@ -45,10 +45,30 @@ class CachedDataset(AbstractDataset):
 
         self._keys = list(self._cache[0].data.keys()) if self._cache else []
         self._synchronous = parent.is_synchronous
+        # Snapshot the parent's provenance + clock (like is_synchronous). Without
+        # this a cached dataset loses its sequence boundaries, so window(),
+        # filter_sequences() and frame_info() silently treat the whole cache as a
+        # single sequence -- building windows that reach across sequence seams.
+        self._frame_sequence_ids = getattr(parent, "frame_sequence_ids", None)
+        self._frame_stems = getattr(parent, "frame_stems", None)
+        self._frame_channel_ids = getattr(parent, "frame_channel_ids", None)
+        self.timestamps = getattr(parent, "timestamps", None)
 
     @property
     def is_synchronous(self) -> bool:
         return self._synchronous
+
+    @property
+    def frame_sequence_ids(self):
+        return self._frame_sequence_ids
+
+    @property
+    def frame_stems(self):
+        return self._frame_stems
+
+    @property
+    def frame_channel_ids(self):
+        return self._frame_channel_ids
 
     def __len__(self) -> int:
         return len(self._cache)

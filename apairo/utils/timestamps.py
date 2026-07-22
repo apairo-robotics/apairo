@@ -8,7 +8,12 @@ def load_timestamps(file):
 
 
 def get_frequency(timestamps: np.ndarray) -> float:
-    """Return the mean frequency of the timestamps in Hz."""
+    """Mean frequency of the timestamps in Hz. A channel with fewer than two
+    samples has no defined rate; report it as infinitely fast so it is never
+    picked as the lowest-frequency reference clock -- which would collapse a
+    synchronized view onto that channel's single frame."""
+    if len(timestamps) < 2:
+        return float("inf")
     return 1 / np.mean(timestamps[1:] - timestamps[:-1])
 
 
