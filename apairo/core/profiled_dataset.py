@@ -1111,13 +1111,20 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         filter."""
         if self._ref_key is None:
             raise RuntimeError("_full_anchor_rows() needs a per-frame anchor channel.")
+        cached = getattr(self, "_anchor_rows_cache", None)
+        if cached is not None:
+            return cached
         per_seq: dict[str, list[str]] = {}
         for f in self._discover_native(self._ref_key, apply_frame_filter=False):
             per_seq.setdefault(self._seq_root(f).name, []).append(f.stem)
-        return {
+        # Memoized: the anchor glob is construction-fixed, but this is called once
+        # per stacked channel and once per clock alignment -- re-globbing the whole
+        # anchor tree each time is wasteful.
+        self._anchor_rows_cache: dict[str, dict[str, int]] = {
             seq: {stem: i for i, stem in enumerate(stems)}
             for seq, stems in per_seq.items()
         }
+        return self._anchor_rows_cache
 
     def _build_stacked_loader(
         self, seq_paths, reshape, reader
@@ -1334,8 +1341,32 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
             ds.transform("lidar", RobotFilter())
             ds_train = ds.filter_split("train")  # transforms kept
+
+        Works for both LST-based splits (SemanticKITTI/Rellis) and directory-layer
+        splits (GOOSE), so there is a transform-preserving split for every dataset.
         """
-        return _apply_lst_filter(self, self._lst_frame_filter(name))
+        if self._splits_spec is not None and self._splits_spec.type == "lst":
+            frame_set = self._lst_frame_filter(name)
+        else:
+            frame_set = self._split_layer_frame_filter(name)
+        return _apply_lst_filter(self, frame_set)
+
+    def _split_layer_frame_filter(self, name: str) -> set[tuple[str, str]]:
+        """Frames belonging to a directory-layer split (its dir name in the path)."""
+        if name not in self.splits:
+            raise ValueError(
+                f"Split '{name}' not found. Available: {self.splits or '(none)'}."
+            )
+        anchor = self._files.get(self._ref_key) if self._ref_key is not None else None
+        if not anchor:
+            raise ValueError(
+                f"{type(self).__name__}.filter_split needs a per-frame anchor channel."
+            )
+        return {
+            (self._seq_root(f).name, f.stem)
+            for f in anchor
+            if name in f.relative_to(self._root).parts
+        }
 
     def _lst_frame_filter(self, name: str) -> set[tuple[str, str]]:
         if self._splits_spec is None or self._splits_spec.type != "lst":

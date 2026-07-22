@@ -106,6 +106,16 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
     """Validate a channel's ``key`` / ``order`` alignment specs (the filename-key
     contract). Returns issue strings; never raises."""
     out: list[str] = []
+    loader = meta.get("loader")
+    if (meta.get("key") is not None or meta.get("order") is not None) and loader in {
+        "npy",
+        "zarr",
+        "txt_rows",
+    }:
+        out.append(
+            f"channel '{key}': 'key'/'order' needs a per-frame loader (npys, img, "
+            f"bin), not the stacked '{loader}' loader"
+        )
     spec = meta.get("key")
     if spec is not None:
         if not isinstance(spec, dict):
@@ -937,7 +947,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
         alias = meta.get("alias")
         if not alias:
             continue
-        if alias in channels:
+        if alias in channels and alias != key:  # a self-alias is a harmless no-op
             issues.append(
                 f"Channel '{key}': alias '{alias}' collides with an existing channel name"
             )
@@ -1033,11 +1043,13 @@ def verify_calibration(root_dir: str | Path) -> list[str]:
             issues.append(f"camera '{name}': missing 'K'")
         elif not _is_shape(entry["K"], (3, 3)):
             issues.append(f"camera '{name}': 'K' is not 3x3")
-        if "D" in entry and not _is_shape(entry["D"], (-1,)):
+        # A null D/R/P (a rectified camera) is valid -- read_calibration treats it
+        # as absent, so verify must too (skip the shape check when it is None).
+        if entry.get("D") is not None and not _is_shape(entry["D"], (-1,)):
             issues.append(f"camera '{name}': 'D' is not a flat list of numbers")
-        if "R" in entry and not _is_shape(entry["R"], (3, 3)):
+        if entry.get("R") is not None and not _is_shape(entry["R"], (3, 3)):
             issues.append(f"camera '{name}': 'R' is not 3x3")
-        if "P" in entry and not _is_shape(entry["P"], (3, 4)):
+        if entry.get("P") is not None and not _is_shape(entry["P"], (3, 4)):
             issues.append(f"camera '{name}': 'P' is not 3x4")
         issues += _unknown(entry, _CALIBRATION_CAMERA_FIELDS, f"camera '{name}'")
     return issues

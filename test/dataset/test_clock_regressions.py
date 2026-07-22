@@ -312,3 +312,66 @@ def test_img_loader_accepts_jpeg_bmp_uppercase(tmp_path):  # M2
 
     ld = IMGLoader(str(tmp_path))
     assert len(ld) == 3  # was 0 (case-sensitive png/jpg only) -> IndexError
+
+
+# -- verify false-positives + directory-split filter (L4/L5/L6/M7b) -------------
+
+
+def test_verify_calibration_accepts_null_distortion(tmp_path):  # L4
+    import yaml
+
+    from apairo.core.config import verify_calibration
+
+    ap = tmp_path / ".apairo"
+    ap.mkdir()
+    (ap / "calibration.yaml").write_text(
+        yaml.safe_dump(
+            {"cameras": {"cam0": {"K": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "D": None}}}
+        )
+    )
+    assert not any("'D'" in s for s in verify_calibration(str(tmp_path)))
+
+
+def test_verify_config_allows_self_alias(tmp_path):  # L5
+    from apairo.core.config import verify_config, write_config
+
+    write_config(
+        tmp_path,
+        {"version": 1, "channels": {"lidar": {"loader": "npys", "alias": "lidar"}}},
+    )
+    assert not any("collides" in s for s in verify_config(str(tmp_path)))
+
+
+def test_verify_key_order_rejects_key_on_stacked_loader(tmp_path):  # L6
+    from apairo.core.config import verify_config, write_config
+
+    write_config(
+        tmp_path,
+        {
+            "version": 1,
+            "channels": {"poses": {"loader": "npy", "key": {"name": r"(\d+)"}}},
+        },
+    )
+    assert any("per-frame loader" in s for s in verify_config(str(tmp_path)))
+
+
+def test_filter_split_directory_split_preserves_transforms(tmp_path):  # M7b
+    class _GooseDS(ProfiledDataset):
+        _profile = "goose.yaml"
+
+    for split, seq in [("train", "s0"), ("val", "s1")]:  # distinct seqs per split
+        (tmp_path / "lidar" / split / seq).mkdir(parents=True)
+        (tmp_path / "labels" / split / seq).mkdir(parents=True)
+        for i in range(2):
+            np.random.rand(4, 4).astype("f4").tofile(
+                tmp_path / "lidar" / split / seq / f"{i:06d}.bin"
+            )
+            np.zeros(4, np.int32).tofile(
+                tmp_path / "labels" / split / seq / f"{i:06d}.label"
+            )
+    ds = _GooseDS(str(tmp_path), keys=["lidar", "labels"]).transform(
+        "lidar", lambda p: p[:1]
+    )
+    tr = ds.filter_split("train")  # was ValueError (no LST splits) before the fix
+    assert len(tr) == 2  # only the train frames
+    assert tr[0].data["lidar"].shape[0] == 1  # transform preserved mid-chain
