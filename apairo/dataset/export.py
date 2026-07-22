@@ -87,10 +87,15 @@ def export_dataset(
 
     # 3. Destination.
     dest = Path(dest).expanduser()
-    if dest.exists() and any(dest.iterdir()) and not overwrite:
-        raise FileExistsError(
-            f"Destination '{dest}' is not empty. Pass overwrite=True to replace it."
-        )
+    if dest.exists() and any(dest.iterdir()):
+        if not overwrite:
+            raise FileExistsError(
+                f"Destination '{dest}' is not empty. Pass overwrite=True to replace it."
+            )
+        # overwrite REPLACES: clear the destination so stale sequences from a
+        # prior export cannot survive and re-enter the regenerated manifest. A
+        # genuine incremental 'update' mode belongs in a separate, explicit option.
+        shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
     # 4. Copy each selected sequence + regenerate its sidecars.
@@ -119,12 +124,13 @@ def _export_sequence(
             f"Run `apairo init` on the source first."
         )
     channels = read_config(src_seq).get("channels", {})
-    # A channel is kept when its public name (its alias, else its own name) was
-    # selected. channels.yaml is keyed by the on-disk (real) directory name.
+    # A channel is kept when its REAL directory name OR its alias was selected --
+    # the request may name either (the alias request language), so matching only
+    # the public/alias name would silently drop a channel opened by its real name.
     keep = {
         real: meta
         for real, meta in channels.items()
-        if meta.get("alias", real) in selected_public
+        if real in selected_public or meta.get("alias", real) in selected_public
     }
     if not keep:
         raise KeyError(

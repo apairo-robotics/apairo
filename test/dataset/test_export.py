@@ -218,6 +218,32 @@ def test_export_refuses_nonempty_dest(root, tmp_path):
     assert set(read_config(dest / "seq_a")["channels"]) == {"imu"}
 
 
+def test_export_overwrite_replaces_stale_sequences(root, tmp_path):
+    # overwrite must REPLACE, not merge: a seq_a-only re-export over a seq_a+seq_b
+    # export must not leave seq_b behind to re-enter the regenerated manifest.
+    dest = tmp_path / "out"
+    RawDataset(root, keys=["lidar", "imu"]).export(dest)
+    assert read_manifest(dest)["sequences"] == ["seq_a", "seq_b"]
+    RawDataset(root, keys=["lidar", "imu"]).filter_sequences(["seq_a"]).export(
+        dest, overwrite=True
+    )
+    assert read_manifest(dest)["sequences"] == ["seq_a"]  # was [seq_a, seq_b]
+    assert not (dest / "seq_b").exists()
+
+
+def test_export_keeps_channel_selected_by_its_real_name(root, tmp_path):
+    # A channel opened by its REAL name while it carries an alias must not be
+    # silently dropped from the export.
+    from apairo.core.config import set_alias
+
+    RawDataset(root)  # bootstrap .apairo per sequence
+    for seq in ("seq_a", "seq_b"):
+        set_alias(root / seq, "lidar", "points")  # alias the lidar channel
+    dest = tmp_path / "out"
+    RawDataset(root, keys=["lidar", "imu"]).export(dest)  # opened by real name
+    assert set(read_config(dest / "seq_a")["channels"]) == {"lidar", "imu"}
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 
