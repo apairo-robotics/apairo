@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,6 +110,22 @@ def _read_lst_frame_set(lst_path: Path) -> set[tuple[str, str]]:
             stem = Path(parts[-1]).stem
             result.add((seq_id, stem))
     return result
+
+
+_NATSORT_RE = re.compile(r"(\d+)")
+
+
+def _natural_key(path: Path) -> list:
+    """Natural sort key: within each path component, compare digit runs
+    numerically so frames sort ``0, 1, 2, 10`` rather than lexicographic
+    ``0, 1, 10, 2``. A frame's *position* in this order is used as its row index
+    into stacked per-sequence files and sidecar clocks, so a plain lexicographic
+    sort silently misaligns them when filenames are not zero-padded. Identical to
+    a plain sort for zero-padded names."""
+    return [
+        tuple(int(c) if c.isdigit() else c for c in _NATSORT_RE.split(part))
+        for part in path.parts
+    ]
 
 
 @dataclass
@@ -474,8 +491,10 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if not base.is_dir():
             return []
         if spec.is_sequence_file:
-            return sorted(base.glob(f"**/{mapped}{spec.ext}"))
-        return sorted(d for d in base.glob(f"**/{mapped}") if d.is_dir())
+            return sorted(base.glob(f"**/{mapped}{spec.ext}"), key=_natural_key)
+        return sorted(
+            (d for d in base.glob(f"**/{mapped}") if d.is_dir()), key=_natural_key
+        )
 
     @classmethod
     def inventory(cls, directory: str | Path) -> dict:
@@ -798,7 +817,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 )
             ext = spec.get("ext", "")
             pattern = f"**/{directory}/**/*{ext}" if ext else f"**/{directory}/**/*"
-            files_full = sorted(p for p in self._root.glob(pattern) if p.is_file())
+            files_full = sorted(
+                (p for p in self._root.glob(pattern) if p.is_file()), key=_natural_key
+            )
             key_spec = {
                 k: spec[k] for k in ("name", "file", "scale", "units") if k in spec
             }
@@ -990,7 +1011,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         else:
             pattern = f"**/{mapped}{spec.ext}"
 
-        paths = sorted(self._root.glob(pattern))
+        paths = sorted(self._root.glob(pattern), key=_natural_key)
         if self._sequence_ids_filter is not None:
             paths = [p for p in paths if p.parent.name in self._sequence_ids_filter]
         return paths
@@ -1005,7 +1026,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         else:
             pattern = f"**/{key}/**/*.{ext}"
 
-        files = sorted(self._root.glob(pattern))
+        files = sorted(self._root.glob(pattern), key=_natural_key)
         # Directory-based splits live in the path (filter by it); lst-based splits
         # have no split layer and are resolved by _frame_filter below -- mirror
         # _discover_native so a derived channel splits the same way a native one does.
@@ -1047,7 +1068,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         else:
             pattern = f"**/{mapped}/**/*{spec.ext}"
 
-        files = sorted(self._root.glob(pattern))
+        files = sorted(self._root.glob(pattern), key=_natural_key)
 
         if self._split_filter:
             split_layer = next(

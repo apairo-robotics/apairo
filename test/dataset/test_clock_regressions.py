@@ -13,8 +13,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from apairo.core.profiled_dataset import ProfiledDataset
 from apairo.dataset import Rellis3DDataset
 from apairo.loader.npy_loader import NPYLoader
+
+
+class _KittiDS(ProfiledDataset):
+    _profile = "semantic_kitti.yaml"
+
 
 MINI = Path(__file__).parents[1] / "assets" / "mini_rellis"
 
@@ -80,3 +86,26 @@ def test_partial_clock_coverage_is_clockless(rellis):
     ds = Rellis3DDataset(rellis, keys=["lidar", "labels"])  # 00001 lacks the camera
     assert ds.timestamps is None
     assert len(ds) == 10
+
+
+# -- H3: non-zero-padded frames must sort numerically, not lexicographically ----
+
+
+def test_non_zero_padded_frames_align_with_stacked_clock(tmp_path):
+    # Frames named 0..11 (not zero-padded). A lexicographic sort orders them
+    # 0,1,10,11,2,... so frame '10' lands at position 2 and would be assigned
+    # times.txt line 2 (and any stacked/sidecar row 2) -- a silent misalignment.
+    seq = tmp_path / "sequences" / "00"
+    (seq / "velodyne").mkdir(parents=True)
+    (seq / "labels").mkdir(parents=True)
+    n = 12
+    for i in range(n):
+        # encode the frame index into the cloud content to verify frame order
+        np.full((4, 4), float(i), np.float32).tofile(seq / "velodyne" / f"{i}.bin")
+        np.zeros(4, np.int32).tofile(seq / "labels" / f"{i}.label")
+    (seq / "times.txt").write_text("\n".join(f"{i / 10:.1f}" for i in range(n)))
+
+    ds = _KittiDS(str(tmp_path), keys=["lidar", "labels"])
+    for k in range(n):
+        assert ds[k].data["lidar"][0, 0] == pytest.approx(float(k))  # frame k, in order
+        assert ds[k].timestamp == pytest.approx(k / 10)  # clock line k, aligned
