@@ -15,9 +15,9 @@ ds = apairo.SemanticKittiDataset(
 
 print(len(ds))              # total number of frames across all sequences
 sample = ds[0]
-print(sample.data["lidar"].shape)   # torch.Size([N, 4])  -- x, y, z, intensity
-print(sample.data["labels"].shape)  # torch.Size([N])     -- semantic class IDs
-print(sample.timestamp)             # None  (synchronous, no timestamps)
+print(sample.data["lidar"].shape)   # (N, 4)  numpy.ndarray -- x, y, z, intensity
+print(sample.data["labels"].shape)  # (N,)    numpy.ndarray -- semantic class IDs
+print(sample.timestamp)             # None if clockless, else a float (per-frame clock)
 ```
 
 The same API works for all synchronous datasets:
@@ -49,7 +49,7 @@ Every `__getitem__` call returns a [`Sample`][apairo.core.sample.Sample]:
 ```python
 @dataclass
 class Sample:
-    data: dict[str, torch.Tensor]   # key -> tensor
+    data: dict[str, np.ndarray]     # key -> numpy array
     timestamp: float | None         # None for synchronous datasets
 ```
 

@@ -544,38 +544,47 @@ class AsyncLayoutDataset(AbstractDataset):
                 )
 
     def _collect_timestamps(self) -> dict[str, np.ndarray]:
-        """Timestamps per loaded key: its own ``timestamps.txt`` when present,
-        else the channel named by its ``timestamps_from`` (a derived channel
-        sharing its source's clock), else the legacy replacement map handled by
-        :func:`~apairo.loader.loads_timestamps`."""
+        """Timestamps per loaded key: its own clock (a ``_key_providers`` callable,
+        a declarative ``key`` spec, or a ``timestamps.txt``), else the clock of the
+        channel named by its ``timestamps_from`` -- resolved through the *same*
+        precedence, so borrowing works whatever the source's clock origin and
+        regardless of the order channels are processed in."""
         timestamps: dict[str, np.ndarray] = {}
         fallback: list[str] = []
-        for key in self._keys:
+
+        def own_clock(key: str) -> np.ndarray | None:
+            """A channel's own clock (provider > key spec > timestamps.txt), memoized
+            in ``timestamps``; ``None`` if it has none of the three."""
+            if key in timestamps:
+                return timestamps[key]
             provider = getattr(self, "_key_providers", {}).get(key)
             if provider is not None:  # subclass callable: filenames -> key array
                 timestamps[key] = self._as_key_array(
                     key, provider(getattr(self.loaders[key], "files", None))
                 )
-                continue
-            if (
-                key in self._key_spec
-            ):  # declarative key, parsed in memory (nothing written)
+                return timestamps[key]
+            if key in self._key_spec:  # declarative key, parsed in memory
                 timestamps[key] = self._as_key_array(key, self._parse_key(key))
-                continue
+                return timestamps[key]
             ts_path = Path(self._files[key]) / "timestamps.txt"
             if ts_path.exists():
                 timestamps[key] = load_timestamps(ts_path)
-            elif key in self._timestamp_aliases:
+                return timestamps[key]
+            return None
+
+        for key in self._keys:
+            if own_clock(key) is not None:
+                continue
+            if key in self._timestamp_aliases:  # timestamps_from a source channel
                 src = self._timestamp_aliases[key]
-                if src not in timestamps:
-                    src_path = Path(self._files[src]) / "timestamps.txt"
-                    if not src_path.exists():
-                        raise ValueError(
-                            f"'{key}' shares timestamps with '{src}' (timestamps_from), "
-                            f"but '{src}' has no timestamps.txt."
-                        )
-                    timestamps[src] = load_timestamps(src_path)
-                timestamps[key] = timestamps[src]
+                src_clock = own_clock(src)
+                if src_clock is None:
+                    raise ValueError(
+                        f"'{key}' shares timestamps with '{src}' (timestamps_from), "
+                        f"but '{src}' has no resolvable clock (no key spec, provider, "
+                        f"or timestamps.txt)."
+                    )
+                timestamps[key] = src_clock
             else:
                 fallback.append(key)
         if fallback:

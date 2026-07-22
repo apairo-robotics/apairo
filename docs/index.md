@@ -19,8 +19,8 @@ import apairo
 # Synchronous: SemanticKITTI
 ds = apairo.SemanticKittiDataset("/data/semantic_kitti", keys=["lidar", "labels"])
 sample = ds[0]
-# sample.data["lidar"]   -> torch.Tensor (N, 4)  float32
-# sample.data["labels"]  -> torch.Tensor (N,)    int64
+# sample.data["lidar"]   -> numpy.ndarray (N, 4)  float32
+# sample.data["labels"]  -> numpy.ndarray (N,)    int64
 
 # Asynchronous: TartanDrive
 ds = apairo.TartanKittiDataset("/data/tartan/2024-01-01_forest")
@@ -38,7 +38,6 @@ sample = ds[0]
 | `SemanticKittiDataset` | synchronous | lidar, labels |
 | `Rellis3DDataset` | synchronous | lidar, labels |
 | `Goose3DDataset` | synchronous | lidar, labels |
-| `TartanDataset` | synchronous | any (`.pt` format) |
 | `RawDataset` | asynchronous | any channels (from `.apairo/channels.yaml`) |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
 
@@ -48,9 +47,9 @@ sample = ds[0]
 
 - **YAML-driven dataset profiles** -- adding a new synchronous dataset requires one `.yaml` file and two lines of Python
 - **Derived key loading** -- preprocessed outputs live alongside raw data, registered in a `.apairo` sidecar and loaded transparently
-- **Preprocessing framework** -- `FramePreprocessor` and `SequencePreprocessor` run pipelines and persist results automatically ([`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) for ready-made preprocessors)
-- **At-access transforms** -- `dataset.transform(key, fn)` and `Compose` apply callables at read time without writing to disk ([`apairo_transform`](https://github.com/apairo/apairo_transform) for ready-made transforms)
-- **PyTorch integration** -- `TorchConcatDataset` and `TorchKittiDataset` wrap any dataset for use with `DataLoader`
+- **Preprocessing framework** -- `FramePreprocessor` and `SequencePreprocessor` run pipelines and persist results automatically ([`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) for ready-made preprocessors)
+- **At-access transforms** -- `dataset.transform(key, fn)` and `Compose` apply callables at read time without writing to disk ([`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) for ready-made transforms)
+- **PyTorch-ready** -- every apairo dataset is a `torch.utils.data.Dataset` (`__getitem__` / `__len__`); pass it straight to `DataLoader`, no wrapper
 - **Sequence-level splits** -- `split_sequences()` avoids temporal leakage across train/val/test
 
 ---

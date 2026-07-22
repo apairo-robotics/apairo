@@ -3,8 +3,7 @@
 ## Requirements
 
 - Python ≥ 3.11
-- PyTorch (CPU or CUDA)
-- NumPy, torchvision, PyYAML (installed automatically)
+- NumPy, PyYAML (installed automatically)
 
 ## Install
 
@@ -15,8 +14,8 @@ pip install apairo
 ## Optional extras
 
 ```bash
-# Visualization utilities (matplotlib)
-pip install apairo[viz]
+# Benchmark / plotting utilities (matplotlib)
+pip install apairo[bench]
 
 # Development tools (pytest, matplotlib)
 pip install apairo[dev]

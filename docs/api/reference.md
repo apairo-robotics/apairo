@@ -115,7 +115,7 @@ Reused by `RawDataset` and `TartanKittiDataset`.
 ### WRITERS
 
 Format writers used by the preprocessing runner.
-Keyed by loader name (`"npy"`, `"npys"`, `"bin"`, `"pt"`).
+Keyed by loader name (`"npy"`, `"npys"`, `"bin"`, `"zarr"`, `"img"`).
 
 ```python
 from apairo import WRITERS
@@ -131,8 +131,8 @@ writer.write(my_array, Path("/data/output/000000.npy"))
 ### DERIVED_LOADERS
 
 File-level loaders for derived/preprocessed keys.
-Keyed by loader name (`"npy"`, `"pt"`, `"bin"`, `"img"`).
-Each entry is a `Callable[[Path], torch.Tensor]`.
+Keyed by loader name (`"npy"`, `"bin"`, `"img"`).
+Each entry is a `Callable[[Path], np.ndarray]`.
 
 ```python
 from apairo import DERIVED_LOADERS

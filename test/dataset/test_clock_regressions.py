@@ -165,3 +165,37 @@ def test_loads_timestamps_no_hardcoded_dataset_names(tmp_path):
     np.save(d / "0.npy", np.zeros(3))  # data present, but no timestamps.txt
     with pytest.raises(ValueError, match="No timestamps.txt"):
         loads_timestamps(["depth_left"], {"depth_left": str(d)})
+
+
+# -- H6/H8: timestamps_from a filename-key source, order-independently ----------
+
+
+def test_timestamps_from_a_filename_key_source(tmp_path):
+    from apairo.core.config import write_config
+    from apairo.dataset.raw import RawDataset
+
+    root = tmp_path / "seq"
+    (root / "camera").mkdir(parents=True)
+    (root / "lidar").mkdir(parents=True)
+    for i in range(5):
+        np.save(root / "camera" / f"frame{i:06d}-{i}.npy", np.zeros((2, 3), np.float32))
+        np.save(root / "lidar" / f"{i:06d}.npy", np.zeros((2, 3), np.float32))
+    write_config(
+        root,
+        {
+            "version": 1,
+            "channels": {
+                "camera": {
+                    "kind": "raw",
+                    "loader": "npys",
+                    "key": {"name": r"frame\d+-(\d+)"},
+                },
+                "lidar": {"kind": "raw", "loader": "npys", "timestamps_from": "camera"},
+            },
+        },
+    )
+    # 'lidar' is processed before 'camera' -- the order that used to crash because
+    # camera's clock is filename-parsed (it has no timestamps.txt to read).
+    ds = RawDataset(str(root), keys=["lidar", "camera"])
+    np.testing.assert_array_equal(ds.timestamps["lidar"], np.arange(5, dtype=float))
+    np.testing.assert_array_equal(ds.timestamps["camera"], np.arange(5, dtype=float))
