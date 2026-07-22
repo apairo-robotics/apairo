@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 import warnings
 from dataclasses import dataclass, field
@@ -1300,7 +1301,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
     def sequence_ids(self) -> list[str]:
         return list(self._seq_groups.keys())
 
-    @property
+    @functools.cached_property
     def frame_sequence_ids(self) -> np.ndarray:
         """Sequence ID for every frame, indexed by global frame index.
 
@@ -1323,7 +1324,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             result[indices] = seq_id
         return result
 
-    @property
+    @functools.cached_property
     def frame_stems(self) -> np.ndarray:
         """Filename stem for every frame, indexed by global frame index."""
         result = np.empty(len(self), dtype=object)

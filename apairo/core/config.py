@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import numpy as np
 import yaml
@@ -24,12 +24,16 @@ KEY_UNITS: dict[str, float] = {"s": 1.0, "ms": 1e-3, "us": 1e-6, "ns": 1e-9}
 def safe_config_name(name: str, *, label: str = "path") -> str:
     """A config-supplied path component (from a possibly-untrusted ``channels.yaml``
     or profile) must be a plain relative name that stays under its parent: reject an
-    absolute path or a ``..`` escape, so a downloaded dataset cannot read or write
-    outside its own tree."""
-    if Path(name).is_absolute() or ".." in Path(name).parts:
-        raise ValueError(
-            f"{label}: '{name}' must be a relative path with no '..' or root anchor."
-        )
+    absolute path, a drive, a root anchor (a leading ``/`` or ``\\``), or a ``..``
+    escape, so a downloaded dataset cannot read or write outside its own tree.
+    Checked under BOTH POSIX and Windows rules -- a leading ``/`` is not
+    ``is_absolute()`` on Windows, so a single-flavor check would leave a hole."""
+    for flavor in (PurePosixPath(name), PureWindowsPath(name)):
+        if flavor.is_absolute() or flavor.drive or flavor.root or ".." in flavor.parts:
+            raise ValueError(
+                f"{label}: '{name}' must be a relative path with no '..', drive, or "
+                f"root anchor."
+            )
     return name
 
 

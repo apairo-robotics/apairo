@@ -270,7 +270,9 @@ def test_safe_config_name_rejects_traversal():  # M5 / L3
     from apairo.core.config import safe_config_name
 
     assert safe_config_name("poses.npy") == "poses.npy"
-    for bad in ["../secret", "/etc/passwd", "a/../../b"]:
+    # includes Windows-flavored escapes (a leading '/' is not is_absolute() on
+    # Windows; a drive/UNC path is relative under POSIX) -- both must be rejected.
+    for bad in ["../secret", "/etc/passwd", "a/../../b", "C:\\evil", "\\\\host\\s"]:
         with pytest.raises(ValueError, match="relative path"):
             safe_config_name(bad)
 
@@ -375,3 +377,10 @@ def test_filter_split_directory_split_preserves_transforms(tmp_path):  # M7b
     tr = ds.filter_split("train")  # was ValueError (no LST splits) before the fix
     assert len(tr) == 2  # only the train frames
     assert tr[0].data["lidar"].shape[0] == 1  # transform preserved mid-chain
+
+
+def test_frame_provenance_is_cached(rellis):  # L7
+    ds = Rellis3DDataset(rellis, keys=["lidar", "labels"])
+    # cached_property -> the same object on repeated access (no rebuild)
+    assert ds.frame_sequence_ids is ds.frame_sequence_ids
+    assert ds.frame_stems is ds.frame_stems
