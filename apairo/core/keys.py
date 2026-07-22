@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from apairo.core.config import KEY_UNITS
+from apairo.core.config import KEY_UNITS, safe_config_name
 
 
 def parse_filename_key(
@@ -42,7 +42,9 @@ def parse_filename_key(
 
         if directory is None:
             raise ValueError(f"{label}: key {{file}} needs a directory to read from.")
-        path = Path(directory) / spec["file"]
+        path = Path(directory) / safe_config_name(
+            spec["file"], label=f"{label} key file"
+        )
         if not path.exists():
             raise FileNotFoundError(
                 f"{label}: key file '{spec['file']}' not found in '{directory}'."

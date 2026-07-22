@@ -21,7 +21,13 @@ class BINLoader(AbstractLoader):
 
     def __getitem__(self, idx) -> np.ndarray:
         path = os.path.join(self.directory, self.files[idx])
-        return np.fromfile(path, dtype=np.float32).reshape(-1, 4)
+        arr = np.fromfile(path, dtype=np.float32)
+        if arr.size % 4:
+            raise ValueError(
+                f"Corrupt/truncated point cloud '{path}': {arr.size} float32 value(s) "
+                f"is not a multiple of 4 (x, y, z, intensity)."
+            )
+        return arr.reshape(-1, 4)
 
     @property
     def shape(self):

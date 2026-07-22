@@ -3,6 +3,17 @@ import os
 import numpy as np
 
 from apairo.core import AbstractLoader
+from apairo.core.utils.exceptions import FileExtensionError
+
+_IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
+
+
+def _img_sort_key(name: str) -> tuple[int, object]:
+    """Numeric-first sort: a pure-integer stem sorts numerically (0, 1, 2, 10);
+    anything else (timestamped/prefixed names) falls back to lexicographic instead
+    of crashing the default ``int()`` sort."""
+    stem = os.path.splitext(name)[0]
+    return (0, int(stem)) if stem.isdigit() else (1, name)
 
 
 class IMGLoader(AbstractLoader):
@@ -33,16 +44,21 @@ class IMGLoader(AbstractLoader):
                 "Image loading requires Pillow. Install it with: pip install Pillow"
             ) from exc
         self.directory = directory
-        self.files = (
-            list(files)
-            if files is not None
-            else list(
-                sorted(
-                    filter(lambda f: f[-3:] in {"png", "jpg"}, os.listdir(directory)),
-                    key=lambda f: int(f.split(".")[0]),
-                )
+        if files is not None:
+            self.files = list(files)
+        else:
+            self.files = sorted(
+                (
+                    f
+                    for f in os.listdir(directory)
+                    if os.path.splitext(f)[1].lower() in _IMG_EXTS
+                ),
+                key=_img_sort_key,
             )
-        )
+        if not self.files:
+            raise FileExtensionError(
+                f"No image files ({', '.join(sorted(_IMG_EXTS))}) found in {directory}."
+            )
         from PIL import Image
 
         with Image.open(os.path.join(self.directory, self.files[0])) as img:

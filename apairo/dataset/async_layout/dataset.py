@@ -10,6 +10,7 @@ from apairo.core.config import (
     CONFIG_DIR,
     config_exists,
     read_config,
+    safe_config_name,
     write_config,
 )
 from apairo.core.config import (
@@ -173,7 +174,9 @@ class AsyncLayoutDataset(AbstractDataset):
         # directory colocates several (poses.npy beside valid_mask.npy) -- the
         # whole-array analogue of `suffix`. The name lives here, in the layout.
         self._array_file_of: dict[str, str] = {
-            self._public(k): v["array_file"]
+            self._public(k): safe_config_name(
+                v["array_file"], label=f"channel '{k}' array_file"
+            )
             for k, v in channels.items()
             if v.get("array_file")
         }

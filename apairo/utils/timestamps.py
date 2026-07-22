@@ -19,7 +19,10 @@ def get_frequency(timestamps: np.ndarray) -> float:
 
 def get_end_of_time(timestamps: dict) -> float:
     """Return the latest timestamp across all channels."""
-    return max([timestamps[key][-1] for key in timestamps])
+    for key, ts in timestamps.items():
+        if len(ts) == 0:
+            raise ValueError(f"Channel '{key}' has an empty clock (0 timestamps).")
+    return max(ts[-1] for ts in timestamps.values())
 
 
 def get_reference_timestamps(timestamps: dict) -> str:

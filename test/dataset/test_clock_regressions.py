@@ -261,3 +261,54 @@ def test_split_preserves_transforms(rellis):  # M7
     )
     tr = ds.split("train")
     assert tr[0].data["lidar"].shape[0] == 1  # transform kept, not silently dropped
+
+
+# -- Security (M5/L3) + robustness (L1/L2/M2) ----------------------------------
+
+
+def test_safe_config_name_rejects_traversal():  # M5 / L3
+    from apairo.core.config import safe_config_name
+
+    assert safe_config_name("poses.npy") == "poses.npy"
+    for bad in ["../secret", "/etc/passwd", "a/../../b"]:
+        with pytest.raises(ValueError, match="relative path"):
+            safe_config_name(bad)
+
+
+def test_get_end_of_time_rejects_empty_clock():  # L1
+    from apairo.utils.timestamps import get_end_of_time
+
+    with pytest.raises(ValueError, match="empty clock"):
+        get_end_of_time({"lidar": np.array([])})
+
+
+def test_bin_loader_rejects_truncated_file(tmp_path):  # L2
+    from apairo.loader.bin_loader import BINLoader
+
+    (tmp_path / "0.bin").write_bytes(
+        b"\x00" * (6 * 4)
+    )  # 6 float32 -> not a multiple of 4
+    with pytest.raises(ValueError, match="Corrupt/truncated"):
+        BINLoader(str(tmp_path))[0]
+
+
+def test_img_sort_key_numeric_first():  # M2
+    from apairo.loader.img_loader import _img_sort_key
+
+    names = ["10.jpg", "2.jpg", "1.jpg", "frame-x.jpg"]
+    assert sorted(names, key=_img_sort_key) == [
+        "1.jpg",
+        "2.jpg",
+        "10.jpg",
+        "frame-x.jpg",
+    ]
+
+
+def test_img_loader_accepts_jpeg_bmp_uppercase(tmp_path):  # M2
+    Image = pytest.importorskip("PIL.Image")
+    for name in ["1.JPG", "10.jpeg", "2.bmp"]:
+        Image.new("RGB", (2, 2)).save(tmp_path / name)
+    from apairo.loader.img_loader import IMGLoader
+
+    ld = IMGLoader(str(tmp_path))
+    assert len(ld) == 3  # was 0 (case-sensitive png/jpg only) -> IndexError

@@ -22,6 +22,7 @@ from apairo.core.config import (
     read_calibration,
     read_config,
     read_manifest,
+    safe_config_name,
     write_config,
     write_manifest,
 )
@@ -212,7 +213,13 @@ class _PerFrameLoader:
         if spec.ext in _BINARY_EXTS:
             arr = np.fromfile(path, dtype=np.dtype(spec.dtype))
             if spec.reshape:
-                arr = arr.reshape(spec.reshape)
+                try:
+                    arr = arr.reshape(spec.reshape)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Cannot reshape '{path}' ({arr.size} value(s)) to "
+                        f"{spec.reshape} -- corrupt or truncated file?"
+                    ) from exc
             if spec.mask is not None:
                 arr &= spec.mask
         else:
@@ -847,6 +854,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         Returns ``None`` when the sidecar is simply absent (clockless subset)."""
         from apairo.loader import load_timestamps
 
+        safe_config_name(name, label=f"{label} sidecar")
         seq_stamps: dict[str, np.ndarray] = {}
         for seq_dir in self._sequence_dirs():
             path = seq_dir / name
@@ -936,7 +944,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     def derived_path(self, idx: int, key: str, ext: str) -> Path:
         ref_key = self._ref_key
-        assert ref_key is not None  # set once keys are loaded
+        if ref_key is None:
+            raise RuntimeError("derived_path() needs a loaded reference channel.")
         ref = self._files[ref_key][idx]
         rel = ref.relative_to(self._root)
         parts = list(rel.parts)
@@ -1100,7 +1109,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         channel honour the same split/predicate selection as the per-frame
         channels.  Keyed off the anchor (``_ref_key``) glob without the frame
         filter."""
-        assert self._ref_key is not None  # callers check before anchoring
+        if self._ref_key is None:
+            raise RuntimeError("_full_anchor_rows() needs a per-frame anchor channel.")
         per_seq: dict[str, list[str]] = {}
         for f in self._discover_native(self._ref_key, apply_frame_filter=False):
             per_seq.setdefault(self._seq_root(f).name, []).append(f.stem)

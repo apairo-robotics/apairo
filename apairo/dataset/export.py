@@ -25,6 +25,7 @@ from apairo.core.config import (
     CONFIG_DIR,
     config_exists,
     read_config,
+    safe_config_name,
     write_config,
 )
 
@@ -142,7 +143,12 @@ def _export_sequence(
     # One physical directory may back several channels (a base npys channel and
     # its suffixed sub-channels); copy each unique directory once, whole.
     for directory in sorted(
-        {meta.get("directory", real) for real, meta in keep.items()}
+        {
+            safe_config_name(
+                meta.get("directory", real), label=f"channel '{real}' directory"
+            )
+            for real, meta in keep.items()
+        }
     ):
         _copy_tree(src_seq / directory, dst_seq / directory, link=link)
 

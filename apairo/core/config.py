@@ -20,6 +20,19 @@ KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "bin", "img", "zarr"})
 # seconds; `units` compiles to `scale`). See docs/datasets/bring-your-own-dataset.md.
 KEY_UNITS: dict[str, float] = {"s": 1.0, "ms": 1e-3, "us": 1e-6, "ns": 1e-9}
 
+
+def safe_config_name(name: str, *, label: str = "path") -> str:
+    """A config-supplied path component (from a possibly-untrusted ``channels.yaml``
+    or profile) must be a plain relative name that stays under its parent: reject an
+    absolute path or a ``..`` escape, so a downloaded dataset cannot read or write
+    outside its own tree."""
+    if Path(name).is_absolute() or ".." in Path(name).parts:
+        raise ValueError(
+            f"{label}: '{name}' must be a relative path with no '..' or root anchor."
+        )
+    return name
+
+
 # ── .apairo schema, version 1 ────────────────────────────────────────────────
 # The on-disk contract. Validation is tolerant: an unknown field is reported as a
 # warning and otherwise ignored, so a sidecar written by a newer apairo still
