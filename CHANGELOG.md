@@ -7,6 +7,8 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-23
+
 ### Added
 - **Synchronous datasets can carry a per-frame clock; `is_synchronous` is now
   structural.** Synchrony (co-captured frames — `ds[i]` is one sample across all
@@ -558,7 +560,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/apairo-robotics/apairo/compare/v0.6.2...v0.7.0
 [0.5.0]: https://github.com/apairo-robotics/apairo/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/apairo-robotics/apairo/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/apairo-robotics/apairo/compare/v0.2.1...v0.3.0

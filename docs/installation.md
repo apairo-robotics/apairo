@@ -14,6 +14,12 @@ pip install apairo
 ## Optional extras
 
 ```bash
+# Image channels (Pillow)
+pip install apairo[vision]
+
+# Zarr channels (zarr)
+pip install apairo[zarr]
+
 # Benchmark / plotting utilities (matplotlib)
 pip install apairo[bench]
 

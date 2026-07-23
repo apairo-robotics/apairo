@@ -9,6 +9,9 @@ outputs
 *.npy
 *.ply
 
+# Stray scratch image at the repo root
+/x.png
+
 .*/
 .env
 build/

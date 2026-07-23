@@ -74,7 +74,7 @@ execution context** — not by concept:
   (ground segmentation, odometry, learned models). Runs once on a data
   server; its dependencies never contaminate training environments.
 - **`apairo_extractor`** — rosbags in, apairo layouts out.
-- **`apairo_rr`** — visualization via rerun.
+- **`apairo_visu`** — visualization via rerun.
 
 The contracts crossing these boundaries are deliberately tiny: a
 transform is a callable on an array or a `Sample`; a preprocessor is a

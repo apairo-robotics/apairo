@@ -15,6 +15,9 @@ Unified Python loader for robotics sensor datasets — one API across synchronou
 
 All data is returned as `numpy.ndarray`. Convert to the framework of your choice.
 
+**No loading overhead.** apairo loads the *same bytes* at the *same throughput* as a hand-rolled loader —
+see [apairo_benchmarks](https://github.com/apairo-robotics/apairo_benchmarks) for the head-to-head proof.
+
 ---
 
 ## Installation
@@ -284,7 +287,7 @@ See [documentation](https://apairo-robotics.github.io/apairo/) for the full guid
 
 ## Contributing
 
-apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_rr](https://github.com/apairo-robotics/apairo_rr)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apairo"
-version = "0.6.2"
-description = "Extensible framework to load robotics datasets"
+version = "0.7.0"
+description = "Unified Python loader for robotics sensor datasets -- one API across synchronous and asynchronous layouts"
 readme = "README.md"
 authors = [
   { name = "Augustin Bresset", email = "augustin.bresset@gmail.com" },
