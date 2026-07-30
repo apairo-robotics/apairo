@@ -41,6 +41,8 @@ def _detect_loader(channel_dir: Path) -> str | None:
     exts = {f.suffix.lower() for f in data_files}
     if ".bin" in exts:
         return "bin"
+    if ".pcd" in exts:
+        return "pcd"
     if exts & {".png", ".jpg", ".jpeg", ".bmp"}:
         return "img"
     npy_files = [f for f in data_files if f.suffix == ".npy"]
@@ -180,6 +182,14 @@ class AsyncLayoutDataset(AbstractDataset):
             for k, v in channels.items()
             if v.get("array_file")
         }
+        # A `pcd` channel's field contract. A PCD header is self-describing, so
+        # the field set is a per-file property; declaring it here is what makes
+        # the channel's width a layout decision instead of a per-file accident.
+        self._fields_of: dict[str, list[str]] = {
+            self._public(k): list(v["fields"])
+            for k, v in channels.items()
+            if v.get("fields")
+        }
 
         if dataset_profile is not None:
             self._profile: dict[str, str] = load_profile(dataset_profile)
@@ -267,6 +277,7 @@ class AsyncLayoutDataset(AbstractDataset):
         type is inferred from file extensions:
 
         * ``.bin`` → ``bin``
+        * ``.pcd`` → ``pcd``
         * ``.png`` / ``.jpg`` / … → ``img``
         * multiple ``.npy`` files → ``npys``
         * single ``.npy`` file → ``npy``
@@ -364,7 +375,7 @@ class AsyncLayoutDataset(AbstractDataset):
             detail = f" (checked: {raw_keys})" if raw_keys else ""
             raise ValueError(
                 f"No recognizable channels found in '{directory}'{detail}. "
-                f"Expected subdirectories containing .bin, .npy, or image files."
+                f"Expected subdirectories containing .bin, .pcd, .npy, or image files."
             )
 
         write_config(directory, {"version": 1, "channels": channels})
@@ -409,34 +420,39 @@ class AsyncLayoutDataset(AbstractDataset):
             enumerate_by_regex = key in self._order_spec or (
                 key in self._key_spec and "name" in self._key_spec[key]
             )
+            # The `pcd` field contract travels with every construction path: it is
+            # the channel's declared width, not an artefact of how files are named.
+            extra: dict = {}
+            if self._profile[key] == "pcd" and key in self._fields_of:
+                extra["fields"] = self._fields_of[key]
             if order_provider is not None:  # subclass callable: directory -> filenames
                 loaders[key] = loader_cls(
-                    directory, files=list(order_provider(directory))
+                    directory, files=list(order_provider(directory)), **extra
                 )
             elif enumerate_by_regex:
                 # Declarative enumeration policy (the `order` regex, else the `key`
                 # regex): a channel whose names carry a '_' (a Rellis <epoch>_<ms>),
                 # which the default frame-file convention reserves for suffixes, still
                 # enumerates, and the loader's own name sort is bypassed.
-                if self._profile[key] not in {"npys", "img", "bin"}:
+                if self._profile[key] not in {"npys", "img", "bin", "pcd"}:
                     raise ValueError(
                         f"Channel '{key}' declares a filename key/order but its loader "
                         f"'{self._profile[key]}' has no per-frame files -- filename "
-                        f"keys/order need a per-frame loader (npys, img, bin)."
+                        f"keys/order need a per-frame loader (npys, img, bin, pcd)."
                     )
                 loaders[key] = loader_cls(
-                    directory, files=self._enumerate(key, directory)
+                    directory, files=self._enumerate(key, directory), **extra
                 )
             elif suffix:
                 loaders[key] = loader_cls(
-                    directory, files=suffixed_frame_files(directory, suffix)
+                    directory, files=suffixed_frame_files(directory, suffix), **extra
                 )
             elif self._array_file_of.get(key) and self._profile[key] == "npy":
                 # A colocated stacked array named explicitly (valid_mask.npy in a
                 # shared gicp_poses/): load that file, not the directory's glob[0].
                 loaders[key] = loader_cls(directory, file=self._array_file_of[key])
             else:
-                loaders[key] = loader_cls(directory)
+                loaders[key] = loader_cls(directory, **extra)
         self.loaders: dict[str, AbstractLoader] = loaders
         self.timestamps: dict[str, np.ndarray] = self._collect_timestamps()
         self._check_suffix_coverage()
@@ -465,6 +481,7 @@ class AsyncLayoutDataset(AbstractDataset):
             "npys": {".npy"},
             "npy": {".npy"},
             "bin": {".bin"},
+            "pcd": {".pcd"},
             "img": {".png", ".jpg", ".jpeg", ".bmp"},
         }.get(self._profile[key])
 

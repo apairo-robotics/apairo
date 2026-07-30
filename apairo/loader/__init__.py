@@ -9,6 +9,7 @@ from .bin_loader import BINLoader
 from .img_loader import IMGLoader
 from .npy_loader import NPYLoader
 from .npys_loader import NPYSLoader
+from .pcd_loader import PCDLoader, read_pcd
 from .tar_loader import TarImageLoader
 from .txt_loader import TXTLoader
 from .zarr_loader import ZarrLoader
@@ -19,6 +20,7 @@ str_to_loader = {
     "npy": NPYLoader,
     "bin": BINLoader,
     "zarr": ZarrLoader,
+    "pcd": PCDLoader,
 }
 
 
@@ -37,6 +39,8 @@ DERIVED_LOADERS: dict[str, Callable[[Path], np.ndarray]] = {
     "npy": lambda path: np.load(path),
     "bin": lambda path: np.fromfile(path, dtype=np.float32),
     "img": _load_img,
+    # No `fields` here: a derived channel is read back whole, in header order.
+    "pcd": lambda path: read_pcd(str(path)),
 }
 
 __all__ = [
@@ -47,6 +51,8 @@ __all__ = [
     "TXTLoader",
     "ZarrLoader",
     "TarImageLoader",
+    "PCDLoader",
+    "read_pcd",
     "str_to_loader",
     "DERIVED_LOADERS",
     "loads_timestamps",

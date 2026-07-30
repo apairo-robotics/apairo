@@ -14,7 +14,7 @@ DATASET_FILE = "dataset.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
-KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "bin", "img", "zarr"})
+KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "bin", "img", "zarr", "pcd"})
 
 # Time units for a filename-parsed key's `units:` sugar (each maps to a factor in
 # seconds; `units` compiles to `scale`). See docs/datasets/bring-your-own-dataset.md.
@@ -56,6 +56,7 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
         "directory",
         "suffix",
         "array_file",
+        "fields",
         "key",
         "order",
         "recipe",
@@ -330,6 +331,7 @@ def register_raw_channel(
     directory: str | None = None,
     suffix: str | None = None,
     array_file: str | None = None,
+    fields: list[str] | None = None,
 ) -> None:
     """Declare a raw channel in ``root_dir/.apairo/channels.yaml``.
 
@@ -343,8 +345,8 @@ def register_raw_channel(
     Args:
         root_dir: Dataset root directory (or sequence directory).
         key: Channel name -- must match its subdirectory name.
-        loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, ``"img"``, or
-            ``"zarr"``.
+        loader: Data format: ``"npy"``, ``"npys"``, ``"bin"``, ``"img"``,
+            ``"zarr"``, or ``"pcd"``.
         frame: Coordinate frame the channel's data is expressed in (descriptive
             metadata only; apairo does not apply transforms).
         transform: For a channel that *is* a coordinate transform (a pose
@@ -372,6 +374,13 @@ def register_raw_channel(
             *directory* to share another channel's directory, and only meaningful
             for the ``"npy"`` loader. Without it, ``npy`` loads the sole ``.npy``
             in the directory.
+        fields: The field contract of a ``"pcd"`` channel, e.g.
+            ``["x", "y", "z", "intensity"]``. A PCD header is self-describing, so
+            two frames may declare different fields; naming them here selects
+            those columns in that order and makes the channel's width a declared
+            property rather than a per-file accident. A frame missing one raises
+            at load time. Only meaningful for the ``"pcd"`` loader; without it
+            every field the file declares is returned, in header order.
     """
     root_dir = Path(root_dir)
     config: dict = (
@@ -396,6 +405,8 @@ def register_raw_channel(
         entry["suffix"] = suffix
     if array_file is not None:
         entry["array_file"] = array_file
+    if fields is not None:
+        entry["fields"] = list(fields)
     config["channels"][key] = entry
     write_config(root_dir, config)
 
@@ -917,6 +928,25 @@ def verify_config(root_dir: str | Path) -> list[str]:
                     f"Channel '{key}': array_file '{array_file}' not found in "
                     f"{storage_dir}"
                 )
+
+        fields = meta.get("fields")
+        if fields is not None:
+            if loader is not None and loader != "pcd":
+                issues.append(
+                    f"Channel '{key}': 'fields' declares a PCD field contract and "
+                    f"is only meaningful for the 'pcd' loader (got '{loader}')"
+                )
+            elif not (
+                isinstance(fields, list)
+                and fields
+                and all(isinstance(f, str) for f in fields)
+            ):
+                issues.append(
+                    f"Channel '{key}': 'fields' must be a non-empty list of field "
+                    f"names, got {fields!r}"
+                )
+            elif len(set(fields)) != len(fields):
+                issues.append(f"Channel '{key}': 'fields' has duplicate names")
 
         tf = meta.get("transform")
         if tf is not None:

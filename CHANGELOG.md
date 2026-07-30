@@ -7,6 +7,29 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`pcd` — PCL point clouds read in place.** A directory of vendor `.pcd`
+  frames is now a channel like any other (`loader: pcd`), for PCD v0.7 `ascii`
+  and `binary`. No loader could express this before: `bin` assumes a headerless
+  float32 quadruple and would have read the ASCII header as coordinates, and a
+  PCD→npy preprocessor would still need a parser while materialising a second
+  copy of the vendor's data. No new dependency — numpy alone.
+  A PCD header is self-describing, so the field set is a *per-file* property.
+  A channel pins it with `fields: [x, y, z, intensity]` in `channels.yaml`: that
+  selects those columns in that order, so the channel's width is a declared
+  property rather than a per-file accident, and a frame missing one raises
+  naming both sets. Without `fields`, every field the file declares is returned
+  in header order. The field contract lives in the layout, never in the loader.
+  `COUNT > 1` expands to `<name>_<i>` columns; PCL's `_` padding fields are
+  dropped but still consume their slot; the result dtype is the smallest type
+  holding every selected field exactly (`np.result_type`), so an all-`F4` cloud
+  stays float32 while an Ouster `t` (`U4`) promotes to float64 instead of losing
+  counts to a float32 mantissa. `DATA binary_compressed` is refused by name
+  (it needs an LZF decompressor) rather than mis-parsed into plausible garbage.
+  Auto-detection maps a `.pcd` directory to the loader, so `RawDataset.init`
+  registers such a channel; a filename `key`/`order` regex works with it.
+  Purely additive. Validated against 45 real vendor clouds, bit for bit.
+
 ## [0.7.0] - 2026-07-23
 
 ### Added

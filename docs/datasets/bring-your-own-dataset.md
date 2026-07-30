@@ -2,7 +2,7 @@
 
 apairo reads a dataset as a set of **channels** — one directory per channel,
 holding per-frame files (or a single stacked file) in a format the loader
-registry understands (`npy`, `npys`, `bin`, `img`, `zarr`). Turning *your*
+registry understands (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`). Turning *your*
 directories into a loadable dataset comes down to three small questions per
 channel. Two have always been implicit; this page makes all three explicit — and
 shows how the **`key`** and **`order`** fields let a channel carry its own
@@ -24,7 +24,7 @@ so a plain directory of zero-padded files needs no configuration at all.
 | Contract | Question it answers | Built-in default |
 |---|---|---|
 | **order** | how are this channel's frames listed and ordered? | files matching the frame-file convention (`is_frame_file`), sorted numerically |
-| **load** | how is one frame decoded to a numpy array? | the loader named in `channels.yaml` (`npy` / `npys` / `bin` / `img` / `zarr`) |
+| **load** | how is one frame decoded to a numpy array? | the loader named in `channels.yaml` (`npy` / `npys` / `bin` / `img` / `zarr` / `pcd`) |
 | **key** | what is each frame's alignment key — the value `synchronize()` matches on? | the channel's own `timestamps.txt`, else a borrowed one (`timestamps_from`), else the frame's position |
 
 `order` and `load` were always there; `key` used to be hardwired to

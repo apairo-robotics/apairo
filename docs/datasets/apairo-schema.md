@@ -57,12 +57,17 @@ channels:
     loader: npy
     directory: gicp_poses  # share gicp_poses/ rather than own a dir     (optional)
     array_file: valid_mask.npy
+  ouster_points:           # vendor PCL clouds, read in place
+    kind: raw
+    loader: pcd
+    frame: os_sensor
+    fields: [x, y, z, intensity]  # the channel's field contract         (optional)
 ```
 
 | Field | Required | Meaning |
 |---|---|---|
 | `kind` | yes | `raw` (on-disk modality) or `preprocess` (derived/persisted). |
-| `loader` | yes | Storage format: `npy` (one stacked file, row per frame), `npys` (one file per frame), `bin`, `img`, `zarr`. |
+| `loader` | yes | Storage format: `npy` (one stacked file, row per frame), `npys` (one file per frame), `bin`, `img`, `zarr`, `pcd`. |
 | `timestamps_from` | no | The channel whose timestamps this one shares (provenance). |
 | `sources` | no | Channels this one was derived from (provenance). |
 | `frame` | no | Coordinate frame the data is expressed in. Descriptive only — apairo never applies transforms. |
@@ -71,6 +76,7 @@ channels:
 | `directory` | no | On-disk subdirectory the channel's files live in, when different from its key — lets a channel share another channel's directory. Defaults to the key. |
 | `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). `npys` only. |
 | `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`). `npy` only. |
+| `fields` | no | The field contract of a `pcd` channel, e.g. `[x, y, z, intensity]`. A PCD header is self-describing, so two frames may declare different fields; naming them here selects those columns in that order, making the channel's width a declared property rather than a per-file accident. A frame missing one raises, naming both sets. Omitted, every field the file declares is returned in header order. `pcd` only. |
 
 ## `dataset.yaml` (root manifest, optional)
 
