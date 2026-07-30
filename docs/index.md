@@ -49,7 +49,7 @@ sample = ds[0]
 - **Derived key loading** -- preprocessed outputs live alongside raw data, registered in a `.apairo` sidecar and loaded transparently
 - **Preprocessing framework** -- `FramePreprocessor` and `SequencePreprocessor` run pipelines and persist results automatically ([`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) for ready-made preprocessors)
 - **At-access transforms** -- `dataset.transform(key, fn)` and `Compose` apply callables at read time without writing to disk ([`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) for ready-made transforms)
-- **PyTorch-ready** -- every apairo dataset is a `torch.utils.data.Dataset` (`__getitem__` / `__len__`); pass it straight to `DataLoader`, no wrapper
+- **PyTorch-ready** -- every apairo dataset implements the map-style protocol (`__getitem__` / `__len__`), so `DataLoader` accepts it straight; samples are `numpy.ndarray`, and apairo never imports torch
 - **Sequence-level splits** -- `split_sequences()` avoids temporal leakage across train/val/test
 
 ---

@@ -15,7 +15,7 @@ sequences/
     labels/    000000.label 000001.label ...
 ```
 
-`ds[i]` returns a `Sample` with `timestamp=None` and a `data` dict containing all requested keys. Random access and standard PyTorch `DataLoader` shuffling work out of the box.
+`ds[i]` returns a `Sample` whose `data` dict contains all requested keys. Synchrony is structural (`ds.is_synchronous`) and says nothing about a clock: a synchronous dataset may still expose a shared per-frame clock through `ds.timestamps`, in which case `sample.timestamp` is that frame's tick. Without one it stays `None`. Random access and standard PyTorch `DataLoader` shuffling work out of the box.
 
 ### Asynchronous
 
@@ -24,7 +24,7 @@ In asynchronous (KITTI-layout) datasets, each sensor has its own subdirectory wi
 ```
 velodyne_0/   000000.bin   000001.bin   ...   timestamps.txt
 image_left/   000000.png   000001.png   ...   timestamps.txt
-imu/          000000.pt    000001.pt    ...   timestamps.txt
+imu/          000000.npy   000001.npy   ...   timestamps.txt
 ```
 
 apairo merges all channels into a single timestamp-ordered timeline. `ds[i]` returns one event -- the scan or image or IMU reading at position `i` in the global timeline -- with its `timestamp` field set. Exactly one key is populated in `sample.data` per event.

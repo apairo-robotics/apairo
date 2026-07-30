@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+import numpy as np
+
 from apairo.core import AbstractDataset
 from apairo.core.sample import Sample
 
@@ -88,6 +90,18 @@ class ZipDataset(AbstractDataset):
     @property
     def is_synchronous(self) -> bool:
         return all(ds.is_synchronous for ds in self._datasets)
+
+    @property
+    def timestamps(self) -> dict | np.ndarray | None:  # type: ignore[override]
+        """The merged clock: the first parent that carries one, mirroring
+        :meth:`_load` (which stamps a sample with the first non-``None`` parent
+        timestamp).  ``None`` when no parent is clocked.  Read through
+        ``getattr`` -- not every view wrapper defines a bare ``.timestamps``."""
+        for ds in self._datasets:
+            ts = getattr(ds, "timestamps", None)
+            if ts is not None:
+                return ts
+        return None
 
     def _load(self, idx: int) -> Sample:
         merged: dict = {}

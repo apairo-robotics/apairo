@@ -129,6 +129,27 @@ def test_join_then_filter(ds_a, ds_b):
     assert len(z) == len(ds_a)
 
 
+# ------------------------------------------------------------------------ clock
+
+
+def test_timestamps_none_when_no_parent_is_clocked(ds_a, ds_b):
+    assert ZipDataset(ds_a, ds_b).timestamps is None
+
+
+def test_timestamps_takes_the_first_clocked_parent(ds_a, ds_b):
+    ds_b.timestamps = np.arange(5, dtype=float)
+    z = ZipDataset(ds_a, ds_b)
+    np.testing.assert_array_equal(z.timestamps, np.arange(5, dtype=float))
+
+
+def test_timestamps_prefers_the_earlier_parent(ds_a, ds_b):
+    ds_a.timestamps = np.arange(5, dtype=float)
+    ds_b.timestamps = np.arange(5, dtype=float) + 100
+    np.testing.assert_array_equal(
+        ZipDataset(ds_a, ds_b).timestamps, np.arange(5, dtype=float)
+    )
+
+
 def test_repr(ds_a, ds_b):
     z = ZipDataset(ds_a, ds_b)
     assert "ZipDataset" in repr(z)
