@@ -7,6 +7,7 @@ and stable. Do not confuse it with a [dataset *profile*](yaml-profiles.md)
 `.apairo/` sidecars describe one dataset *on disk*.
 
 ```
+<root>/apairo.yaml   # the human declaration -- optional, never written by apairo
 <root>/.apairo/
   channels.yaml      # the channel registry (per sequence directory)
   dataset.yaml       # root manifest -- optional
@@ -15,15 +16,19 @@ and stable. Do not confuse it with a [dataset *profile*](yaml-profiles.md)
 
 Only `channels.yaml` is required for a directory to be a loadable apairo
 sequence. `dataset.yaml` and `calibration.yaml` are **optional** — a dataset with
-no extrinsics simply has no `calibration.yaml`.
+no extrinsics simply has no `calibration.yaml`. The split between `apairo.yaml`
+and `.apairo/` is by **owner**: the declaration is yours (apairo reads it and
+never writes it), the sidecar directory is the machine's — see
+[`apairo.yaml`](#apairoyaml--the-declaration-human-owned) below.
 
 ## Compatibility policy
 
 Validation is **tolerant**. An unknown field is reported as a warning and
 otherwise ignored, so a sidecar written by a newer apairo still loads on an older
 one. Every file carries a `version` (currently `1`); a different version is
-flagged. Validate with `verify_config`, `verify_manifest`, `verify_calibration`
-(or, from the shell, `apairo status` surfaces channel issues).
+flagged. Validate with `verify_config`, `verify_manifest`, `verify_calibration`,
+`verify_declaration` (or, from the shell, `apairo status` surfaces channel and
+declaration issues).
 
 ## `channels.yaml`
 
@@ -77,6 +82,49 @@ channels:
 | `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). `npys` only. |
 | `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`). `npy` only. |
 | `fields` | no | The field contract of a `pcd` channel, e.g. `[x, y, z, intensity]`. A PCD header is self-describing, so two frames may declare different fields; naming them here selects those columns in that order, making the channel's width a declared property rather than a per-file accident. A frame missing one raises, naming both sets. Omitted, every field the file declares is returned in header order. `pcd` only. |
+
+## `apairo.yaml` — the declaration (human-owned)
+
+`channels.yaml` holds two kinds of knowledge with different owners: what the
+machine can regenerate (discovered `raw` channels, `preprocess` provenance
+written by `run_preprocess`) and what only a human can know — a filename
+[`key`](bring-your-own-dataset.md#the-key-field) regex, a `pcd`
+`fields` contract, an `alias`. The declaration gives the human half a home of
+its own, **outside** the dot-directory:
+
+* apairo **never writes** `apairo.yaml`. `init` (including `--overwrite`) and
+  `run_preprocess` only touch `.apairo/`, so a registry rebuild cannot destroy
+  a declaration. Version it in git next to your eval code.
+* It uses the same version-1 schema as `channels.yaml`, **minus machine
+  provenance**: `kind: preprocess`, `sources` and `recipe` are refused — with
+  an error, not a warning.
+* It overlays the registry **per channel and per field**. Declaring a `key`
+  for a channel does not repeat the `loader` the registry already knows; a
+  channel that exists only in the declaration must name its `loader`.
+* The bootstrap scan respects it: stems explained by a declared `key`/`order`
+  regex are not fanned out into suffixed sub-channels.
+
+```yaml
+# <seq>/apairo.yaml -- versioned by you, never touched by apairo
+version: 1
+channels:
+  "pcd (2)":                       # key == the on-disk directory name
+    loader: pcd
+    alias: lidar                   # exposed as "lidar" at load time
+    fields: [x, y, z, intensity]   # stable (N, 4) float32
+    key: {name: '(\d{16,})$', units: [ns]}   # clock parsed from the stems
+```
+
+A declaration can also live entirely outside the data tree and be passed at
+load time — the read-only-mount case:
+
+```python
+ds = apairo.RawDataset(root, declare="eval/barakuda.yaml")
+```
+
+Per-field precedence, highest first: `declare=` > `<seq>/apairo.yaml` >
+`.apairo/channels.yaml`. On a dataset root, `declare=` applies to every
+sequence.
 
 ## `dataset.yaml` (root manifest, optional)
 

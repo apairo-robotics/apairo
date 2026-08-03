@@ -46,7 +46,10 @@ from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
     config_exists,
+    declaration_exists,
+    declaration_path,
     read_config,
+    read_declaration,
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
@@ -88,6 +91,10 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             no manual :meth:`init`.
         keys: Channels to load. ``None`` -> every channel declared in
             ``channels.yaml``.
+        declare: Path to a declaration file overlaid onto the channel metadata
+            (per channel, per field) -- see
+            :class:`~apairo.dataset.async_layout.AsyncLayoutDataset`. On a
+            root, the declaration applies to every sequence.
 
     Example::
 
@@ -99,25 +106,37 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         self,
         directory: str | Path,
         keys: list[str] | None = None,
+        declare: str | Path | None = None,
     ) -> None:
         path = Path(directory)
+        self._declare = declare  # consulted by _bootstrap_config
 
         # A sequence loads directly; a bare channel layout (no .apairo) is
-        # bootstrapped on the spot, so raw data needs no manual init().
+        # bootstrapped on the spot, so raw data needs no manual init(). A
+        # declaration (in-tree or declare=) also marks a sequence, but only
+        # after root detection, so a root carrying a stray apairo.yaml at its
+        # top still loads as a root.
         if config_exists(path) or self._is_sequence_layout(path):
-            self._is_root = False
-            self._sequence_dir = path
-            self._name = path.name
-            if not config_exists(path):
-                self._load_or_create_config(path)
-            super().__init__(path, keys=keys)
+            is_sequence = True
         elif _is_dataset_root(path):
-            self._init_raw_root(path, keys)
+            is_sequence = False
+        elif declaration_exists(path) or declare is not None:
+            is_sequence = True
         else:
             raise FileNotFoundError(
                 f"'{path}' is neither a sequence (no recognizable channel "
                 f"sub-directories) nor a dataset root (no sequence sub-directories)."
             )
+
+        if is_sequence:
+            self._is_root = False
+            self._sequence_dir = path
+            self._name = path.name
+            if not config_exists(path):
+                self._load_or_create_config(path)
+            super().__init__(path, keys=keys, declare=declare)
+        else:
+            self._init_raw_root(path, keys, declare)
 
     # ------------------------------------------------------------------ init
 
@@ -214,7 +233,12 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
     # ------------------------------------------------------------------ root
 
-    def _init_raw_root(self, root: Path, keys: list[str] | None) -> None:
+    def _init_raw_root(
+        self,
+        root: Path,
+        keys: list[str] | None,
+        declare: str | Path | None = None,
+    ) -> None:
         manifest = _read_manifest(root)
         self._name = manifest.get("name", root.name)
 
@@ -236,7 +260,10 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         # type(self) so a profiled subclass (e.g. TartanKittiDataset) builds
         # sequences of its own kind, keeping its channel profile.
         super()._init_root(
-            root, seq_dirs, lambda d: type(self)(d, keys=keys), build_index=True
+            root,
+            seq_dirs,
+            lambda d: type(self)(d, keys=keys, declare=declare),
+            build_index=True,
         )
 
     # ------------------------------------------------------------------ hooks
@@ -269,6 +296,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
     def _bootstrap_config(self, sequence_dir: Path) -> dict:
         """ConfigurableDataset hook: detect raw channels when .apairo is absent."""
+        declared = self._declared(sequence_dir)
         channels: dict = {}
         for key in sorted(get_files(str(sequence_dir))):
             channel_dir = Path(sequence_dir) / key
@@ -276,6 +304,25 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             if loader is None:
                 continue
             channels[key] = {"loader": loader, "kind": "raw"}
+            # A declared key/order regex explains this channel's stems (their
+            # '_' is part of the name, not a suffix) -- don't fan them out
+            # into suffixed sub-channels.
+            if declared.get(key, {}).get("key") or declared.get(key, {}).get("order"):
+                continue
             for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
                 channels[f"{key}_{suffix}"] = {"kind": "raw", **frag}
         return {"version": 1, "channels": channels}
+
+    def _declared(self, sequence_dir: Path) -> dict[str, dict]:
+        """The declarations visible from *sequence_dir* (in-tree, then the
+        ``declare=`` file), overlaid per channel and per field."""
+        declared: dict[str, dict] = {}
+        if declaration_exists(sequence_dir):
+            declared = {
+                k: dict(v)
+                for k, v in read_declaration(declaration_path(sequence_dir)).items()
+            }
+        if getattr(self, "_declare", None) is not None:
+            for k, v in read_declaration(self._declare).items():
+                declared.setdefault(k, {}).update(v)
+        return declared

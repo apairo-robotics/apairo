@@ -52,11 +52,31 @@ strictly read-only — it works on a read-only mount, a shared cluster volume, a
 `ro` container. Materializing a self-contained clock belongs to the *write* side
 (`export`, the extractor), never to reading.
 
+## Where to declare — `apairo.yaml`, not the machine registry
+
+The `key` / `order` / `fields` / `alias` contracts are *human* knowledge — no
+scan can regenerate them. Write them in a
+[declaration](apairo-schema.md#apairoyaml--the-declaration-human-owned):
+`<seq>/apairo.yaml`, a visible file apairo **never writes**, safe from
+`init --overwrite` and versionable in git. The examples below show the channel
+entries; they work identically in `apairo.yaml` (preferred) and in
+`.apairo/channels.yaml` (the machine registry — hand-editing it works but
+mixes your knowledge into a regenerable file).
+
+For a tree you cannot or do not want to touch at all, keep the declaration
+outside it and pass it at load time:
+
+```python
+ds = apairo.RawDataset(root, declare="eval/my_dataset.yaml")
+```
+
+Per-field precedence: `declare=` > `<seq>/apairo.yaml` > `.apairo/channels.yaml`.
+
 ---
 
 ## The `key` field
 
-Add `key:` to a channel in `channels.yaml`. Two forms.
+Add `key:` to a channel entry (in `apairo.yaml`, or the registry). Two forms.
 
 ### `key: {name: <regex>}` — parse the key from the filename
 

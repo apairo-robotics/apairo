@@ -11,6 +11,9 @@ CONFIG_DIR = ".apairo"
 CHANNELS_FILE = "channels.yaml"
 CALIBRATION_FILE = "calibration.yaml"
 DATASET_FILE = "dataset.yaml"
+# The human-owned declaration, at the sequence root (NOT inside .apairo): how to
+# read this directory. apairo reads it and never writes it -- see read_declaration.
+DECLARATION_FILE = "apairo.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
@@ -63,6 +66,10 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
     }
 )
 _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
+# Machine provenance a declaration may not claim: these fields are written by
+# run_preprocess into .apairo/channels.yaml and record what apairo *did*, not
+# how to read the tree.
+_DECLARATION_REFUSED: frozenset[str] = frozenset({"sources", "recipe"})
 _TRANSFORM_FIELDS: frozenset[str] = frozenset({"parent", "child", "static", "format"})
 
 # class (profiled root) | name/sequences/channels (generic root roll-up).
@@ -235,6 +242,85 @@ def write_config(root_dir: Path, config: dict) -> None:
     d.mkdir(exist_ok=True)
     with open(d / CHANNELS_FILE, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=True)
+
+
+def declaration_path(root_dir: str | Path) -> Path:
+    """``<root>/apairo.yaml`` -- the human-owned declaration of *root_dir*."""
+    return Path(root_dir) / DECLARATION_FILE
+
+
+def declaration_exists(root_dir: str | Path) -> bool:
+    return declaration_path(root_dir).is_file()
+
+
+def read_declaration(path: str | Path) -> dict[str, dict]:
+    """Read a declaration file and return its ``channels`` mapping.
+
+    A declaration (``<seq>/apairo.yaml``, or any file passed as ``declare=``)
+    is the *human* half of the channel metadata: how to read a directory --
+    loaders, aliases, ``key``/``order`` specs, ``fields`` contracts. It shares
+    the ``channels.yaml`` version-1 schema, minus machine provenance: apairo
+    reads it and **never writes it**, so ``init --overwrite`` and
+    ``run_preprocess`` cannot destroy it.
+
+    Hard rules (raise :class:`ValueError` -- a declaration is hand-written, so
+    it fails loud):
+
+    * ``kind: preprocess`` is refused -- provenance belongs to ``.apairo``;
+    * ``sources`` / ``recipe`` are refused for the same reason.
+
+    Unknown fields follow the schema's tolerant policy (ignored at load;
+    surfaced by :func:`verify_declaration` / ``apairo status``).
+    """
+    path = Path(path)
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    if not isinstance(data, dict) or not isinstance(data.get("channels"), dict):
+        raise ValueError(
+            f"Declaration '{path}' must be a mapping with a 'channels' mapping "
+            f"(the channels.yaml shape)."
+        )
+    for key, meta in data["channels"].items():
+        if not isinstance(meta, dict):
+            raise ValueError(f"Declaration '{path}': channel '{key}' is not a mapping.")
+        if meta.get("kind") not in (None, "raw"):
+            raise ValueError(
+                f"Declaration '{path}': channel '{key}' declares kind "
+                f"'{meta['kind']}'. A declaration describes how to read raw "
+                f"data; preprocess provenance is recorded by run_preprocess in "
+                f".apairo/channels.yaml."
+            )
+        refused = sorted(_DECLARATION_REFUSED & set(meta))
+        if refused:
+            raise ValueError(
+                f"Declaration '{path}': channel '{key}' carries machine "
+                f"provenance field(s) {refused} -- those are written by apairo "
+                f"into .apairo/channels.yaml, not declared."
+            )
+    return data["channels"]
+
+
+def merge_declared_channels(
+    channels: dict[str, dict], declared: dict[str, dict]
+) -> dict[str, dict]:
+    """Overlay *declared* onto *channels*, per channel and per field.
+
+    A declared channel unknown to *channels* is added (it must then name its
+    ``loader`` -- nothing else supplies one); a known one keeps every field the
+    declaration does not set, so a declaration can add a ``key`` or ``fields``
+    contract without repeating the loader the registry already knows.
+    """
+    merged = {k: dict(v) for k, v in channels.items()}
+    for key, meta in declared.items():
+        if key not in merged and "loader" not in meta:
+            raise ValueError(
+                f"Declared channel '{key}' is not in the channel registry and "
+                f"names no 'loader' -- a declaration-only channel must declare "
+                f"one."
+            )
+        entry = merged.setdefault(key, {"kind": "raw"})
+        entry.update(meta)
+    return merged
 
 
 def read_manifest(root_dir: str | Path) -> dict:
@@ -991,6 +1077,73 @@ def verify_config(root_dir: str | Path) -> list[str]:
             )
         seen_alias[alias] = key
 
+    return issues
+
+
+def verify_declaration(
+    path: str | Path, root_dir: str | Path | None = None
+) -> list[str]:
+    """Check a declaration file against the version-1 schema.
+
+    The declaration is **optional**: an absent file is not an issue (returns
+    ``[]``).  Validates ``version``, the ownership rules (``kind: preprocess``,
+    ``sources``/``recipe`` refused), loaders, ``key``/``order`` specs, and warns
+    on unknown fields.  When *root_dir* is given, channel directories are also
+    checked on disk.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return []
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except Exception as exc:
+        return [f"{path.name}: cannot parse: {exc}"]
+    if not isinstance(data, dict):
+        return [f"{path.name}: top level is not a mapping"]
+
+    issues: list[str] = []
+    version = data.get("version")
+    if version is not None and version != SCHEMA_VERSION:
+        issues.append(
+            f"{path.name}: unknown version {version!r} (expected {SCHEMA_VERSION})"
+        )
+    issues += _unknown(data, _CHANNELS_TOP_FIELDS, path.name)
+
+    channels = data.get("channels")
+    if not isinstance(channels, dict):
+        issues.append(f"{path.name}: 'channels' is missing or not a mapping")
+        return issues
+
+    for key, meta in channels.items():
+        if not isinstance(meta, dict):
+            issues.append(f"{path.name}: channel '{key}': entry is not a mapping")
+            continue
+        if meta.get("kind") not in (None, "raw"):
+            issues.append(
+                f"{path.name}: channel '{key}': kind '{meta['kind']}' is refused "
+                f"(a declaration never claims preprocess provenance)"
+            )
+        for refused in sorted(_DECLARATION_REFUSED & set(meta)):
+            issues.append(
+                f"{path.name}: channel '{key}': '{refused}' is machine provenance "
+                f"(written by apairo into .apairo, not declared)"
+            )
+        issues += _unknown(meta, _CHANNEL_FIELDS, f"{path.name}: channel '{key}'")
+        loader = meta.get("loader")
+        if loader and loader not in KNOWN_LOADERS:
+            issues.append(f"{path.name}: channel '{key}': unknown loader '{loader}'")
+        storage_dir = (
+            Path(root_dir) / str(meta.get("directory", key)) if root_dir else Path(".")
+        )
+        if root_dir is not None and not storage_dir.is_dir():
+            issues.append(
+                f"{path.name}: channel '{key}': directory not found on disk "
+                f"({storage_dir})"
+            )
+        issues += [
+            f"{path.name}: {i}" for i in _verify_key_order(key, meta, storage_dir)
+        ]
     return issues
 
 

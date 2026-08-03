@@ -8,6 +8,29 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`apairo.yaml` — the human-owned declaration.** Channel metadata used to
+  have a single home, `.apairo/channels.yaml`, which mixed two owners: what the
+  machine discovers and derives (`kind: raw` scan results, `kind: preprocess`
+  provenance) and what only a human can know (a filename `key` regex, a `pcd`
+  `fields` contract, an `alias`). That made `init --overwrite` destructive to
+  hand-written knowledge, and made the read-time `key` feature — whose promise
+  is *zero writes into your data tree* — require a write into that very tree.
+  The split is by owner, not by content: `<seq>/apairo.yaml` (visible,
+  git-versionable, **never written by apairo**) declares *how to read* a
+  directory, while `.apairo/` remains the machine registry of *what exists*.
+  A declaration uses the `channels.yaml` version-1 schema minus machine
+  provenance (`kind: preprocess`, `sources`, `recipe` are refused — loudly).
+  It overlays the registry per channel *and per field*, so declaring a `key`
+  does not repeat the loader the registry already knows; a declaration-only
+  channel must name its `loader`. `RawDataset(dir, declare=path)` loads a
+  declaration from *outside* the tree (precedence: `declare=` >
+  `<seq>/apairo.yaml` > `.apairo/channels.yaml`), making fully-featured loading
+  of a read-only mount possible; a root propagates `declare=` to every
+  sequence. The bootstrap scan respects declarations: a channel whose stems a
+  declared `key`/`order` regex explains is not fanned out into spurious
+  suffixed sub-channels. `apairo status` validates the in-tree declaration
+  (ownership violations, unknown fields, loaders, `key`/`order` specs).
+  Purely additive: without a declaration nothing changes.
 - **`pcd` — PCL point clouds read in place.** A directory of vendor `.pcd`
   frames is now a channel like any other (`loader: pcd`), for PCD v0.7 `ascii`
   and `binary`. No loader could express this before: `bin` assumes a headerless

@@ -34,6 +34,7 @@ from apairo.core.config import (
     alias_conflict,
     channel_dependents,
     config_exists,
+    declaration_path,
     read_calibration,
     read_config,
     read_manifest,
@@ -41,6 +42,7 @@ from apairo.core.config import (
     set_alias,
     verify_calibration,
     verify_config,
+    verify_declaration,
     verify_manifest,
 )
 from apairo.core.profiled_dataset import ProfiledDataset
@@ -180,14 +182,18 @@ def _seq_info(seq_dir: Path) -> dict:
         u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)
     }
     starts = [c["span"][0] for c in {**channels, **untracked}.values() if c["span"]]
+    issues = (
+        verify_config(seq_dir)
+        if config_exists(seq_dir)
+        else ["not initialized -- run `apairo init`"]
+    )
+    issues += verify_declaration(declaration_path(seq_dir), seq_dir)
     return {
         "channels": channels,
         "untracked": untracked,
         "start": min(starts) if starts else None,
         "events": sum(c["frames"] for c in channels.values()),
-        "issues": verify_config(seq_dir)
-        if config_exists(seq_dir)
-        else ["not initialized -- run `apairo init`"],
+        "issues": issues,
     }
 
 

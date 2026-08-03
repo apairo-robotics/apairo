@@ -9,7 +9,11 @@ from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
     config_exists,
+    declaration_exists,
+    declaration_path,
+    merge_declared_channels,
     read_config,
+    read_declaration,
     safe_config_name,
     write_config,
 )
@@ -111,6 +115,11 @@ class AsyncLayoutDataset(AbstractDataset):
         dataset_profile: YAML profile filename **or** absolute Path mapping keys
             to loader types.  ``None`` → loaders are read from ``.apairo``
             (requires ``.apairo`` to exist).
+        declare: Path to a declaration file (the ``channels.yaml`` schema minus
+            machine provenance) overlaid onto the channel metadata, per channel
+            and per field.  Precedence: ``declare=`` > ``<directory>/apairo.yaml``
+            > ``.apairo/channels.yaml``.  Lets a read-only tree be declared from
+            outside; apairo never writes a declaration.
     """
 
     synchronous: bool = False
@@ -120,6 +129,7 @@ class AsyncLayoutDataset(AbstractDataset):
         directory: str | Path,
         keys: list[str] | None = None,
         dataset_profile: str | Path | None = None,
+        declare: str | Path | None = None,
     ) -> None:
         directory = Path(directory)
 
@@ -137,6 +147,14 @@ class AsyncLayoutDataset(AbstractDataset):
             channels = read_config(directory).get("channels", {})
         else:
             channels = {}
+        # Human declarations overlay the machine registry, per channel and per
+        # field: the in-tree apairo.yaml first, then an explicit declare= file.
+        if declaration_exists(directory):
+            channels = merge_declared_channels(
+                channels, read_declaration(declaration_path(directory))
+            )
+        if declare is not None:
+            channels = merge_declared_channels(channels, read_declaration(declare))
         self._alias_of: dict[str, str] = {
             k: v["alias"] for k, v in channels.items() if v.get("alias")
         }
@@ -203,9 +221,10 @@ class AsyncLayoutDataset(AbstractDataset):
                 keys = sorted(self._profile.keys())
         else:
             raise FileNotFoundError(
-                f"No dataset_profile given and no .apairo found in '{directory}'. "
-                f"Either pass dataset_profile=..., or initialize with "
-                f"{type(self).__name__}.init('{directory}')."
+                f"No dataset_profile given and no .apairo or apairo.yaml found "
+                f"in '{directory}'. Either pass dataset_profile=... or "
+                f"declare=..., write an apairo.yaml declaration, or initialize "
+                f"with {type(self).__name__}.init('{directory}')."
             )
 
         if keys is None:
