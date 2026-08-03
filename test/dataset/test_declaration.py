@@ -167,6 +167,17 @@ def test_init_respects_declared_key_no_suffix_fanout(tmp_path):
     assert set(read_config(root)["channels"]) == {"lidar"}
 
 
+def test_init_respects_external_declare(tmp_path):
+    root = tmp_path / "seq"
+    _frames(root / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2, 3)])
+    external = _declare(
+        tmp_path / "eval.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    RawDataset.init(root, declare=external)
+    assert set(read_config(root)["channels"]) == {"lidar"}
+
+
 def test_no_declaration_is_ever_written(tmp_path):
     root = _make_seq(tmp_path / "seq")
     RawDataset(root)

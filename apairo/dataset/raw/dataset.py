@@ -47,14 +47,16 @@ from apairo.core.config import (
     CONFIG_DIR,
     config_exists,
     declaration_exists,
-    declaration_path,
     read_config,
-    read_declaration,
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
 from apairo.dataset.async_layout import AsyncLayoutDataset
-from apairo.dataset.async_layout.dataset import _detect_loader, _suffix_channel_entries
+from apairo.dataset.async_layout.dataset import (
+    _declared_key_channels,
+    _detect_loader,
+    _suffix_channel_entries,
+)
 from apairo.utils.files import get_files
 
 _MANIFEST_FILE = "dataset.yaml"
@@ -148,6 +150,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         merge: bool = False,
         overwrite: bool = False,
         name: str | None = None,
+        declare: str | Path | None = None,
     ) -> Path:
         """Write the ``.apairo`` sidecar(s) by scanning *directory*. Root-aware.
 
@@ -161,7 +164,11 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             directory: Sequence or dataset-root directory (auto-detected).
             merge: Add newly detected channels without touching existing ones.
             overwrite: Discard existing ``.apairo`` and rebuild from scratch.
+                Never touches an ``apairo.yaml`` declaration.
             name: Dataset name for the root manifest (default: directory name).
+            declare: External declaration file the scan should respect (the
+                in-tree ``apairo.yaml`` is always read). On a root it applies
+                to every sequence.
 
         Returns:
             Path of the file written -- ``channels.yaml`` for a sequence, or
@@ -170,7 +177,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         path = Path(directory)
 
         if cls._is_sequence_layout(path):
-            AsyncLayoutDataset.init(path, overwrite=overwrite, merge=merge)
+            AsyncLayoutDataset.init(
+                path, overwrite=overwrite, merge=merge, declare=declare
+            )
             return path / CONFIG_DIR / CHANNELS_FILE
 
         seq_dirs: list[Path] = []
@@ -179,7 +188,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
                 continue
             if cls._is_sequence_layout(d):
                 try:
-                    AsyncLayoutDataset.init(d, overwrite=overwrite, merge=merge)
+                    AsyncLayoutDataset.init(
+                        d, overwrite=overwrite, merge=merge, declare=declare
+                    )
                 except (FileExistsError, ValueError):
                     # Already initialised (no overwrite/merge), or merge found
                     # nothing new -- either way the sequence is ready. Idempotent.
@@ -296,7 +307,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
     def _bootstrap_config(self, sequence_dir: Path) -> dict:
         """ConfigurableDataset hook: detect raw channels when .apairo is absent."""
-        declared = self._declared(sequence_dir)
+        explained = _declared_key_channels(
+            sequence_dir, getattr(self, "_declare", None)
+        )
         channels: dict = {}
         for key in sorted(get_files(str(sequence_dir))):
             channel_dir = Path(sequence_dir) / key
@@ -307,22 +320,8 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             # A declared key/order regex explains this channel's stems (their
             # '_' is part of the name, not a suffix) -- don't fan them out
             # into suffixed sub-channels.
-            if declared.get(key, {}).get("key") or declared.get(key, {}).get("order"):
+            if key in explained:
                 continue
             for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
                 channels[f"{key}_{suffix}"] = {"kind": "raw", **frag}
         return {"version": 1, "channels": channels}
-
-    def _declared(self, sequence_dir: Path) -> dict[str, dict]:
-        """The declarations visible from *sequence_dir* (in-tree, then the
-        ``declare=`` file), overlaid per channel and per field."""
-        declared: dict[str, dict] = {}
-        if declaration_exists(sequence_dir):
-            declared = {
-                k: dict(v)
-                for k, v in read_declaration(declaration_path(sequence_dir)).items()
-            }
-        if getattr(self, "_declare", None) is not None:
-            for k, v in read_declaration(self._declare).items():
-                declared.setdefault(k, {}).update(v)
-        return declared

@@ -105,6 +105,7 @@ issues      none
 | `--name NAME` | Dataset name for the root manifest (default: directory name) |
 | `--force` | Rebuild from scratch instead of merging |
 | `--as CLASS` | Interpret with a specific dataset class (default: `RawDataset`) |
+| `--declare FILE` | External declaration file the scan should respect (the in-tree `apairo.yaml` is always read; `RawDataset` family only) |
 
 `--as <Class>` maps a registered dataset's profile (e.g. `Rellis3DDataset`,
 `Goose3DDataset`, `SemanticKittiDataset`) onto the directories on disk, writing
@@ -145,6 +146,7 @@ profile-unaware generic reading.
 | `--json` | Machine-readable output (same information as the table) |
 | `--show-tf` | Include the transform layer: static calibration + dynamic `tf` channels (hidden by default) |
 | `--missing` | (root) per-sequence breakdown of which channels each sequence lacks vs the union of all channels |
+| `--declare FILE` | Also validate this external declaration file against the dataset (also on `apairo check`) |
 
 ### On a dataset root - summary
 

@@ -595,14 +595,40 @@ def cmd_status(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
+    declare_issues = (
+        _external_declare_issues(path, args.declare) if args.declare else None
+    )
+    if declare_issues is not None:
+        status["declare_issues"] = declare_issues
     if args.json:
         print(json.dumps(status, indent=2, sort_keys=True))
     else:
         _print_status(status, show_tf=args.show_tf, show_missing=args.missing)
+        if declare_issues is not None:
+            if declare_issues:
+                print(f"\ndeclaration ({args.declare}): {len(declare_issues)} issue(s)")
+                for issue in declare_issues:
+                    print(f"  - {issue}")
+            else:
+                print(f"\ndeclaration ({args.declare}): ok")
     return 0
 
 
 # ── check ─────────────────────────────────────────────────────────────────────
+
+
+def _external_declare_issues(path: Path, declare: str) -> list[str]:
+    """Issues in an external declaration file, validated against *path* -- per
+    sequence when *path* is a root (the file applies to every sequence)."""
+    f = Path(declare).expanduser()
+    if not f.is_file():
+        return [f"declaration file not found: {f}"]
+    if _is_sequence(path):
+        return verify_declaration(f, path)
+    seq_dirs = _sequence_dirs(path)
+    if not seq_dirs:
+        return verify_declaration(f, path)
+    return [f"{d.name}: {i}" for d in seq_dirs for i in verify_declaration(f, d)]
 
 
 def _check_issues(path: Path) -> list[str] | None:
@@ -638,6 +664,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.declare:
+        issues += _external_declare_issues(path, args.declare)
     if args.json:
         print(
             json.dumps({"ok": not issues, "issues": issues}, indent=2, sort_keys=True)
@@ -692,9 +720,19 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
     cls = DATASETS[args.as_]
+    extra = {}
+    if args.declare:
+        if issubclass(cls, ProfiledDataset):
+            print(
+                f"--declare applies to the RawDataset family; "
+                f"{cls.__name__} channels come from its built-in profile.",
+                file=sys.stderr,
+            )
+            return 2
+        extra["declare"] = args.declare
     try:
         written = cls.init(
-            path, merge=not args.force, overwrite=args.force, name=args.name
+            path, merge=not args.force, overwrite=args.force, name=args.name, **extra
         )
     except (FileNotFoundError, ValueError, FileExistsError) as exc:
         print(f"init failed: {exc}", file=sys.stderr)
@@ -939,10 +977,21 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
         action="store_true",
         help="rebuild from scratch (default: merge, non-destructive)",
     )
+    p_init.add_argument(
+        "--declare",
+        metavar="FILE",
+        help="external declaration file the scan should respect "
+        "(the in-tree apairo.yaml is always read)",
+    )
 
     p_status = sub.add_parser("status", help="show what a dataset directory contains")
     _add_common(p_status)
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
+    p_status.add_argument(
+        "--declare",
+        metavar="FILE",
+        help="also validate this external declaration file against the dataset",
+    )
     p_status.add_argument(
         "--sequence",
         "-s",
@@ -972,6 +1021,11 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     )
     _add_common(p_check)
     p_check.add_argument("--json", action="store_true", help="machine-readable output")
+    p_check.add_argument(
+        "--declare",
+        metavar="FILE",
+        help="also validate this external declaration file against the dataset",
+    )
 
     p_alias = sub.add_parser(
         "alias",

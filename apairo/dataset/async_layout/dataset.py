@@ -56,13 +56,19 @@ def _detect_loader(channel_dir: Path) -> str | None:
     return None
 
 
-def _declared_key_channels(directory: Path) -> set[str]:
-    """Channels whose stems the in-tree declaration explains with a ``key`` or
-    ``order`` regex -- their ``_`` is part of the name, not a suffix, so the
-    scan must not fan them out into suffixed sub-channels."""
-    if not declaration_exists(directory):
-        return set()
-    declared = read_declaration(declaration_path(directory))
+def _declared_key_channels(
+    directory: Path, declare: str | Path | None = None
+) -> set[str]:
+    """Channels whose stems a declaration explains with a ``key`` or ``order``
+    regex -- their ``_`` is part of the name, not a suffix, so the scan must
+    not fan them out into suffixed sub-channels. Union of the in-tree
+    ``apairo.yaml`` and the optional external *declare* file."""
+    declared: dict[str, dict] = {}
+    if declaration_exists(directory):
+        declared.update(read_declaration(declaration_path(directory)))
+    if declare is not None:
+        for k, v in read_declaration(declare).items():
+            declared.setdefault(k, {}).update(v)
     return {k for k, v in declared.items() if v.get("key") or v.get("order")}
 
 
@@ -299,6 +305,7 @@ class AsyncLayoutDataset(AbstractDataset):
         raw_keys: list[str] | None = None,
         overwrite: bool = False,
         merge: bool = False,
+        declare: str | Path | None = None,
     ) -> Path:
         """Scan an async-layout directory and write ``.apairo/channels.yaml``.
 
@@ -325,6 +332,10 @@ class AsyncLayoutDataset(AbstractDataset):
                 without touching channels already declared (raw or
                 preprocessed).  If ``.apairo`` does not yet exist, behaves
                 like a normal init.  Incompatible with ``overwrite``.
+            declare: Path to an external declaration file the scan should
+                respect, in addition to the in-tree ``apairo.yaml`` (which is
+                always read).  The scan only *reads* declarations -- it writes
+                ``.apairo/`` and nothing else.
 
         Returns:
             Path of the written ``channels.yaml``.
@@ -340,7 +351,7 @@ class AsyncLayoutDataset(AbstractDataset):
 
         directory = Path(directory)
 
-        explained = _declared_key_channels(directory)
+        explained = _declared_key_channels(directory, declare)
 
         if merge and config_exists(directory):
             existing = read_config(directory).get("channels", {})

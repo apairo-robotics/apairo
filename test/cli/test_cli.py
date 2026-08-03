@@ -626,3 +626,56 @@ def test_channel_remove_profiled_purge_cascades(rellis_root):
     )
     assert "lidar" not in read_config(rellis_root)["channels"]
     assert not any(d.exists() for d in seq_dirs)
+
+
+# ── declaration ──────────────────────────────────────────────────────────────
+
+
+def _write_declare(path, channels):
+    import yaml
+
+    with open(path, "w") as f:
+        yaml.dump({"version": 1, "channels": channels}, f)
+    return path
+
+
+def test_init_declare_respects_external_declaration(tmp_path):
+    seq = tmp_path / "seq" / "lidar"
+    seq.mkdir(parents=True)
+    for i in (1, 2, 3):
+        np.save(seq / f"scene_{i}000000000.npy", np.random.rand(4, 3))
+    decl = _write_declare(
+        tmp_path / "eval.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    assert _run(["init", str(tmp_path / "seq"), "--declare", str(decl)]) == 0
+    assert set(read_config(tmp_path / "seq")["channels"]) == {"lidar"}
+
+
+def test_init_declare_refused_for_profiled_class(tmp_path, capsys):
+    decl = _write_declare(tmp_path / "eval.yaml", {"lidar": {"loader": "npys"}})
+    code = _run(
+        ["init", str(tmp_path), "--as", "Rellis3DDataset", "--declare", str(decl)]
+    )
+    assert code == 2
+    assert "RawDataset family" in capsys.readouterr().err
+
+
+def test_status_declare_validates_external_file(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    decl = _write_declare(
+        raw_root.parent / "eval.yaml",
+        {"lidar": {"alias": "cloud", "feilds": ["x"]}},
+    )
+    assert _run(["status", str(raw_root), "--declare", str(decl), "--json"]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert any("feilds" in i for i in status["declare_issues"])
+
+
+def test_check_declare_flags_missing_file(raw_root, capsys):
+    _run(["init", str(raw_root)])
+    capsys.readouterr()
+    code = _run(["check", str(raw_root), "--declare", str(raw_root / "nope.yaml")])
+    assert code == 1
+    assert "not found" in capsys.readouterr().out

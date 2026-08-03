@@ -30,7 +30,11 @@ All notable changes to apairo are documented here. The format is based on
   declared `key`/`order` regex explains is not fanned out into spurious
   suffixed sub-channels. `apairo status` validates the in-tree declaration
   (ownership violations, unknown fields, loaders, `key`/`order` specs).
-  Purely additive: without a declaration nothing changes.
+  The in-tree file needs no flag anywhere — its name is a fixed convention,
+  auto-discovered like `.apairo/` itself; external files reach the CLI via
+  `apairo init/status/check --declare FILE` (respect during the scan,
+  validation against the dataset) and the `declare=` parameter on
+  `RawDataset.init`. Purely additive: without a declaration nothing changes.
 - **`pcd` — PCL point clouds read in place.** A directory of vendor `.pcd`
   frames is now a channel like any other (`loader: pcd`), for PCD v0.7 `ascii`
   and `binary`. No loader could express this before: `bin` assumes a headerless
