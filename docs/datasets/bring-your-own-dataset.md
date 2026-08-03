@@ -55,7 +55,8 @@ strictly read-only — it works on a read-only mount, a shared cluster volume, a
 ## Where to declare — `apairo.yaml`, not the machine registry
 
 The `key` / `order` / `fields` / `alias` contracts are *human* knowledge — no
-scan can regenerate them. Write them in a
+scan can regenerate them. Start from `apairo declare <dir>` (a scaffold with
+the detected channels and commented hints), then write them in a
 [declaration](apairo-schema.md#apairoyaml--the-declaration-human-owned):
 `<seq>/apairo.yaml`, a visible file apairo **never writes**, safe from
 `init --overwrite` and versionable in git. The examples below show the channel

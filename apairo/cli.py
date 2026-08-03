@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,7 @@ from typing import Any
 import numpy as np
 
 from apairo.core.config import (
+    DECLARATION_FILE,
     alias_conflict,
     channel_dependents,
     config_exists,
@@ -679,6 +681,142 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if issues else 0
 
 
+# ── declare (scaffold) ────────────────────────────────────────────────────────
+
+_DECLARE_HEADER = """\
+# apairo declaration -- how to read this dataset. This file is yours: apairo
+# reads it and never edits it. Uncomment the hints you need, delete the rest.
+# Named <sequence>/apairo.yaml it is auto-discovered; under any other name or
+# location, pass it explicitly: RawDataset(..., declare=...) / --declare FILE.
+version: 1
+channels:"""
+
+
+def _yaml_channel_key(name: str) -> str:
+    return name if re.fullmatch(r"[A-Za-z0-9_-]+", name) else f'"{name}"'
+
+
+def _declare_key_hint(channel_dir: Path) -> str | None:
+    """A commented ``key:`` suggestion when the channel carries no clock on
+    disk -- unit guessed from the width of a trailing digit run in the stems."""
+    if (channel_dir / "timestamps.txt").exists():
+        return None
+    stems = sorted(
+        f.stem
+        for f in channel_dir.iterdir()
+        if f.is_file() and f.name != "timestamps.txt" and not f.name.startswith(".")
+    )
+    if not stems:
+        return None
+    digits = re.search(r"(\d+)$", stems[0])
+    if digits is None:
+        return (
+            "    # key: {name: '<regex, one capture group>'}"
+            "   # no timestamps.txt -- declare the clock"
+        )
+    n = len(digits.group(1))
+    unit = (
+        "ns"
+        if n >= 18
+        else "us"
+        if n >= 15
+        else "ms"
+        if n >= 12
+        else "s"
+        if n >= 9
+        else None
+    )
+    if unit is None:
+        return "    # key: {name: '(\\d+)$'}   # index parsed from the stems"
+    return (
+        f"    # key: {{name: '(\\d+)$', units: [{unit}]}}"
+        f"   # {n}-digit epoch found in the stems"
+    )
+
+
+def _declare_fields_hint(channel_dir: Path, loader: str) -> str | None:
+    """The first frame's actual PCD fields, as a commented ``fields:`` line."""
+    if loader != "pcd":
+        return None
+    first = next(
+        (f for f in sorted(channel_dir.iterdir()) if f.suffix.lower() == ".pcd"), None
+    )
+    if first is None:
+        return None
+    from apairo.loader.pcd_loader import _parse_header
+
+    try:
+        names = ", ".join(_parse_header(str(first)).names)
+    except (OSError, ValueError):
+        return None
+    return f"    # fields: [{names}]   # keep the columns you need, in this order"
+
+
+def cmd_declare(args: argparse.Namespace) -> int:
+    path = Path(args.path).expanduser()
+    if not path.is_dir():
+        print(f"Not a directory: {path}", file=sys.stderr)
+        return 2
+
+    if _is_sequence(path):
+        seq_dirs, is_root = [path], False
+    else:
+        seq_dirs, is_root = _sequence_dirs(path), True
+    if not seq_dirs:
+        print(f"'{path}' has no recognizable channels or sequences.", file=sys.stderr)
+        return 1
+
+    if args.output is None:
+        if is_root:
+            print(
+                f"A root-level {DECLARATION_FILE} is not auto-discovered; write "
+                f"the declaration where you version it and pass it explicitly:\n"
+                f"  apairo declare {path} -o eval/{path.name}.yaml",
+                file=sys.stderr,
+            )
+            return 2
+        out = path / DECLARATION_FILE
+    else:
+        out = None if args.output == "-" else Path(args.output).expanduser()
+    if out is not None and out.exists():
+        print(
+            f"Refusing to overwrite '{out}' -- the declaration is yours; "
+            f"delete it first for a fresh scaffold.",
+            file=sys.stderr,
+        )
+        return 1
+
+    channels: dict[str, tuple[str, Path]] = {}
+    for seq in seq_dirs:
+        for d in sorted(seq.iterdir()):
+            if not d.is_dir() or d.name.startswith(".") or d.name in channels:
+                continue
+            loader = _detect_loader(d)
+            if loader is not None:
+                channels[d.name] = (loader, d)
+    if not channels:
+        print(f"No recognizable channels under '{path}'.", file=sys.stderr)
+        return 1
+
+    lines = [_DECLARE_HEADER]
+    for name, (loader, d) in channels.items():
+        lines.append(f"  {_yaml_channel_key(name)}:")
+        lines.append(f"    loader: {loader}")
+        lines.append("    # alias: <public name at load time>")
+        for hint in (_declare_fields_hint(d, loader), _declare_key_hint(d)):
+            if hint:
+                lines.append(hint)
+    text = "\n".join(lines) + "\n"
+
+    if out is None:
+        print(text, end="")
+        return 0
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    print(f"wrote {out}  ({len(channels)} channel(s) -- a scaffold; edit it)")
+    return 0
+
+
 # ── init ────────────────────────────────────────────────────────────────────
 
 
@@ -984,6 +1122,18 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
         "(the in-tree apairo.yaml is always read)",
     )
 
+    p_declare = sub.add_parser(
+        "declare",
+        help="scaffold a declaration file (apairo.yaml) from a directory scan",
+    )
+    _add_common(p_declare)
+    p_declare.add_argument(
+        "-o",
+        "--output",
+        metavar="FILE",
+        help=f"write here instead of <dir>/{DECLARATION_FILE} ('-' for stdout)",
+    )
+
     p_status = sub.add_parser("status", help="show what a dataset directory contains")
     _add_common(p_status)
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
@@ -1119,6 +1269,7 @@ def main(argv: list[str] | None = None) -> None:
     args = _build_parser(set(plugins)).parse_args(argv)
     handler = {
         "init": cmd_init,
+        "declare": cmd_declare,
         "status": cmd_status,
         "check": cmd_check,
         "alias": cmd_alias,

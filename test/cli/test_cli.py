@@ -679,3 +679,62 @@ def test_check_declare_flags_missing_file(raw_root, capsys):
     code = _run(["check", str(raw_root), "--declare", str(raw_root / "nope.yaml")])
     assert code == 1
     assert "not found" in capsys.readouterr().out
+
+
+# ── declare (scaffold) ───────────────────────────────────────────────────────
+
+
+def test_declare_scaffolds_sequence(tmp_path, capsys):
+    seq = tmp_path / "seq"
+    _make_seq(seq, 3)
+    assert _run(["declare", str(seq)]) == 0
+    text = (seq / "apairo.yaml").read_text()
+    assert "version: 1" in text
+    assert "lidar:" in text and "loader: npys" in text
+    assert "key:" not in text  # timestamps.txt present -- no clock hint
+    from apairo.core.config import verify_declaration
+
+    assert verify_declaration(seq / "apairo.yaml", seq) == []
+
+
+def test_declare_refuses_overwrite(tmp_path, capsys):
+    seq = tmp_path / "seq"
+    _make_seq(seq, 3)
+    assert _run(["declare", str(seq)]) == 0
+    capsys.readouterr()
+    assert _run(["declare", str(seq)]) == 1
+    assert "Refusing to overwrite" in capsys.readouterr().err
+
+
+def test_declare_stdout_suggests_epoch_key(tmp_path, capsys):
+    seq = tmp_path / "seq" / "lidar"
+    seq.mkdir(parents=True)
+    for i in (1, 2, 3):
+        np.save(seq / f"scene_{i}785248347168248576.npy", np.random.rand(4, 3))
+    assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
+    out = capsys.readouterr().out
+    assert "units: [ns]" in out and "19-digit epoch" in out
+    assert not (tmp_path / "seq" / "apairo.yaml").exists()
+
+
+def test_declare_pcd_lists_real_fields(tmp_path, capsys):
+    from test.loader.test_pcd_loader import XYZI, write_binary
+
+    seq = tmp_path / "seq" / "cloud"
+    seq.mkdir(parents=True)
+    write_binary(seq / "000000.pcd", XYZI, [[1.0, 2.0, 3.0, 0.5]])
+    np.savetxt(seq.parent / "cloud" / "timestamps.txt", [0.0])
+    assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
+    assert "# fields: [x, y, z, intensity]" in capsys.readouterr().out
+
+
+def test_declare_root_requires_output(raw_root, capsys):
+    assert _run(["declare", str(raw_root)]) == 2
+    assert "not auto-discovered" in capsys.readouterr().err
+
+
+def test_declare_root_with_output(raw_root, tmp_path, capsys):
+    out = tmp_path / "eval" / "my_root.yaml"
+    assert _run(["declare", str(raw_root), "-o", str(out)]) == 0
+    text = out.read_text()
+    assert "lidar:" in text and "imu:" in text

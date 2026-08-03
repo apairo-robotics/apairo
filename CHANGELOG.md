@@ -35,6 +35,14 @@ All notable changes to apairo are documented here. The format is based on
   `apairo init/status/check --declare FILE` (respect during the scan,
   validation against the dataset) and the `declare=` parameter on
   `RawDataset.init`. Purely additive: without a declaration nothing changes.
+- **`apairo declare` — scaffold a declaration.** The human counterpart of
+  `init`: scans a directory and writes a starter `apairo.yaml` (or `-o FILE`,
+  `-` for stdout) with every detected channel and its loader, plus commented
+  hints — the actual field list read from the first frame's PCD header, and a
+  `key:` suggestion with the unit guessed from a trailing digit run in the
+  stems (a 19-digit epoch suggests `units: [ns]`). Refuses to overwrite an
+  existing declaration; on a root it requires `-o`, since a root-level
+  `apairo.yaml` is not auto-discovered.
 - **`pcd` — PCL point clouds read in place.** A directory of vendor `.pcd`
   frames is now a channel like any other (`loader: pcd`), for PCD v0.7 `ascii`
   and `binary`. No loader could express this before: `bin` assumes a headerless

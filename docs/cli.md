@@ -119,6 +119,39 @@ apairo init /data/RELLIS --as Rellis3DDataset
 
 ---
 
+## `apairo declare`
+
+Scaffold a [declaration](datasets/apairo-schema.md#apairoyaml--the-declaration-human-owned)
+from a directory scan -- the human counterpart of `init`:
+
+```bash
+apairo declare /data/seq                      # writes /data/seq/apairo.yaml
+apairo declare /data/seq -o -                 # print to stdout
+apairo declare /data/root -o eval/root.yaml   # root: pick where you version it
+```
+
+The scaffold names every detected channel with its loader, then adds commented
+hints to adapt: the **actual field list** read from the first frame's PCD
+header, and a **`key:` suggestion** when a channel has no `timestamps.txt`
+(unit guessed from the width of a trailing digit run in the stems -- a 19-digit
+epoch suggests `units: [ns]`). It never overwrites an existing declaration --
+the file is yours the moment it exists.
+
+| Option | Meaning |
+|---|---|
+| `-o, --output FILE` | Write here instead of `<dir>/apairo.yaml` (`-` for stdout) |
+
+!!! note "Naming -- like a Dockerfile"
+    `apairo.yaml` at the sequence root is the conventional name, auto-discovered
+    by everything (like `Dockerfile`). Any other name or location works --
+    `<dataset>.yaml` in your eval repo, one file per campaign -- passed
+    explicitly with `declare=` / `--declare FILE` (like `docker build -f`).
+    A dataset **root** is the one place the conventional name does not apply:
+    a root-level `apairo.yaml` is not auto-discovered, so root declarations are
+    always passed explicitly.
+
+---
+
 ## `apairo status`
 
 Report what a dataset directory contains, without loading any heavy data (frame

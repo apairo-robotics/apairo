@@ -115,6 +115,10 @@ channels:
     key: {name: '(\d{16,})$', units: [ns]}   # clock parsed from the stems
 ```
 
+Scaffold one from a directory scan with
+[`apairo declare <dir>`](../cli.md#apairo-declare) — detected loaders filled
+in, real PCD fields and a `key:` suggestion as commented hints.
+
 A declaration can also live entirely outside the data tree and be passed at
 load time — the read-only-mount case:
 
