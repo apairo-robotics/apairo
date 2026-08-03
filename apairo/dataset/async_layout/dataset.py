@@ -56,6 +56,16 @@ def _detect_loader(channel_dir: Path) -> str | None:
     return None
 
 
+def _declared_key_channels(directory: Path) -> set[str]:
+    """Channels whose stems the in-tree declaration explains with a ``key`` or
+    ``order`` regex -- their ``_`` is part of the name, not a suffix, so the
+    scan must not fan them out into suffixed sub-channels."""
+    if not declaration_exists(directory):
+        return set()
+    declared = read_declaration(declaration_path(directory))
+    return {k for k, v in declared.items() if v.get("key") or v.get("order")}
+
+
 def _suffix_channel_entries(channel_dir: Path, loader: str) -> dict[str, dict]:
     """Suffixed npy sub-channels found in *channel_dir*, keyed by suffix.
 
@@ -330,6 +340,8 @@ class AsyncLayoutDataset(AbstractDataset):
 
         directory = Path(directory)
 
+        explained = _declared_key_channels(directory)
+
         if merge and config_exists(directory):
             existing = read_config(directory).get("channels", {})
             added = 0
@@ -344,6 +356,8 @@ class AsyncLayoutDataset(AbstractDataset):
                 if channel_dir.name not in existing:
                     _register_raw_channel(directory, channel_dir.name, loader)
                     added += 1
+                if channel_dir.name in explained:
+                    continue
                 # A directory's base channel may already be registered while a
                 # suffix that only appeared later (e.g. *_intensity.npy) is not
                 # -- check independently so re-running merge picks it up.
@@ -387,6 +401,8 @@ class AsyncLayoutDataset(AbstractDataset):
                 "kind": "raw",
                 "loader": loader,
             }
+            if channel_dir.name in explained:
+                continue
             for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
                 channels[f"{channel_dir.name}_{suffix}"] = {"kind": "raw", **frag}
 

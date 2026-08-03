@@ -171,6 +171,16 @@ RawDataset.init("/data/my_dataset/seq_a")   # writes .apairo/channels.yaml
 ds = RawDataset("/data/my_dataset/seq_a")
 ```
 
+Everything the scan cannot know - a filename `key` regex, a `pcd` `fields`
+contract, an `alias` - belongs in a
+[declaration](datasets/apairo-schema.md#apairoyaml--the-declaration-human-owned):
+`<seq>/apairo.yaml`, or a file outside the tree passed as `declare=` (a root
+propagates it to every sequence):
+
+```python
+ds = RawDataset("/data/my_dataset", declare="eval/my_dataset.yaml")
+```
+
 `RawDataset` is asynchronous, so the [`synchronize()`](#synchronizing-async-sync)
 section below applies unchanged; on a root, each sequence is synchronized on its
 own clock and the results concatenated.
@@ -228,7 +238,11 @@ for `apairo-extractor` output are ROS topic names (`ouster_points`,
 renaming anything on disk: the directory keeps its real name, but the dataset
 loads and exposes it under the alias. This brings the profile-free `RawDataset`
 the canonical-naming ergonomics a profiled dataset gets from its layout -- and
-the naming lives in `.apairo`, not scattered across your scripts.
+the naming lives in the dataset's metadata, not scattered across your scripts.
+(`set_alias` records it in the machine registry; an
+[`apairo.yaml` declaration](datasets/apairo-schema.md#apairoyaml--the-declaration-human-owned)
+declares the same `alias:` field under your ownership - preferred for aliases
+you author and version.)
 
 ```python
 import apairo

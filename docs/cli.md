@@ -90,6 +90,16 @@ issues      none
     re-extraction or re-download needed. The result loads directly with
     [`RawDataset`](async-datasets.md#rawdataset).
 
+!!! note "`init` writes only the machine registry"
+    `init` (including `--force`) touches only `.apairo/` - it **never** writes
+    or rebuilds an
+    [`apairo.yaml` declaration](datasets/apairo-schema.md#apairoyaml--the-declaration-human-owned),
+    so a `--force` rebuild cannot destroy hand-written `key` / `fields` /
+    `alias` contracts. The scan *respects* an existing declaration: stems
+    explained by a declared `key`/`order` regex are not fanned out into
+    suffixed sub-channels. Running `init` is also optional - loading a bare
+    directory with `RawDataset` bootstraps the registry on the spot.
+
 | Option | Meaning |
 |---|---|
 | `--name NAME` | Dataset name for the root manifest (default: directory name) |
@@ -119,7 +129,9 @@ apairo status [PATH] [-s ID] [--json] [--show-tf] [--missing]
 
 It distinguishes **tracked** channels (declared in `.apairo`) from **untracked**
 ones (channel directories present on disk but not yet registered), and surfaces
-any consistency issues found by `verify_config`.
+any consistency issues found by `verify_config` - plus, when the sequence
+carries an `apairo.yaml` declaration, any issue found by `verify_declaration`
+(ownership violations, unknown fields, invalid `key`/`order` specs).
 
 If the directory was initialized as a specific dataset class (`init --as
 <Class>`, recorded in `.apairo/dataset.yaml`), `status` dispatches **through that

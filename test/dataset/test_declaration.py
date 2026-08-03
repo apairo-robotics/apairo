@@ -151,6 +151,22 @@ def test_init_overwrite_preserves_declaration(tmp_path):
     assert RawDataset(root).keys == ["cloud"]
 
 
+def test_init_respects_declared_key_no_suffix_fanout(tmp_path):
+    # Underscore stems explained by a declared key regex: neither the fresh
+    # scan nor a later merge may fan them out into suffixed sub-channels.
+    root = tmp_path / "seq"
+    _frames(root / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2, 3)])
+    _declare(
+        root / "apairo.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    RawDataset.init(root)
+    assert set(read_config(root)["channels"]) == {"lidar"}
+    with pytest.raises(ValueError, match="No new recognizable channels"):
+        RawDataset.init(root, merge=True)
+    assert set(read_config(root)["channels"]) == {"lidar"}
+
+
 def test_no_declaration_is_ever_written(tmp_path):
     root = _make_seq(tmp_path / "seq")
     RawDataset(root)
