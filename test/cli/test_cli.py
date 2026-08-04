@@ -728,6 +728,66 @@ def test_declare_pcd_lists_real_fields(tmp_path, capsys):
     assert "# fields: [x, y, z, intensity]" in capsys.readouterr().out
 
 
+def test_declare_epoch_key_is_active_and_scaffold_loads(tmp_path):
+    # A channel with no timestamps.txt is unloadable until a key is declared,
+    # so a confident epoch guess is emitted UNCOMMENTED: the scaffold loads
+    # as generated.
+    from apairo.dataset.raw import RawDataset
+
+    seq = tmp_path / "seq" / "lidar"
+    seq.mkdir(parents=True)
+    for i in (1, 2, 3):
+        np.save(seq / f"scene_{i}785248347168248576.npy", np.random.rand(4, 3))
+    assert _run(["declare", str(tmp_path / "seq")]) == 0
+    ds = RawDataset(tmp_path / "seq")
+    assert len(ds) == 3
+    assert ds.timestamps["lidar"][0] > 1e9
+
+
+def test_declare_key_hint_keeps_literal_tail(tmp_path, capsys):
+    # toaster-style stems <scene>_<epoch>_toaster: the literal tail after the
+    # digit run lands in the suggested regex.
+    seq = tmp_path / "seq" / "gt"
+    seq.mkdir(parents=True)
+    np.save(seq / "tree_1785248347168248576_toaster.npy", np.zeros(3))
+    assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
+    assert "key: {name: '(\\d+)_toaster$', units: [ns]}" in capsys.readouterr().out
+
+
+def test_declare_key_hint_ignores_foreign_extensions(tmp_path, capsys):
+    # A stray archive must not hijack the stem inspection (eval_seb's
+    # correct.tar.xz sorted first and used to yield the generic hint).
+    seq = tmp_path / "seq" / "cloud"
+    seq.mkdir(parents=True)
+    (seq / "aaa_archive.tar.xz").write_bytes(b"x")
+    np.save(seq / "scene_1785248347168248576.npy", np.zeros(3))
+    assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
+    out = capsys.readouterr().out
+    assert "units: [ns]" in out and "19-digit epoch" in out
+
+
+def test_status_merges_declaration_and_counts_by_key_regex(tmp_path, capsys):
+    # The key lives in the declaration, not the registry; status must merge it
+    # and count only the regex-matching loader files -- not schema yamls or
+    # archives colocated in the channel directory.
+    seq = tmp_path / "seq"
+    gt = seq / "gt"
+    gt.mkdir(parents=True)
+    for i in (1, 2):
+        np.save(gt / f"tree_{i}785248347168248576_toaster.npy", np.zeros(3))
+        (gt / f"tree_{i}785248347168248576_toaster_schema.yaml").write_text("x: 1")
+    (gt / "labeled.zip").write_bytes(b"z")
+    _write_declare(
+        seq / "apairo.yaml",
+        {"gt": {"loader": "npys", "key": {"name": r"(\d+)_toaster$", "units": ["ns"]}}},
+    )
+    assert _run(["init", str(seq)]) == 0
+    capsys.readouterr()
+    assert _run(["status", str(seq), "--json"]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["channels"]["gt"]["frames"] == 2
+
+
 def test_declare_root_requires_output(raw_root, capsys):
     assert _run(["declare", str(raw_root)]) == 2
     assert "not auto-discovered" in capsys.readouterr().err

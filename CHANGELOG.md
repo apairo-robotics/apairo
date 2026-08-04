@@ -8,6 +8,16 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Fixed
+- **`apairo status` now sees what loading sees.** The in-tree declaration is
+  merged over the registry before rendering, and a channel enumerated by a
+  `key`/`order` regex counts only the loader-extension files whose stem
+  matches — colocated schema yamls or archives no longer inflate `frames`
+  (a 6-label channel used to report 13). The scaffold's `key:` hint also got
+  honest: it inspects only the loader's own files (a stray `.tar.xz` no longer
+  hijacks the stem inspection), keeps a literal tail after the epoch in the
+  suggested regex (`(\d+)_toaster$`), and is emitted **uncommented** when the
+  channel is unloadable without it and the guess is confident — a scaffold
+  should load as generated.
 - **`directory:` is now honored for plain channels, including nested relative
   paths.** The schema always described `directory` as "the on-disk subdirectory
   the channel's files live in", but the implementation only consumed it for

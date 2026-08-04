@@ -36,9 +36,12 @@ from apairo.core.config import (
     alias_conflict,
     channel_dependents,
     config_exists,
+    declaration_exists,
     declaration_path,
+    merge_declared_channels,
     read_calibration,
     read_config,
+    read_declaration,
     read_manifest,
     remove_channel,
     set_alias,
@@ -120,6 +123,29 @@ def _count_files(channel_dir: Path) -> int:
     )
 
 
+def _keyed_frame_count(channel_dir: Path, meta: dict) -> int | None:
+    """Frame count for a channel enumerated by its key/order regex -- the
+    loader-extension files whose stem matches, exactly like ``_enumerate``.
+    ``None`` when the channel declares no usable regex."""
+    spec = meta.get("order") or meta.get("key") or {}
+    pattern = spec.get("name") if isinstance(spec, dict) else None
+    if not pattern:
+        return None
+    try:
+        regex = re.compile(pattern)
+    except re.error:
+        return None
+    exts = _HINT_EXTS.get(meta.get("loader", ""))
+    return sum(
+        1
+        for p in channel_dir.iterdir()
+        if p.is_file()
+        and not p.name.startswith(".")
+        and (exts is None or p.suffix.lower() in exts)
+        and regex.search(p.stem)
+    )
+
+
 def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
     """Per-channel facts for the channel directory ``seq_dir/channel``.
 
@@ -141,13 +167,18 @@ def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
     shape, dtype = _channel_shape(
         cdir, loader, meta.get("array_file") if meta else None
     )
+    keyed = _keyed_frame_count(cdir, meta) if meta and cdir.is_dir() else None
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,
         "transform": meta.get("transform") if meta else None,
         "alias": meta.get("alias") if meta else None,
         "loader": loader,
-        "frames": len(ts) if ts is not None else _count_files(cdir),
+        "frames": len(ts)
+        if ts is not None
+        else keyed
+        if keyed is not None
+        else _count_files(cdir),
         "rate_hz": rate,
         "span": list(span) if span else None,
         "shape": shape,
@@ -179,6 +210,16 @@ def _untracked_channels(seq_dir: Path) -> list[str]:
 
 def _seq_info(seq_dir: Path) -> dict:
     cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
+    # Status must see what loading sees: the in-tree declaration overlays the
+    # registry (key/order specs drive the frame count below). A broken
+    # declaration is skipped here -- verify_declaration reports it in issues.
+    if declaration_exists(seq_dir):
+        try:
+            cfg = merge_declared_channels(
+                cfg, read_declaration(declaration_path(seq_dir))
+            )
+        except ValueError:
+            pass
     channels = {k: _channel_detail(seq_dir, k, v) for k, v in sorted(cfg.items())}
     untracked = {
         u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)
@@ -696,25 +737,43 @@ def _yaml_channel_key(name: str) -> str:
     return name if re.fullmatch(r"[A-Za-z0-9_-]+", name) else f'"{name}"'
 
 
-def _declare_key_hint(channel_dir: Path) -> str | None:
-    """A commented ``key:`` suggestion when the channel carries no clock on
-    disk -- unit guessed from the width of a trailing digit run in the stems."""
+# Data-file extensions per loader, for scaffold hints (mirrors _enumerate's map).
+_HINT_EXTS: dict[str, set[str]] = {
+    "npys": {".npy"},
+    "npy": {".npy"},
+    "bin": {".bin"},
+    "pcd": {".pcd"},
+    "img": {".png", ".jpg", ".jpeg", ".bmp"},
+}
+
+
+def _declare_key_hint(channel_dir: Path, loader: str) -> str | None:
+    """A ``key:`` line for a channel with no clock on disk.
+
+    Without a ``timestamps.txt`` the channel cannot load at all until a key is
+    declared, so when the stems carry a confident epoch (a trailing digit run
+    wide enough to name its unit, possibly followed by a literal tail like
+    ``_toaster``) the line is emitted **uncommented** -- the scaffold should
+    load as generated. Otherwise a commented hint marks the homework."""
     if (channel_dir / "timestamps.txt").exists():
         return None
+    exts = _HINT_EXTS.get(loader)
     stems = sorted(
         f.stem
         for f in channel_dir.iterdir()
-        if f.is_file() and f.name != "timestamps.txt" and not f.name.startswith(".")
+        if f.is_file()
+        and not f.name.startswith(".")
+        and (exts is None or f.suffix.lower() in exts)
     )
     if not stems:
         return None
-    digits = re.search(r"(\d+)$", stems[0])
-    if digits is None:
+    m = re.search(r"(\d+)(\D*)$", stems[0])
+    if m is None:
         return (
             "    # key: {name: '<regex, one capture group>'}"
             "   # no timestamps.txt -- declare the clock"
         )
-    n = len(digits.group(1))
+    n, tail = len(m.group(1)), m.group(2)
     unit = (
         "ns"
         if n >= 18
@@ -726,11 +785,12 @@ def _declare_key_hint(channel_dir: Path) -> str | None:
         if n >= 9
         else None
     )
+    pattern = "(\\d+)" + re.escape(tail) + "$"
     if unit is None:
-        return "    # key: {name: '(\\d+)$'}   # index parsed from the stems"
+        return f"    # key: {{name: '{pattern}'}}   # index parsed from the stems"
     return (
-        f"    # key: {{name: '(\\d+)$', units: [{unit}]}}"
-        f"   # {n}-digit epoch found in the stems"
+        f"    key: {{name: '{pattern}', units: [{unit}]}}"
+        f"   # {n}-digit epoch guessed from the stems -- verify"
     )
 
 
@@ -803,7 +863,7 @@ def cmd_declare(args: argparse.Namespace) -> int:
         lines.append(f"  {_yaml_channel_key(name)}:")
         lines.append(f"    loader: {loader}")
         lines.append("    # alias: <public name at load time>")
-        for hint in (_declare_fields_hint(d, loader), _declare_key_hint(d)):
+        for hint in (_declare_fields_hint(d, loader), _declare_key_hint(d, loader)):
             if hint:
                 lines.append(hint)
     text = "\n".join(lines) + "\n"
