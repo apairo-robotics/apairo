@@ -46,6 +46,24 @@ Remaining, parked:
   already aligns per-channel key arrays regardless of what the key means; this
   collapse is the larger architectural step, and is deferred.
 
+  *Two guards + a first slice, surfaced by a real eval vault (barakuda, 2026-08):*
+
+  - **Positional default needs the equal-count guard.** "Nothing declared →
+    alphabetical order, clockless, synchronous" is the right default **only
+    when every channel has the same length** — that is what makes position an
+    alignment. On unequal counts (barakuda: 46 / 45 / 6 files per directory)
+    positional pairing is silently wrong; the load must refuse loudly and name
+    the counts, pointing at `key:` / `timestamps.txt` as the fix.
+  - **First slice: a bare channel directory is a single-channel dataset.**
+    Data files directly inside the pointed directory (no channel subdirs) →
+    one channel named after the directory, alphabetical/numeric order, no
+    clock needed since there is nothing to align against. Already expressible
+    explicitly (validated): `RawDataset(dir, declare=...)` with
+    `directory: "."`; the zero-config detection is the step.
+  - **Sequence vs channel is altitude, not identity.** The same directory is a
+    *channel* seen from its parent and a *dataset* seen from itself; tools
+    should accept both entry points rather than force one reading.
+
 ## Persist a synchronize() result as a reloadable synchronous view
 
 `.synchronize()` recomputes the matching every session, and nothing lets us
