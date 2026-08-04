@@ -127,7 +127,8 @@ from a directory scan -- the human counterpart of `init`:
 ```bash
 apairo declare /data/seq                      # writes /data/seq/apairo.yaml
 apairo declare /data/seq -o -                 # print to stdout
-apairo declare /data/root -o eval/root.yaml   # root: pick where you version it
+apairo declare /data/root                     # root: one file, every sequence
+apairo declare /data/seq -o eval/seq.yaml     # your name, passed via --declare
 ```
 
 The scaffold names every detected channel with its loader, then adds commented
@@ -142,13 +143,15 @@ the file is yours the moment it exists.
 | `-o, --output FILE` | Write here instead of `<dir>/apairo.yaml` (`-` for stdout) |
 
 !!! note "Naming -- like a Dockerfile"
-    `apairo.yaml` at the sequence root is the conventional name, auto-discovered
-    by everything (like `Dockerfile`). Any other name or location works --
-    `<dataset>.yaml` in your eval repo, one file per campaign -- passed
-    explicitly with `declare=` / `--declare FILE` (like `docker build -f`).
-    A dataset **root** is the one place the conventional name does not apply:
-    a root-level `apairo.yaml` is not auto-discovered, so root declarations are
-    always passed explicitly.
+    `apairo.yaml` is the conventional name, auto-discovered (like `Dockerfile`).
+    At a **sequence** root it declares that sequence; at a **dataset** root it
+    applies to every sequence -- the union of their channels, each sequence
+    loading the subset it holds, a sequence's own `apairo.yaml` refining it.
+    Any other name or location works -- `<dataset>.yaml` in your eval repo, one
+    file per campaign -- passed explicitly with `declare=` / `--declare FILE`
+    (like `docker build -f`). Per-field precedence, highest first:
+    `declare=` > `<seq>/apairo.yaml` > `<root>/apairo.yaml` >
+    `.apairo/channels.yaml`.
 
 ---
 

@@ -71,7 +71,7 @@ outside it and pass it at load time:
 ds = apairo.RawDataset(root, declare="eval/my_dataset.yaml")
 ```
 
-Per-field precedence: `declare=` > `<seq>/apairo.yaml` > `.apairo/channels.yaml`.
+Per-field precedence: `declare=` > `<seq>/apairo.yaml` > `<root>/apairo.yaml` > `.apairo/channels.yaml` (a dataset root's file applies to every sequence).
 
 ---
 

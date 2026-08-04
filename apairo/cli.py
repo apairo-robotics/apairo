@@ -827,14 +827,6 @@ def cmd_declare(args: argparse.Namespace) -> int:
         return 1
 
     if args.output is None:
-        if is_root:
-            print(
-                f"A root-level {DECLARATION_FILE} is not auto-discovered; write "
-                f"the declaration where you version it and pass it explicitly:\n"
-                f"  apairo declare {path} -o eval/{path.name}.yaml",
-                file=sys.stderr,
-            )
-            return 2
         out = path / DECLARATION_FILE
     else:
         out = None if args.output == "-" else Path(args.output).expanduser()
@@ -873,7 +865,8 @@ def cmd_declare(args: argparse.Namespace) -> int:
         return 0
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
-    print(f"wrote {out}  ({len(channels)} channel(s) -- a scaffold; edit it)")
+    where = "applies to every sequence; " if is_root else ""
+    print(f"wrote {out}  ({len(channels)} channel(s) -- {where}a scaffold; edit it)")
     return 0
 
 
@@ -1185,6 +1178,36 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_declare = sub.add_parser(
         "declare",
         help="scaffold a declaration file (apairo.yaml) from a directory scan",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Scaffold a declaration -- the human-owned half of the channel\n"
+            "metadata: HOW to read this dataset (loaders, aliases, filename-key\n"
+            "regexes, pcd `fields` contracts). apairo reads it and never edits\n"
+            "it, so `init --force` cannot destroy it.\n"
+            "\n"
+            "The scan pre-fills every detected channel: its loader, the actual\n"
+            "field list from the first PCD header, and -- when a channel has no\n"
+            "timestamps.txt -- an active `key:` guessed from the stems (epoch\n"
+            "width -> unit, literal tails kept), so the scaffold loads as\n"
+            "generated. Commented hints mark the optional refinements."
+        ),
+        epilog=(
+            "naming (like a Dockerfile):\n"
+            f"  <dir>/{DECLARATION_FILE} is the conventional name, auto-discovered.\n"
+            "  On a dataset ROOT it applies to every sequence (a sequence's own\n"
+            f"  {DECLARATION_FILE} refines it). Any other name/location works,\n"
+            "  passed explicitly: RawDataset(..., declare=...) or --declare FILE\n"
+            "  on init/status/check.\n"
+            "\n"
+            "examples:\n"
+            "  apairo declare /data/seq              # writes /data/seq/apairo.yaml\n"
+            "  apairo declare /data/root             # root: applies to every sequence\n"
+            "  apairo declare /data/seq -o -         # print to stdout\n"
+            "  apairo declare /data/seq -o eval.yaml # your name, passed via --declare\n"
+            "\n"
+            "Refuses to overwrite an existing declaration: the file is yours the\n"
+            "moment it exists. Validate with `apairo status` / `apairo check`."
+        ),
     )
     _add_common(p_declare)
     p_declare.add_argument(

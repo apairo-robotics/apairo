@@ -132,8 +132,11 @@ ds = apairo.RawDataset(root, declare="eval/barakuda.yaml")
 ```
 
 Per-field precedence, highest first: `declare=` > `<seq>/apairo.yaml` >
-`.apairo/channels.yaml`. On a dataset root, `declare=` applies to every
-sequence.
+`<root>/apairo.yaml` > `.apairo/channels.yaml`. On a dataset root, both
+`declare=` and the root's own `apairo.yaml` apply to every sequence: the root
+file is the dataset-wide contract (typically the **union** of the sequences'
+channels -- a sequence simply skips the declared channels it does not hold),
+and a sequence's own file is the more specific word on the fields it sets.
 
 ## `dataset.yaml` (root manifest, optional)
 

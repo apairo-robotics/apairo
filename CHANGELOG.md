@@ -7,6 +7,18 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **A dataset root's `apairo.yaml` applies to every sequence.** The root file
+  is the dataset-wide contract -- typically the union of the sequences'
+  channels -- propagated below each sequence's own `apairo.yaml` (per-field
+  precedence: `declare=` > sequence file > root file > registry). In
+  load-everything mode a sequence skips declared channels it does not hold
+  (an explicitly requested missing channel still errors), and `available`
+  reflects what is actually on disk. `apairo declare <root>` now writes
+  `<root>/apairo.yaml` (one scaffold, every sequence) instead of requiring
+  `-o`, and `apairo declare --help` explains the contract, the naming rule
+  and the examples.
+
 ### Fixed
 - **`apairo status` now sees what loading sees.** The in-tree declaration is
   merged over the registry before rendering, and a channel enumerated by a

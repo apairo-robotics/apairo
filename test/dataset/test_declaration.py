@@ -251,6 +251,60 @@ def test_directory_escape_rejected(tmp_path):
 # ─────────────────────────────── root ────────────────────────────────────────
 
 
+def test_root_declaration_propagates_to_sequences(tmp_path):
+    # One apairo.yaml at the root drives every sequence: keys parsed, no
+    # suffix fan-out junk in any per-sequence registry.
+    root = tmp_path / "root"
+    for seq in ("seq_a", "seq_b"):
+        _frames(root / seq / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2)])
+    _declare(
+        root / "apairo.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    ds = RawDataset(root)
+    assert len(ds) == 4
+    for sub in ds.sequences:
+        np.testing.assert_allclose(sub.timestamps["lidar"], [1.0, 2.0])
+    for seq in ("seq_a", "seq_b"):
+        assert set(read_config(root / seq)["channels"]) == {"lidar"}
+
+
+def test_sequence_declaration_refines_root(tmp_path):
+    # Per-field precedence: the root's file is the dataset-wide contract, a
+    # sequence's own apairo.yaml is the more specific word on the fields it
+    # sets -- the root's key survives underneath.
+    root = tmp_path / "root"
+    seq = root / "seq_a"
+    _frames(seq / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2)])
+    base = _declare(
+        tmp_path / "base.yaml",
+        {"lidar": {"alias": "cloud", "key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    _declare(seq / "apairo.yaml", {"lidar": {"alias": "pts"}})
+    ds = RawDataset(seq, declare_base=base)
+    assert ds.keys == ["pts"]
+    np.testing.assert_allclose(ds.timestamps["pts"], [1.0, 2.0])
+
+
+def test_declare_param_wins_over_root_file(tmp_path):
+    root = tmp_path / "root"
+    _make_seq(root / "seq_a")
+    _declare(root / "apairo.yaml", {"lidar": {"alias": "cloud"}})
+    external = _declare(tmp_path / "eval.yaml", {"lidar": {"alias": "pts"}})
+    assert RawDataset(root, declare=external).keys == ["pts"]
+
+
+def test_init_on_root_uses_root_declaration(tmp_path):
+    root = tmp_path / "root"
+    _frames(root / "seq_a" / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2)])
+    _declare(
+        root / "apairo.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    RawDataset.init(root)
+    assert set(read_config(root / "seq_a")["channels"]) == {"lidar"}
+
+
 def test_root_propagates_declare_to_sequences(tmp_path):
     root = tmp_path / "root"
     for seq in ("seq_a", "seq_b"):

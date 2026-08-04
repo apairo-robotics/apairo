@@ -56,17 +56,17 @@ def _detect_loader(channel_dir: Path) -> str | None:
     return None
 
 
-def _declared_key_channels(
-    directory: Path, declare: str | Path | None = None
-) -> set[str]:
+def _declared_key_channels(directory: Path, *declares: str | Path | None) -> set[str]:
     """Channels whose stems a declaration explains with a ``key`` or ``order``
     regex -- their ``_`` is part of the name, not a suffix, so the scan must
     not fan them out into suffixed sub-channels. Union of the in-tree
-    ``apairo.yaml`` and the optional external *declare* file."""
+    ``apairo.yaml`` and any external *declares* files."""
     declared: dict[str, dict] = {}
     if declaration_exists(directory):
         declared.update(read_declaration(declaration_path(directory)))
-    if declare is not None:
+    for declare in declares:
+        if declare is None:
+            continue
         for k, v in read_declaration(declare).items():
             declared.setdefault(k, {}).update(v)
     return {k for k, v in declared.items() if v.get("key") or v.get("order")}
@@ -134,8 +134,12 @@ class AsyncLayoutDataset(AbstractDataset):
         declare: Path to a declaration file (the ``channels.yaml`` schema minus
             machine provenance) overlaid onto the channel metadata, per channel
             and per field.  Precedence: ``declare=`` > ``<directory>/apairo.yaml``
-            > ``.apairo/channels.yaml``.  Lets a read-only tree be declared from
-            outside; apairo never writes a declaration.
+            > ``declare_base`` > ``.apairo/channels.yaml``.  Lets a read-only
+            tree be declared from outside; apairo never writes a declaration.
+        declare_base: Lower-precedence declaration overlaid *before* the
+            in-tree ``apairo.yaml`` -- how a dataset root propagates its own
+            ``<root>/apairo.yaml`` to every sequence (the sequence's own file
+            stays the more specific word). Rarely passed by hand.
     """
 
     synchronous: bool = False
@@ -146,8 +150,10 @@ class AsyncLayoutDataset(AbstractDataset):
         keys: list[str] | None = None,
         dataset_profile: str | Path | None = None,
         declare: str | Path | None = None,
+        declare_base: str | Path | None = None,
     ) -> None:
         directory = Path(directory)
+        keys_defaulted = False  # True when keys=None resolved to "everything"
 
         # Channel metadata from .apairo (empty when a dataset_profile is passed
         # and no sidecar exists). alias_of maps an on-disk directory name to the
@@ -164,7 +170,10 @@ class AsyncLayoutDataset(AbstractDataset):
         else:
             channels = {}
         # Human declarations overlay the machine registry, per channel and per
-        # field: the in-tree apairo.yaml first, then an explicit declare= file.
+        # field, least specific first: the root's propagated declaration, the
+        # sequence's own apairo.yaml, then an explicit declare= file.
+        if declare_base is not None:
+            channels = merge_declared_channels(channels, read_declaration(declare_base))
         if declaration_exists(directory):
             channels = merge_declared_channels(
                 channels, read_declaration(declaration_path(directory))
@@ -235,6 +244,7 @@ class AsyncLayoutDataset(AbstractDataset):
             }
             if keys is None:
                 keys = sorted(self._profile.keys())
+                keys_defaulted = True
         else:
             raise FileNotFoundError(
                 f"No dataset_profile given and no .apairo or apairo.yaml found "
@@ -289,6 +299,12 @@ class AsyncLayoutDataset(AbstractDataset):
                 self._files[public] = self._files[source_public]
 
         keys = [self._resolve_key(k) for k in keys]
+        if keys_defaulted:
+            # Load-everything mode: a dataset-wide declaration (a root's file
+            # is the union over its sequences) may name channels this sequence
+            # does not hold -- skip them here instead of failing the sequence.
+            # An explicitly requested channel still errors below.
+            keys = [k for k in keys if k in self._files]
         missing = set(keys) - set(self._files)
         if missing:
             raise KeyError(f"Keys not found in dataset directory: {missing}")

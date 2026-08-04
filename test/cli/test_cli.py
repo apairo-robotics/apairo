@@ -788,9 +788,11 @@ def test_status_merges_declaration_and_counts_by_key_regex(tmp_path, capsys):
     assert status["channels"]["gt"]["frames"] == 2
 
 
-def test_declare_root_requires_output(raw_root, capsys):
-    assert _run(["declare", str(raw_root)]) == 2
-    assert "not auto-discovered" in capsys.readouterr().err
+def test_declare_root_writes_root_declaration(raw_root, capsys):
+    assert _run(["declare", str(raw_root)]) == 0
+    assert "applies to every sequence" in capsys.readouterr().out
+    text = (raw_root / "apairo.yaml").read_text()
+    assert "lidar:" in text and "imu:" in text
 
 
 def test_declare_root_with_output(raw_root, tmp_path, capsys):

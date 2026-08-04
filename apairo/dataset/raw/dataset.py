@@ -47,6 +47,7 @@ from apairo.core.config import (
     CONFIG_DIR,
     config_exists,
     declaration_exists,
+    declaration_path,
     read_config,
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
@@ -109,9 +110,12 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         directory: str | Path,
         keys: list[str] | None = None,
         declare: str | Path | None = None,
+        declare_base: str | Path | None = None,
     ) -> None:
         path = Path(directory)
-        self._declare = declare  # consulted by _bootstrap_config
+        # Consulted by _bootstrap_config (which runs before super().__init__).
+        self._declare = declare
+        self._declare_base = declare_base
 
         # A sequence loads directly; a bare channel layout (no .apairo) is
         # bootstrapped on the spot, so raw data needs no manual init(). A
@@ -136,7 +140,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             self._name = path.name
             if not config_exists(path):
                 self._load_or_create_config(path)
-            super().__init__(path, keys=keys, declare=declare)
+            super().__init__(
+                path, keys=keys, declare=declare, declare_base=declare_base
+            )
         else:
             self._init_raw_root(path, keys, declare)
 
@@ -175,6 +181,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             ``dataset.yaml`` for a root.
         """
         path = Path(directory)
+        if declare is None and not cls._is_sequence_layout(path):
+            # A root's own apairo.yaml drives the per-sequence scans too.
+            declare = declaration_path(path) if declaration_exists(path) else None
 
         if cls._is_sequence_layout(path):
             AsyncLayoutDataset.init(
@@ -268,19 +277,25 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         if not seq_dirs:
             raise FileNotFoundError(f"No sequences found under '{root}'.")
 
+        # The root's own apairo.yaml propagates to every sequence, below the
+        # sequence's own file; an explicit declare= keeps the top slot.
+        base = declaration_path(root) if declaration_exists(root) else None
+
         # type(self) so a profiled subclass (e.g. TartanKittiDataset) builds
         # sequences of its own kind, keeping its channel profile.
         super()._init_root(
             root,
             seq_dirs,
-            lambda d: type(self)(d, keys=keys, declare=declare),
+            lambda d: type(self)(d, keys=keys, declare=declare, declare_base=base),
             build_index=True,
         )
 
     # ------------------------------------------------------------------ hooks
 
     def _single_available(self) -> frozenset:
-        return frozenset(self._profile)
+        # Declared channels absent from this sequence (a root's union
+        # declaration) are not available here -- intersect with what is on disk.
+        return frozenset(self._profile) & frozenset(self._files)
 
     def _set_single_keys(self, keys) -> None:
         if keys == "all":
@@ -308,7 +323,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     def _bootstrap_config(self, sequence_dir: Path) -> dict:
         """ConfigurableDataset hook: detect raw channels when .apairo is absent."""
         explained = _declared_key_channels(
-            sequence_dir, getattr(self, "_declare", None)
+            sequence_dir,
+            getattr(self, "_declare_base", None),
+            getattr(self, "_declare", None),
         )
         channels: dict = {}
         for key in sorted(get_files(str(sequence_dir))):
