@@ -203,6 +203,51 @@ def test_readonly_tree_loads_with_external_declare(tmp_path):
         os.chmod(root, rw)
 
 
+# ─────────────────────────────── directory ──────────────────────────────────
+
+
+def test_nested_directory_channel(tmp_path):
+    # A channel living in a nested sub-directory (an annotation tool's export
+    # tree) -- `directory` resolves the relative path, no symlink needed.
+    root = _make_seq(tmp_path / "seq")
+    _frames(root / "exports" / "masks", [f"{i:06d}.npy" for i in range(5)])
+    _declare(
+        root / "apairo.yaml",
+        {
+            "masks": {
+                "loader": "npys",
+                "directory": "exports/masks",
+                "key": {"name": r"(\d+)$"},
+            }
+        },
+    )
+    ds = RawDataset(root)
+    assert set(ds.keys) == {"lidar", "masks"}
+    assert ds.load("masks", 0).shape == (2, 3)
+
+
+def test_directory_redirects_a_plain_channel(tmp_path):
+    # `directory` on a plain channel (no suffix/array_file) was silently
+    # ignored; it now points the channel at the named top-level directory.
+    root = _make_seq(tmp_path / "seq")
+    _declare(
+        root / "apairo.yaml",
+        {"cloud": {"loader": "npys", "directory": "lidar", "timestamps_from": "lidar"}},
+    )
+    ds = RawDataset(root, keys=["lidar", "cloud"])
+    np.testing.assert_array_equal(ds.load("cloud", 0), ds.load("lidar", 0))
+
+
+def test_directory_escape_rejected(tmp_path):
+    root = _make_seq(tmp_path / "seq")
+    _declare(
+        root / "apairo.yaml",
+        {"evil": {"loader": "npys", "directory": "../outside"}},
+    )
+    with pytest.raises(ValueError, match="relative path"):
+        RawDataset(root)
+
+
 # ─────────────────────────────── root ────────────────────────────────────────
 
 

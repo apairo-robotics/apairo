@@ -78,7 +78,7 @@ channels:
 | `frame` | no | Coordinate frame the data is expressed in. Descriptive only — apairo never applies transforms. |
 | `transform` | no | Declares the channel *is* a transform stream: `{parent, child, [static], [format]}`. Descriptive only. |
 | `alias` | no | Public name the channel loads under (the directory keeps its real name). Must be unique and must not shadow a real channel directory. |
-| `directory` | no | On-disk subdirectory the channel's files live in, when different from its key — lets a channel share another channel's directory. Defaults to the key. |
+| `directory` | no | On-disk directory the channel's files live in, when different from its key: another channel's directory (colocation), or a **nested relative path** (`per_object_gt/pcd` — an annotation tool's export). Resolved from the sequence directory; `..`, absolute paths and drive anchors are rejected. Defaults to the key. |
 | `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). `npys` only. |
 | `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`). `npy` only. |
 | `fields` | no | The field contract of a `pcd` channel, e.g. `[x, y, z, intensity]`. A PCD header is self-describing, so two frames may declare different fields; naming them here selects those columns in that order, making the channel's width a declared property rather than a per-file accident. A frame missing one raises, naming both sets. Omitted, every field the file declares is returned in header order. `pcd` only. |
@@ -113,6 +113,11 @@ channels:
     alias: lidar                   # exposed as "lidar" at load time
     fields: [x, y, z, intensity]   # stable (N, 4) float32
     key: {name: '(\d{16,})$', units: [ns]}   # clock parsed from the stems
+  labeled:                         # nested export -- no symlink needed
+    loader: pcd
+    directory: per_object_gt/pcd   # relative path, resolved from the sequence
+    fields: [x, y, z, label]
+    key: {name: '(\d{16,})$', units: [ns]}
 ```
 
 Scaffold one from a directory scan with

@@ -7,6 +7,17 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **`directory:` is now honored for plain channels, including nested relative
+  paths.** The schema always described `directory` as "the on-disk subdirectory
+  the channel's files live in", but the implementation only consumed it for
+  `suffix`/`array_file` colocation — on a plain channel it was silently
+  ignored. It now points any channel at its directory: another top-level one,
+  or a nested relative path (`directory: per_object_gt/pcd` — an annotation
+  tool's export tree), resolved from the sequence directory and validated
+  against `..`/absolute escapes. No more symlinking nested exports to the top
+  level just to load them.
+
 ### Added
 - **`apairo.yaml` — the human-owned declaration.** Channel metadata used to
   have a single home, `.apairo/channels.yaml`, which mixed two owners: what the

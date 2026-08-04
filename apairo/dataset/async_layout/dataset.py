@@ -262,6 +262,20 @@ class AsyncLayoutDataset(AbstractDataset):
                 )
             self._files[public] = path
 
+        # A plain channel whose `directory` names where its files live, when
+        # that is not the channel's own key: another top-level directory, or a
+        # nested relative path (per_object_gt/pcd -- an annotation tool's
+        # export). The explicit declaration wins over the same-name scan.
+        for real, meta in channels.items():
+            sub = meta.get("directory")
+            if not sub or meta.get("suffix") or meta.get("array_file"):
+                continue
+            resolved = directory / safe_config_name(
+                str(sub), label=f"channel '{real}' directory"
+            )
+            if resolved.is_dir():
+                self._files[self._public(real)] = str(resolved)
+
         # Sub-channels that share another channel's directory instead of owning
         # one: a suffixed per-frame variant (*_intensity.npy), or a colocated
         # stacked array named by `array_file` (valid_mask.npy beside poses.npy).
