@@ -137,6 +137,10 @@ Per-field precedence, highest first: `declare=` > `<seq>/apairo.yaml` >
 file is the dataset-wide contract (typically the **union** of the sequences'
 channels -- a sequence simply skips the declared channels it does not hold),
 and a sequence's own file is the more specific word on the fields it sets.
+A sequence opened **standalone** inherits its parent's `apairo.yaml`
+automatically (a one-level upward look, like a tool finding its manifest in
+the directory above), so `RawDataset(root / "seq")`, `apairo status root/seq`
+and `apairo studio root/seq` read the same contract as entering by the root.
 
 ## `dataset.yaml` (root manifest, optional)
 

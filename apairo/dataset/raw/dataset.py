@@ -48,6 +48,7 @@ from apairo.core.config import (
     config_exists,
     declaration_exists,
     declaration_path,
+    inherited_declaration,
     read_config,
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
@@ -138,6 +139,11 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             self._is_root = False
             self._sequence_dir = path
             self._name = path.name
+            # A sequence opened standalone inherits its root's apairo.yaml --
+            # same contract whether entered from the root or directly.
+            if declare_base is None:
+                declare_base = inherited_declaration(path)
+                self._declare_base = declare_base
             if not config_exists(path):
                 self._load_or_create_config(path)
             super().__init__(
@@ -181,9 +187,14 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             ``dataset.yaml`` for a root.
         """
         path = Path(directory)
-        if declare is None and not cls._is_sequence_layout(path):
-            # A root's own apairo.yaml drives the per-sequence scans too.
-            declare = declaration_path(path) if declaration_exists(path) else None
+        if declare is None:
+            # The effective declaration drives the scan: a root's own
+            # apairo.yaml for its sequences, the parent's for a sequence
+            # initialised standalone.
+            if cls._is_sequence_layout(path):
+                declare = inherited_declaration(path)
+            else:
+                declare = declaration_path(path) if declaration_exists(path) else None
 
         if cls._is_sequence_layout(path):
             AsyncLayoutDataset.init(

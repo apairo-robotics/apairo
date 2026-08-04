@@ -38,6 +38,7 @@ from apairo.core.config import (
     config_exists,
     declaration_exists,
     declaration_path,
+    inherited_declaration,
     merge_declared_channels,
     read_calibration,
     read_config,
@@ -210,14 +211,16 @@ def _untracked_channels(seq_dir: Path) -> list[str]:
 
 def _seq_info(seq_dir: Path) -> dict:
     cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
-    # Status must see what loading sees: the in-tree declaration overlays the
-    # registry (key/order specs drive the frame count below). A broken
-    # declaration is skipped here -- verify_declaration reports it in issues.
-    if declaration_exists(seq_dir):
+    # Status must see what loading sees: the inherited root declaration, then
+    # the in-tree one, overlay the registry (key/order specs drive the frame
+    # count below). A broken declaration is skipped here -- verify_declaration
+    # reports it in issues.
+    own = declaration_path(seq_dir) if declaration_exists(seq_dir) else None
+    for decl in (inherited_declaration(seq_dir), own):
+        if decl is None:
+            continue
         try:
-            cfg = merge_declared_channels(
-                cfg, read_declaration(declaration_path(seq_dir))
-            )
+            cfg = merge_declared_channels(cfg, read_declaration(decl))
         except ValueError:
             pass
     channels = {k: _channel_detail(seq_dir, k, v) for k, v in sorted(cfg.items())}

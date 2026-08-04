@@ -17,7 +17,11 @@ All notable changes to apairo are documented here. The format is based on
   reflects what is actually on disk. `apairo declare <root>` now writes
   `<root>/apairo.yaml` (one scaffold, every sequence) instead of requiring
   `-o`, and `apairo declare --help` explains the contract, the naming rule
-  and the examples.
+  and the examples. A sequence opened **standalone** inherits its parent's
+  `apairo.yaml` automatically (one-level upward look), so entering a dataset
+  by a sequence -- `RawDataset(root/"seq")`, `apairo studio root/seq` -- reads
+  the same contract as entering by the root; `status` and `init` inherit the
+  same way.
 
 ### Fixed
 - **`apairo status` now sees what loading sees.** The in-tree declaration is

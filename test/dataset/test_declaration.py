@@ -286,6 +286,31 @@ def test_sequence_declaration_refines_root(tmp_path):
     np.testing.assert_allclose(ds.timestamps["pts"], [1.0, 2.0])
 
 
+def test_sequence_opened_standalone_inherits_root_declaration(tmp_path):
+    # `apairo studio <root>/<seq>` case: entering by the sequence must read
+    # the same contract as entering by the root.
+    root = tmp_path / "root"
+    _frames(root / "seq_a" / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2)])
+    _declare(
+        root / "apairo.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    ds = RawDataset(root / "seq_a")
+    np.testing.assert_allclose(ds.timestamps["lidar"], [1.0, 2.0])
+    assert set(read_config(root / "seq_a")["channels"]) == {"lidar"}  # no fan-out
+
+
+def test_standalone_init_inherits_root_declaration(tmp_path):
+    root = tmp_path / "root"
+    _frames(root / "seq_a" / "lidar", [f"scene_{i}000000000.npy" for i in (1, 2)])
+    _declare(
+        root / "apairo.yaml",
+        {"lidar": {"key": {"name": r"(\d+)$", "units": ["ns"]}}},
+    )
+    RawDataset.init(root / "seq_a")
+    assert set(read_config(root / "seq_a")["channels"]) == {"lidar"}
+
+
 def test_declare_param_wins_over_root_file(tmp_path):
     root = tmp_path / "root"
     _make_seq(root / "seq_a")

@@ -253,6 +253,18 @@ def declaration_exists(root_dir: str | Path) -> bool:
     return declaration_path(root_dir).is_file()
 
 
+def inherited_declaration(seq_dir: str | Path) -> Path | None:
+    """The parent directory's declaration, if any.
+
+    A dataset root's ``apairo.yaml`` applies to every sequence; a sequence
+    opened *standalone* inherits it through this one-level upward look (like a
+    tool finding its manifest in the directory above), so
+    ``RawDataset(root/"seq")`` reads the same contract as ``RawDataset(root)``.
+    """
+    parent = Path(seq_dir).resolve().parent
+    return declaration_path(parent) if declaration_exists(parent) else None
+
+
 def read_declaration(path: str | Path) -> dict[str, dict]:
     """Read a declaration file and return its ``channels`` mapping.
 
