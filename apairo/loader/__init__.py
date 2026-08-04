@@ -88,6 +88,6 @@ def loads_timestamps(keys: list, files: dict) -> dict:
 
 
 def load_profile(profile_path: str | Path) -> dict:
-    """Load a YAML loader-profile file."""
+    """Load a YAML loader-profile file (an empty file reads as ``{}``)."""
     with open(profile_path) as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}

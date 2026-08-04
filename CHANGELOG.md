@@ -24,6 +24,11 @@ All notable changes to apairo are documented here. The format is based on
   same way.
 
 ### Fixed
+- **An empty `channels.yaml` no longer crashes every command.** A truncated or
+  stray whitespace-only sidecar (seen on a shared vault) made `yaml.safe_load`
+  return `None` and every reader die on `.get` -- `read_config` and
+  `load_profile` now read it as `{}`, so `status`/`check` report the malformed
+  file as an issue instead of a traceback.
 - **`apairo status` now sees what loading sees.** The in-tree declaration is
   merged over the registry before rendering, and a channel enumerated by a
   `key`/`order` regex counts only the loader-extension files whose stem

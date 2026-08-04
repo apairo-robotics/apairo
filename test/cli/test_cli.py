@@ -800,3 +800,15 @@ def test_declare_root_with_output(raw_root, tmp_path, capsys):
     assert _run(["declare", str(raw_root), "-o", str(out)]) == 0
     text = out.read_text()
     assert "lidar:" in text and "imu:" in text
+
+
+def test_empty_channels_yaml_does_not_crash_status(tmp_path, capsys):
+    # A truncated/stray 1-byte channels.yaml (seen on a shared vault) must be
+    # reported as an issue, not crash every command with an AttributeError.
+    seq = tmp_path / "seq"
+    _make_seq(seq, 2)
+    (seq / ".apairo").mkdir()
+    (seq / ".apairo" / "channels.yaml").write_text("\n")
+    assert _run(["status", str(seq), "--json"]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert any("version" in i.lower() for i in status["issues"])

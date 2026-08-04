@@ -233,8 +233,11 @@ def config_exists(root_dir: Path) -> bool:
 
 
 def read_config(root_dir: Path) -> dict:
+    """Read ``.apairo/channels.yaml``. An empty or whitespace-only file (a
+    truncated write, a stray touch) reads as ``{}`` -- callers get a dict, and
+    ``verify_config`` flags the missing ``version``/``channels`` fields."""
     with open(_channels_path(root_dir)) as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}
 
 
 def write_config(root_dir: Path, config: dict) -> None:
