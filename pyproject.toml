@@ -43,13 +43,15 @@ Issues = "https://github.com/apairo-robotics/apairo/issues"
 vision = ["Pillow"]
 zarr = ["zarr>=3.0"]
 bench = ["matplotlib"]
+# Pinned exactly: CI and every contributor must see the same lint/type/zarr
+# verdict. Bump deliberately, never by accident of install date.
 dev = [
     "pytest",
     "pytest-cov",
     "Pillow",
-    "zarr>=3.0",
+    "zarr==3.3.0",
     "ruff==0.15.20",
-    "mypy",
+    "mypy==2.3.0",
     "types-PyYAML",
 ]
 docs = [
