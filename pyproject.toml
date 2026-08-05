@@ -43,13 +43,15 @@ Issues = "https://github.com/apairo-robotics/apairo/issues"
 vision = ["Pillow"]
 zarr = ["zarr>=3.0"]
 bench = ["matplotlib"]
-# Pinned exactly: CI and every contributor must see the same lint/type/zarr
-# verdict. Bump deliberately, never by accident of install date.
+# Bounded deliberately, so the lint/type/zarr verdict never turns on an
+# install date.  zarr stays a range because it drops old Pythons faster than
+# we do -- 3.11 tops out at 3.1.x while 3.12+ gets 3.3.x; the suite is
+# verified on both, and the ceiling stops the next minor landing unreviewed.
 dev = [
     "pytest",
     "pytest-cov",
     "Pillow",
-    "zarr==3.3.0",
+    "zarr>=3.1,<3.4",
     "ruff==0.15.20",
     "mypy==2.3.0",
     "types-PyYAML",
