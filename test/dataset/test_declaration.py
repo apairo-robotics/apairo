@@ -185,22 +185,37 @@ def test_no_declaration_is_ever_written(tmp_path):
     assert not (root / "apairo.yaml").exists()
 
 
+def _writable(directory):
+    """Whether *directory* still takes new entries after being chmod'd."""
+    probe = directory / ".write-probe"
+    try:
+        probe.touch()
+    except OSError:
+        return False
+    probe.unlink()
+    return True
+
+
 def test_readonly_tree_loads_with_external_declare(tmp_path):
     # Zero writes: no .apairo can be written (read-only mount), the
     # declaration lives outside the tree, loading still works in full.
     root = _make_seq(tmp_path / "seq")
     external = _declare(tmp_path / "eval.yaml", {"lidar": {"alias": "cloud"}})
     ro = stat.S_IRUSR | stat.S_IXUSR
-    os.chmod(root, ro)
     os.chmod(root / "lidar", ro)
+    os.chmod(root, ro)
     try:
+        # Windows honours no read-only bit on directories, and root ignores
+        # the one on files -- neither can host the mount this test describes.
+        if _writable(root):
+            pytest.skip("this platform/user cannot make a directory read-only")
         ds = RawDataset(root, declare=external)
         assert ds.keys == ["cloud"]
         assert not (root / CONFIG_DIR).exists()
     finally:
         rw = ro | stat.S_IWUSR
-        os.chmod(root / "lidar", rw)
         os.chmod(root, rw)
+        os.chmod(root / "lidar", rw)
 
 
 # ─────────────────────────────── directory ──────────────────────────────────
