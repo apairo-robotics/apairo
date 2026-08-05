@@ -829,6 +829,7 @@ def cmd_declare(args: argparse.Namespace) -> int:
         print(f"'{path}' has no recognizable channels or sequences.", file=sys.stderr)
         return 1
 
+    out: Path | None
     if args.output is None:
         out = path / DECLARATION_FILE
     else:

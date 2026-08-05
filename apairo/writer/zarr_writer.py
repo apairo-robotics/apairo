@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
@@ -48,8 +49,9 @@ class ZarrWriter:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         if self._chunks is None and self._compression is None:
-            # np.ndarray satisfies zarr's NDArrayLike protocol at runtime.
-            zarr.save_array(str(path), data)  # type: ignore[arg-type]
+            # np.ndarray satisfies zarr's NDArrayLike protocol at runtime, but
+            # only recent zarr releases spell that in their annotations.
+            zarr.save_array(str(path), cast(Any, data))
             return
 
         compressor = None
@@ -62,12 +64,12 @@ class ZarrWriter:
                 shuffle=Blosc.SHUFFLE,
             )
 
-        arr = zarr.create(
+        arr = zarr.create_array(
             store=zarr.storage.LocalStore(str(path)),
             shape=data.shape,
-            chunks=self._chunks or True,
+            chunks=self._chunks or "auto",
             dtype=data.dtype,
-            compressor=compressor,
+            compressors=compressor,
             overwrite=True,
             zarr_format=2,
         )
