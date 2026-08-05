@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -106,6 +107,12 @@ class WindowView(AbstractDataset):
     @property
     def is_synchronous(self) -> bool:
         return self._parent.is_synchronous
+
+    @property
+    def root_dir(self) -> Path | None:
+        """Delegates to the parent's ``root_dir`` (or ``None`` if it has
+        none), so ``.calibration`` still resolves on a windowed view."""
+        return getattr(self._parent, "root_dir", None)
 
     @property
     def frame_sequence_ids(self) -> np.ndarray:

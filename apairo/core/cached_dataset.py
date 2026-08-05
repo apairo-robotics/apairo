@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from pathlib import Path
 
 from apairo.core.abstract_dataset import AbstractDataset
 from apairo.core.sample import Sample
@@ -53,10 +54,18 @@ class CachedDataset(AbstractDataset):
         self._frame_stems = getattr(parent, "frame_stems", None)
         self._frame_channel_ids = getattr(parent, "frame_channel_ids", None)
         self.timestamps = getattr(parent, "timestamps", None)
+        # Also snapshotted, not delegated -- the parent isn't kept (that's the
+        # whole point of caching), so root_dir must be captured here or
+        # .calibration silently returns empty on every cached dataset.
+        self._root_dir = getattr(parent, "root_dir", None)
 
     @property
     def is_synchronous(self) -> bool:
         return self._synchronous
+
+    @property
+    def root_dir(self) -> Path | None:
+        return self._root_dir
 
     @property
     def frame_sequence_ids(self):

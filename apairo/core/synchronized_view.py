@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import warnings
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -273,6 +274,14 @@ class SynchronizedView(AbstractDataset):
         return idx, valid
 
     # ------------------------------------------------------------- properties
+
+    @property
+    def root_dir(self) -> Path | None:
+        """Delegates to the parent's ``root_dir`` (or ``None`` if it has
+        none), so ``.calibration`` still resolves on a synchronized view --
+        without this, every synchronized view read an empty ``Calibration``
+        regardless of what its parent exposed."""
+        return getattr(self._parent, "root_dir", None)
 
     @property
     def reference(self) -> str | None:
