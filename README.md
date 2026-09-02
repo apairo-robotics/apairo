@@ -8,6 +8,7 @@
   <a href="https://github.com/apairo-robotics/apairo/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/apairo-robotics/apairo/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/apairo-robotics/apairo/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/pypi/l/apairo.svg"></a>
   <a href="https://apairo-robotics.github.io/apairo/"><img alt="Docs" src="https://img.shields.io/badge/docs-online-success.svg"></a>
+  <a href="https://doi.org/10.5281/zenodo.22248230"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.22248230.svg"></a>
   <a href="https://apairo-robotics.github.io/"><img alt="Website" src="https://img.shields.io/badge/website-apairo--robotics-blue.svg"></a>
 </p>
 
