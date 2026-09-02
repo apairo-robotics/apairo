@@ -15,8 +15,7 @@ authors:
     given-names: Augustin
     email: augustin.bresset@ensta.fr
     affiliation: "U2IS, ENSTA, Institut Polytechnique de Paris"
-    # TODO: add your ORCID here -- JOSS asks for it at submission.
-    # orcid: "https://orcid.org/0000-0000-0000-0000"
+    orcid: "https://orcid.org/0009-0001-1994-7136"
 repository-code: "https://github.com/apairo-robotics/apairo"
 url: "https://apairo-robotics.github.io/apairo/"
 license: MIT
