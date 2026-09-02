@@ -7,6 +7,8 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-02
+
 ### Added
 - **A dataset root's `apairo.yaml` applies to every sequence.** The root file
   is the dataset-wide contract -- typically the union of the sequences'
@@ -22,6 +24,10 @@ All notable changes to apairo are documented here. The format is based on
   by a sequence -- `RawDataset(root/"seq")`, `apairo studio root/seq` -- reads
   the same contract as entering by the root; `status` and `init` inherit the
   same way.
+- **`CITATION.cff`.** The repository declares how it wants to be cited, so
+  GitHub shows a "Cite this repository" box and reference managers read the
+  entry directly. The DOI field is filled from the Zenodo archive of this
+  release.
 
 ### Fixed
 - **An empty `channels.yaml` no longer crashes every command.** A truncated or
@@ -660,7 +666,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/apairo-robotics/apairo/compare/v0.6.2...v0.7.0
 [0.5.0]: https://github.com/apairo-robotics/apairo/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/apairo-robotics/apairo/compare/v0.3.0...v0.4.0

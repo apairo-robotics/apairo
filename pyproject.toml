@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apairo"
-version = "0.7.0"
+version = "0.8.0"
 description = "Unified Python loader for robotics sensor datasets -- one API across synchronous and asynchronous layouts"
 readme = "README.md"
 authors = [

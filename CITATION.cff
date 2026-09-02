@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use apairo in your research, please cite it as below."
+title: "apairo: a unified loader for robotics sensor datasets"
+abstract: >-
+  apairo gives synchronous and asynchronous robotics sensor datasets one Python
+  API. Each channel is described by three declarative contracts -- how its
+  frames are ordered, how one frame is decoded, and what each frame's alignment
+  key is -- so a dataset is read where it lies instead of being rewritten.
+  Filtering, channel selection, joining and resampling onto a reference clock
+  are lazy views that cost index arrays rather than copies, and every temporal
+  match reports which event backs it and how stale that event is.
+type: software
+authors:
+  - family-names: Bresset
+    given-names: Augustin
+    email: augustin.bresset@ensta.fr
+    affiliation: "U2IS, ENSTA, Institut Polytechnique de Paris"
+    # TODO: add your ORCID here -- JOSS asks for it at submission.
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+repository-code: "https://github.com/apairo-robotics/apairo"
+url: "https://apairo-robotics.github.io/apairo/"
+license: MIT
+version: 0.8.0
+date-released: "2026-09-02"
+keywords:
+  - robotics
+  - lidar
+  - point cloud
+  - dataset
+  - data loader
+  - temporal alignment
+  - traversability
+# TODO: uncomment once the Zenodo archive exists, and keep the *concept* DOI
+# (the one that always resolves to the latest release), not the version DOI.
+# identifiers:
+#   - type: doi
+#     value: "10.5281/zenodo.XXXXXXX"
+#     description: "Concept DOI -- resolves to the latest archived release"
