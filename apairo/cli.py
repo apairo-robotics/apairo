@@ -174,6 +174,75 @@ def _table_facts(cdir: Path, meta: dict):
     return ts, len(table), list(table.shape), str(table.array.dtype)
 
 
+def _data_frame_count(cdir: Path, meta: dict) -> int | None:
+    """Frames a channel's loader enumerates, counted without reading the data:
+    the default per-frame listing, a suffixed variant's files, a stacked array's
+    rows (mmap) or a table's rows. ``None`` when it is not cheaply known."""
+    from apairo.core.naming import suffixed_frame_files
+    from apairo.loader import str_to_loader
+
+    loader = meta.get("loader")
+    try:
+        if loader == "npy":
+            if meta.get("array_file"):
+                target: Path | None = cdir / str(meta["array_file"])
+            else:
+                target = next(iter(sorted(cdir.glob("*.npy"))), None)
+            return None if target is None else len(np.load(target, mmap_mode="r"))
+        if loader == "csv":
+            table = _table_facts(cdir, meta)
+            return table[1] if table is not None else None
+        if meta.get("suffix"):
+            return len(suffixed_frame_files(cdir, str(meta["suffix"])))
+        if loader in {"npys", "bin", "img", "pcd"}:
+            return len(str_to_loader[loader](str(cdir)))
+    except Exception:
+        return None
+    return None
+
+
+def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
+    """A channel with no clock at all, or whose clock -- its own
+    ``timestamps.txt``, or the one it borrows with ``timestamps_from`` -- does not
+    hold one timestamp per frame. Loading refuses both; ``check`` says so before
+    anyone tries. A declarative ``key`` is left to loading, which parses it."""
+    alias_to_real = {m.get("alias"): k for k, m in cfg.items() if isinstance(m, dict)}
+    issues: list[str] = []
+    for ch, meta in sorted(cfg.items()):
+        if not isinstance(meta, dict) or meta.get("key"):
+            continue
+        cdir = seq_dir / str(meta.get("directory", ch))
+        if not cdir.is_dir():
+            continue
+        own = _read_timestamps(cdir)
+        src = meta.get("timestamps_from")
+        if own is not None:
+            clock, where = own, f"{cdir.name}/timestamps.txt"
+        elif src is not None:
+            src_real = alias_to_real.get(src, src)
+            found = cfg.get(src_real)
+            src_meta: dict = found if isinstance(found, dict) else {}
+            clock = _read_timestamps(seq_dir / str(src_meta.get("directory", src_real)))
+            where = f"borrowed from '{src}' via timestamps_from"
+        else:
+            issues.append(
+                f"channel '{ch}': no clock -- no timestamps.txt, `key` or "
+                f"`timestamps_from`; loading refuses it (`apairo declare` suggests "
+                f"a `key` when the filenames carry one)"
+            )
+            continue
+        if clock is None:
+            continue
+        n_frames = _data_frame_count(cdir, meta)
+        if n_frames is not None and n_frames != len(clock):
+            issues.append(
+                f"channel '{ch}': {n_frames} frame(s) but {len(clock)} timestamp(s) "
+                f"in its clock ({where}) -- every frame needs exactly one; loading "
+                f"refuses this channel"
+            )
+    return issues
+
+
 def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
     """Per-channel facts for the channel directory ``seq_dir/channel``.
 
@@ -268,6 +337,7 @@ def _seq_info(seq_dir: Path) -> dict:
         else ["not initialized -- run `apairo init`"]
     )
     issues += verify_declaration(declaration_path(seq_dir), seq_dir)
+    issues += _clock_coverage_issues(seq_dir, cfg)
     return {
         "channels": channels,
         "untracked": untracked,

@@ -5,12 +5,16 @@ wrong in both directions: a short ``timestamps.txt`` silently dropped the
 trailing frames (a gap in the middle shifted every later frame onto the wrong
 timestamp), and a long one -- or a ``timestamps_from`` borrowed from a channel
 with more frames -- built fine and failed later with a bare ``IndexError``.
-Loading now refuses at construction, naming both counts.
+Loading now refuses at construction, naming both counts, and ``check`` reports
+the same thing without loading anything.
 """
+
+import json
 
 import numpy as np
 import pytest
 
+from apairo.cli import main
 from apairo.core.config import write_config
 from apairo.dataset.raw import RawDataset
 
@@ -76,3 +80,42 @@ def test_a_borrowed_clock_that_matches_still_loads(tmp_path):
     ds = RawDataset(tmp_path, keys=["lidar", "trav"])
     assert len(ds) == 8
     np.testing.assert_array_equal(ds.timestamps["trav"], ds.timestamps["lidar"])
+
+
+def _check(path, capsys):
+    try:
+        code = main(["check", str(path), "--json"])
+    except SystemExit as exc:
+        code = exc.code
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_check_reports_clock_mismatches_without_loading(tmp_path, capsys):
+    _channel(tmp_path, "lidar", 46, 46)
+    _channel(tmp_path, "trav", 45)
+    _channel(tmp_path, "camera", 6, 5)
+    _config(tmp_path, lidar={}, trav={"timestamps_from": "lidar"}, camera={})
+    code, out = _check(tmp_path, capsys)
+    assert code == 1
+    issues = "\n".join(out["issues"])
+    assert "channel 'camera': 6 frame(s) but 5 timestamp(s)" in issues
+    assert "channel 'trav': 45 frame(s) but 46 timestamp(s)" in issues
+    assert not any(i.startswith("channel 'lidar'") for i in out["issues"])
+
+
+def test_check_reports_a_channel_with_no_clock(tmp_path, capsys):
+    _channel(tmp_path, "scans", 3)
+    _config(tmp_path, scans={})
+    code, out = _check(tmp_path, capsys)
+    assert code == 1
+    assert any("channel 'scans': no clock" in i for i in out["issues"])
+
+
+def test_check_leaves_a_declared_key_to_loading(tmp_path, capsys):
+    d = tmp_path / "camera"
+    d.mkdir()
+    for t in (100, 200):
+        np.save(d / f"{t}.npy", np.zeros(3, np.float32))
+    _config(tmp_path, camera={"key": {"name": r"(\d+)", "units": ["ms"]}})
+    code, out = _check(tmp_path, capsys)
+    assert code == 0, out["issues"]
