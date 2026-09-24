@@ -151,7 +151,7 @@ def test_verify_config_flags_array_file_on_non_npy_loader(tmp_path):
         },
     )
     issues = verify_config(seq)
-    assert any("only meaningful for the 'npy' loader" in i for i in issues)
+    assert any("only meaningful for the 'npy' and 'csv' loaders" in i for i in issues)
 
 
 # ─────────────────────────────── status (cli) ────────────────────────────────

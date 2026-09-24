@@ -128,7 +128,8 @@ def test_verify_config_rejects_fields_on_another_loader(tmp_path):
         },
     )
     assert any(
-        "only meaningful for the 'pcd' loader" in i for i in verify_config(tmp_path)
+        "only meaningful for the 'pcd' and 'csv' loaders" in i
+        for i in verify_config(tmp_path)
     )
 
 

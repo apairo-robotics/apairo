@@ -6,6 +6,7 @@ import numpy as np
 import yaml
 
 from .bin_loader import BINLoader
+from .csv_loader import CSVLoader
 from .img_loader import IMGLoader
 from .npy_loader import NPYLoader
 from .npys_loader import NPYSLoader
@@ -21,6 +22,7 @@ str_to_loader = {
     "bin": BINLoader,
     "zarr": ZarrLoader,
     "pcd": PCDLoader,
+    "csv": CSVLoader,
 }
 
 
@@ -48,6 +50,7 @@ __all__ = [
     "NPYLoader",
     "NPYSLoader",
     "BINLoader",
+    "CSVLoader",
     "TXTLoader",
     "ZarrLoader",
     "TarImageLoader",

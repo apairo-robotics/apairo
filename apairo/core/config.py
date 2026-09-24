@@ -17,7 +17,9 @@ DECLARATION_FILE = "apairo.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
 # Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
-KNOWN_LOADERS: frozenset[str] = frozenset({"npy", "npys", "bin", "img", "zarr", "pcd"})
+KNOWN_LOADERS: frozenset[str] = frozenset(
+    {"npy", "npys", "bin", "img", "zarr", "pcd", "csv"}
+)
 
 # Time units for a filename-parsed key's `units:` sugar (each maps to a factor in
 # seconds; `units` compiles to `scale`). See docs/datasets/bring-your-own-dataset.md.
@@ -119,7 +121,19 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
     contract). Returns issue strings; never raises."""
     out: list[str] = []
     loader = meta.get("loader")
-    if (meta.get("key") is not None or meta.get("order") is not None) and loader in {
+    spec = meta.get("key")
+    # A table's clock is one of its columns: `key: {column}` (or a sidecar
+    # `file`) is its form, while a filename regex or an `order` has no files to
+    # read -- the same rule as for the other stacked loaders.
+    column_key = isinstance(spec, dict) and "column" in spec
+    if loader == "csv":
+        if (isinstance(spec, dict) and "name" in spec) or meta.get("order") is not None:
+            out.append(
+                f"channel '{key}': a 'csv' table has no per-frame filenames -- give "
+                f"its clock as 'key: {{column: ...}}' (or 'key: {{file: ...}}'), "
+                f"not a filename regex or an 'order'"
+            )
+    elif (spec is not None or meta.get("order") is not None) and loader in {
         "npy",
         "zarr",
         "txt_rows",
@@ -128,16 +142,51 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
             f"channel '{key}': 'key'/'order' needs a per-frame loader (npys, img, "
             f"bin), not the stacked '{loader}' loader"
         )
-    spec = meta.get("key")
+    if column_key and loader is not None and loader != "csv":
+        out.append(
+            f"channel '{key}': 'key.column' reads the clock from a table column and "
+            f"needs the 'csv' loader (got '{loader}')"
+        )
     if spec is not None:
         if not isinstance(spec, dict):
             out.append(f"channel '{key}': 'key' is not a mapping")
         else:
             has_name, has_file = "name" in spec, "file" in spec
-            if has_name == has_file:  # both, or neither
+            if has_name + has_file + column_key != 1:
                 out.append(
-                    f"channel '{key}': 'key' must specify exactly one of 'name' or 'file'"
+                    f"channel '{key}': 'key' must specify exactly one of 'name', "
+                    f"'file' or 'column'"
                 )
+            if column_key:
+                column = spec["column"]
+                if isinstance(column, bool) or not (
+                    (isinstance(column, int) and column >= 0)
+                    or (isinstance(column, str) and column)
+                ):
+                    out.append(
+                        f"channel '{key}': 'key.column' must be a column index "
+                        f"(>= 0) or a column name, got {column!r}"
+                    )
+                n_unit = spec.get("units", spec.get("scale"))
+                if spec.get("units") is not None and spec.get("scale") is not None:
+                    out.append(
+                        f"channel '{key}': 'key' has both 'units' and 'scale' -- "
+                        f"'units' is sugar for 'scale', give one"
+                    )
+                elif n_unit is not None and not (
+                    isinstance(n_unit, list) and len(n_unit) == 1
+                ):
+                    out.append(
+                        f"channel '{key}': a column key takes a one-entry "
+                        f"'units'/'scale' list, got {n_unit!r}"
+                    )
+                elif (
+                    spec.get("units") is not None and spec["units"][0] not in KEY_UNITS
+                ):
+                    out.append(
+                        f"channel '{key}': 'key.units' has unknown unit(s) "
+                        f"{spec['units']}; known: {sorted(KEY_UNITS)}"
+                    )
             if has_name:
                 groups = _regex_groups(spec["name"])
                 scale = spec.get("scale")
@@ -1019,10 +1068,10 @@ def verify_config(root_dir: str | Path) -> list[str]:
 
         array_file = meta.get("array_file")
         if array_file is not None:
-            if loader is not None and loader != "npy":
+            if loader is not None and loader not in {"npy", "csv"}:
                 issues.append(
                     f"Channel '{key}': 'array_file' selects a stacked array and is "
-                    f"only meaningful for the 'npy' loader (got '{loader}')"
+                    f"only meaningful for the 'npy' and 'csv' loaders (got '{loader}')"
                 )
             elif not (storage_dir / str(array_file)).is_file():
                 issues.append(
@@ -1032,10 +1081,10 @@ def verify_config(root_dir: str | Path) -> list[str]:
 
         fields = meta.get("fields")
         if fields is not None:
-            if loader is not None and loader != "pcd":
+            if loader is not None and loader not in {"pcd", "csv"}:
                 issues.append(
-                    f"Channel '{key}': 'fields' declares a PCD field contract and "
-                    f"is only meaningful for the 'pcd' loader (got '{loader}')"
+                    f"Channel '{key}': 'fields' declares a field contract and is "
+                    f"only meaningful for the 'pcd' and 'csv' loaders (got '{loader}')"
                 )
             elif not (
                 isinstance(fields, list)

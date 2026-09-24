@@ -108,3 +108,44 @@ def parse_filename_key(
                 f"{label}: non-numeric key field in '{name}' (regex {pattern!r}): {exc}"
             ) from exc
     return out
+
+
+def parse_column_key(
+    tokens: list[str], spec: dict, *, label: str = "channel"
+) -> np.ndarray:
+    """One key per table row, from the channel's ``key: {column: ...}`` spec.
+
+    *tokens* are the key column's cells, as read (a :class:`CSVLoader`'s
+    ``key_tokens``). With ``units: [<u>]`` or ``scale: [<s>]`` each cell is
+    multiplied into seconds; an integer cell is converted exactly before the
+    multiplication, so a nanosecond epoch does not round twice.
+    """
+    scale = spec.get("scale")
+    units = spec.get("units")
+    if units is not None:
+        if scale is not None:
+            raise ValueError(
+                f"{label}: key has both 'units' and 'scale' -- 'units' is sugar "
+                f"for 'scale', give one."
+            )
+        try:
+            scale = [KEY_UNITS[u] for u in units]
+        except (KeyError, TypeError) as exc:
+            raise ValueError(
+                f"{label}: unknown key unit in {units!r}; known: {sorted(KEY_UNITS)}."
+            ) from exc
+    if scale is not None and len(scale) != 1:
+        raise ValueError(
+            f"{label}: a column key takes one 'units'/'scale' entry, got {len(scale)}."
+        )
+    factor = float(scale[0]) if scale is not None else 1.0
+    out = np.empty(len(tokens), dtype=float)
+    for i, token in enumerate(tokens):
+        try:
+            value = int(token) if token.lstrip("+-").isdigit() else float(token)
+        except ValueError as exc:
+            raise ValueError(
+                f"{label}: non-numeric key cell {token!r} in row {i}."
+            ) from exc
+        out[i] = value * factor
+    return out

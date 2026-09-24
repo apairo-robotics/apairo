@@ -147,6 +147,33 @@ def _keyed_frame_count(channel_dir: Path, meta: dict) -> int | None:
     )
 
 
+def _table_facts(cdir: Path, meta: dict):
+    """Clock, row count, row shape and dtype of a ``csv`` channel. Its frames are
+    rows, not files, and its clock is a column -- so read the table (text, and
+    small next to the sensor data it indexes). ``None`` when it does not parse;
+    ``check`` reports why."""
+    from apairo.core.keys import parse_column_key
+    from apairo.loader import CSVLoader
+
+    key = meta.get("key")
+    spec: dict = key if isinstance(key, dict) else {}
+    try:
+        table = CSVLoader(
+            cdir,
+            file=meta.get("array_file"),
+            key_column=spec.get("column"),
+            fields=meta.get("fields"),
+        )
+        ts = (
+            parse_column_key(table.key_tokens, spec)
+            if table.key_tokens is not None
+            else _read_timestamps(cdir)
+        )
+    except Exception:
+        return None
+    return ts, len(table), list(table.shape), str(table.array.dtype)
+
+
 def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
     """Per-channel facts for the channel directory ``seq_dir/channel``.
 
@@ -169,13 +196,20 @@ def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
         cdir, loader, meta.get("array_file") if meta else None
     )
     keyed = _keyed_frame_count(cdir, meta) if meta and cdir.is_dir() else None
+    if loader == "csv" and meta and cdir.is_dir():
+        table = _table_facts(cdir, meta)
+        if table is not None:
+            ts, keyed, shape, dtype = table
+            rate, span = _rate_span(ts)
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,
         "transform": meta.get("transform") if meta else None,
         "alias": meta.get("alias") if meta else None,
         "loader": loader,
-        "frames": len(ts)
+        "frames": keyed
+        if loader == "csv" and keyed is not None
+        else len(ts)
         if ts is not None
         else keyed
         if keyed is not None

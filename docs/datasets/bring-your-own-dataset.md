@@ -2,7 +2,7 @@
 
 apairo reads a dataset as a set of **channels** — one directory per channel,
 holding per-frame files (or a single stacked file) in a format the loader
-registry understands (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`). Turning *your*
+registry understands (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`). Turning *your*
 directories into a loadable dataset comes down to three small questions per
 channel. Two have always been implicit; this page makes all three explicit — and
 shows how the **`key`** and **`order`** fields let a channel carry its own
@@ -24,7 +24,7 @@ so a plain directory of zero-padded files needs no configuration at all.
 | Contract | Question it answers | Built-in default |
 |---|---|---|
 | **order** | how are this channel's frames listed and ordered? | files matching the frame-file convention (`is_frame_file`), sorted numerically |
-| **load** | how is one frame decoded to a numpy array? | the loader named in `channels.yaml` (`npy` / `npys` / `bin` / `img` / `zarr` / `pcd`) |
+| **load** | how is one frame decoded to a numpy array? | the loader named in `channels.yaml` (`npy` / `npys` / `bin` / `img` / `zarr` / `pcd` / `csv`) |
 | **key** | what is each frame's alignment key — the value `synchronize()` matches on? | the channel's own `timestamps.txt`, else a borrowed one (`timestamps_from`), else the frame's position |
 
 `order` and `load` were always there; `key` used to be hardwired to
@@ -77,7 +77,7 @@ Per-field precedence: `declare=` > `<seq>/apairo.yaml` > `<root>/apairo.yaml` > 
 
 ## The `key` field
 
-Add `key:` to a channel entry (in `apairo.yaml`, or the registry). Two forms.
+Add `key:` to a channel entry (in `apairo.yaml`, or the registry). Three forms.
 
 ### `key: {name: <regex>}` — parse the key from the filename
 
@@ -150,6 +150,40 @@ line, in frame order. This generalizes `timestamps.txt` to any filename:
 ```yaml
 imu: {loader: npy, key: {file: stamps.txt}}
 ```
+
+### `key: {column: <index or name>}` — read the key from a table column
+
+A `csv` channel is one delimited text table, one row per frame — the shape of
+IMU logs and ground-truth trajectories in most SLAM datasets. Its clock is one of
+its columns: name it by index or by header name, with an optional one-entry
+`units` (or `scale`). The key column is kept out of the frame data.
+
+```yaml
+imu0: {loader: csv, key: {column: timestamp, units: [ns]}}   # EuRoC imu0/data.csv
+```
+
+The table is the directory's single `.csv`, or the file named by `array_file`
+(required for a `.txt` table, or when several tables share a directory). Rows
+may be comma-, tab- or whitespace-separated; `#` lines are comments. Column
+names come from a non-numeric first row, else from the last comment line when it
+has one name per column — EuRoC's `#timestamp [ns],w_RS_S_x [rad s^-1],...` and
+TUM's `# timestamp tx ty tz qx qy qz qw` both qualify. A trailing `[unit]` is
+dropped from a name (`w_RS_S_x`). `fields: [...]` keeps only the named columns, in
+that order.
+
+A table that sits beside the channel directories rather than in one — TUM RGB-D's
+`groundtruth.txt` at the sequence root — is reached with `directory: "."`:
+
+```yaml
+# TUM RGB-D: rgb/1305031102.175304.png, depth/..., groundtruth.txt
+rgb:         {loader: img, key: {name: '(\d+)\.(\d+)'}}
+depth:       {loader: img, key: {name: '(\d+)\.(\d+)'}}
+groundtruth: {loader: csv, directory: ".", array_file: groundtruth.txt,
+              key: {column: timestamp}}
+```
+
+`ds.synchronize(reference="rgb", method="nearest", tolerance=0.02)` then does
+what TUM's `associate.py` does, and reports each match's offset.
 
 ---
 

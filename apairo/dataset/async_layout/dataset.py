@@ -53,6 +53,8 @@ def _detect_loader(channel_dir: Path) -> str | None:
     if npy_files:
         # Multiple per-frame files → npys; single file → npy.
         return "npys" if len(npy_files) > 1 else "npy"
+    if ".csv" in exts:
+        return "csv"
     return None
 
 
@@ -297,6 +299,14 @@ class AsyncLayoutDataset(AbstractDataset):
             source_public = self._public(meta.get("directory", real))
             if source_public in self._files:
                 self._files[public] = self._files[source_public]
+            elif meta.get("array_file") and meta.get("directory"):
+                # A table beside the channel directories rather than in one (TUM's
+                # groundtruth.txt at the sequence root: `directory: "."`).
+                resolved = directory / safe_config_name(
+                    str(meta["directory"]), label=f"channel '{real}' directory"
+                )
+                if resolved.is_dir():
+                    self._files[public] = str(resolved)
 
         keys = [self._resolve_key(k) for k in keys]
         if keys_defaulted:
@@ -347,6 +357,7 @@ class AsyncLayoutDataset(AbstractDataset):
         * ``.png`` / ``.jpg`` / … → ``img``
         * multiple ``.npy`` files → ``npys``
         * single ``.npy`` file → ``npy``
+        * a ``.csv`` table → ``csv`` (one row per frame)
 
         For ambiguous cases (e.g. a single-frame ``.npy`` that is actually
         per-frame), call :func:`~apairo.core.config.register_raw_channel`
@@ -501,7 +512,18 @@ class AsyncLayoutDataset(AbstractDataset):
             extra: dict = {}
             if self._profile[key] == "pcd" and key in self._fields_of:
                 extra["fields"] = self._fields_of[key]
-            if order_provider is not None:  # subclass callable: directory -> filenames
+            if self._profile[key] == "csv":
+                # A table: one row per frame, its clock (if declared) in a column.
+                spec = self._key_spec.get(key, {})
+                loaders[key] = loader_cls(
+                    directory,
+                    file=self._array_file_of.get(key),
+                    key_column=spec.get("column"),
+                    fields=self._fields_of.get(key),
+                )
+            elif (
+                order_provider is not None
+            ):  # subclass callable: directory -> filenames
                 loaders[key] = loader_cls(
                     directory, files=list(order_provider(directory)), **extra
                 )
@@ -697,10 +719,21 @@ class AsyncLayoutDataset(AbstractDataset):
           else ``float('.'.join(groups))`` (one group = an index; two = ``<int>.<frac>``).
         - ``{file: '<name>'}``: read the keys from a named sidecar in the channel
           directory (one float per line -- a differently-named ``timestamps.txt``).
+        - ``{column: <index or name>}``: a ``csv`` table's clock column, with an
+          optional one-entry ``units``/``scale``.
         """
-        from apairo.core.keys import parse_filename_key
+        from apairo.core.keys import parse_column_key, parse_filename_key
 
         spec = self._key_spec[key]
+        if "column" in spec:
+            tokens = getattr(self.loaders[key], "key_tokens", None)
+            if tokens is None:
+                raise ValueError(
+                    f"Channel '{key}' declares a column key but its loader "
+                    f"('{self._profile[key]}') is not a table -- column keys need "
+                    f"the 'csv' loader."
+                )
+            return parse_column_key(tokens, spec, label=f"Channel '{key}'")
         directory = Path(self._files[key])
         files = getattr(self.loaders[key], "files", None)
         if "file" not in spec and files is None:

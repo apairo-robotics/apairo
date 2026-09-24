@@ -7,6 +7,21 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`csv` loader: a text table is a channel, its clock a column.** IMU logs
+  and ground-truth trajectories in most SLAM datasets are one table with one
+  row per frame and the timestamp in a column -- EuRoC's `imu0/data.csv`, TUM
+  RGB-D's `groundtruth.txt`. `loader: csv` reads it in place (comma, tab or
+  whitespace separated, `#` comments, names from a header row or from EuRoC /
+  TUM style header comments, trailing `[unit]` dropped), and the new
+  `key: {column: <index or name>, units: [ns]}` form takes the clock from a
+  column, keeping it out of the frame data. An integer nanosecond stamp is
+  converted exactly before scaling. `fields` selects columns by name and
+  `array_file` names the table (a `.txt`, or one of several); `directory: "."`
+  reaches a table at the sequence root. `init` detects a `.csv` directory,
+  `status` reports its rows, rate and width, and `check` validates the column
+  key.
+
 ## [0.8.0] - 2026-09-02
 
 ### Added
