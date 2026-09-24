@@ -22,6 +22,16 @@ All notable changes to apairo are documented here. The format is based on
   `status` reports its rows, rate and width, and `check` validates the column
   key.
 
+### Fixed
+- **A clock must hold one timestamp per frame.** The timeline gives a channel
+  one slot per timestamp, and nothing checked that this matched its frames: a
+  `timestamps.txt` one line short silently dropped the last frame (a gap in
+  the middle shifted every later frame onto the wrong timestamp), while a long
+  one -- or a `timestamps_from` borrowed from a channel with more frames --
+  built fine and died later on a bare `IndexError`. Loading now refuses such a
+  channel at construction, naming both counts and where the clock came from.
+  Checked on every apairo dataset at hand before landing: none was affected.
+
 ## [0.8.0] - 2026-09-02
 
 ### Added

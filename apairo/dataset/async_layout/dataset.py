@@ -553,7 +553,7 @@ class AsyncLayoutDataset(AbstractDataset):
                 loaders[key] = loader_cls(directory, **extra)
         self.loaders: dict[str, AbstractLoader] = loaders
         self.timestamps: dict[str, np.ndarray] = self._collect_timestamps()
-        self._check_suffix_coverage()
+        self._check_clock_coverage()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
 
     def _enumerate(self, key: str, directory: str) -> list[str]:
@@ -624,12 +624,19 @@ class AsyncLayoutDataset(AbstractDataset):
             )
         return arr
 
-    def _check_suffix_coverage(self) -> None:
-        """A suffixed sub-channel borrows the base channel's clock (shared
-        directory), so the timeline gives it one slot per base frame. If its
-        ``*_<suffix>.npy`` files don't cover every base frame, ``_load`` would
-        index past the loader -- fail here, at construction, with a clear message
-        instead of a cryptic ``IndexError`` later."""
+    def _check_clock_coverage(self) -> None:
+        """Every channel's clock must hold exactly one timestamp per frame.
+
+        The timeline gives a channel one slot per timestamp, so a clock that does
+        not match the frames is wrong in both directions: a short clock silently
+        drops the trailing frames -- and a gap in the middle shifts every later
+        frame onto the wrong timestamp -- while a long one only surfaces as an
+        ``IndexError`` deep in ``_load``. Fail here, at construction, naming both
+        counts. (A declarative ``key`` or a provider is checked where it is
+        parsed, by ``_as_key_array``.)
+
+        A suffixed sub-channel borrows the base channel's clock (shared
+        directory): its ``*_<suffix>.npy`` files must cover every base frame."""
         for key in self._keys:
             suffix = self._suffix_of.get(key)
             if suffix is None:
@@ -660,6 +667,31 @@ class AsyncLayoutDataset(AbstractDataset):
                     f"in '{array_file}' but shares a clock of {n_clock} frame(s): a "
                     f"colocated array must cover every frame."
                 )
+        # Every other channel: its own timestamps.txt, or the clock it borrows
+        # with `timestamps_from`.
+        for key in self._keys:
+            if key in self._suffix_of or key in self._array_file_of:
+                continue
+            n_frames = len(self.loaders[key])
+            n_clock = len(self.timestamps[key])
+            if n_frames == n_clock:
+                continue
+            channel_dir = Path(self._files[key])
+            src = self._timestamp_aliases.get(key)
+            if src is not None and not (channel_dir / "timestamps.txt").exists():
+                raise ValueError(
+                    f"Channel '{key}' has {n_frames} frame(s) but borrows the clock "
+                    f"of '{src}' (timestamps_from), which has {n_clock} "
+                    f"timestamp(s): a borrowed clock must match the channel frame "
+                    f"for frame. If '{key}' is not captured on '{src}'s ticks, give "
+                    f"it its own clock (a timestamps.txt or a `key:`)."
+                )
+            raise ValueError(
+                f"Channel '{key}' has {n_frames} frame(s) but {n_clock} timestamp(s) "
+                f"in '{channel_dir.name}/timestamps.txt': every frame needs exactly "
+                f"one. Look for a missing or extra data file, or a truncated "
+                f"timestamps.txt."
+            )
 
     def _collect_timestamps(self) -> dict[str, np.ndarray]:
         """Timestamps per loaded key: its own clock (a ``_key_providers`` callable,

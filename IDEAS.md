@@ -54,6 +54,14 @@ Remaining, parked:
     alignment. On unequal counts (barakuda: 46 / 45 / 6 files per directory)
     positional pairing is silently wrong; the load must refuse loudly and name
     the counts, pointing at `key:` / `timestamps.txt` as the fix.
+
+    *Landed for the clocked case* (see CHANGELOG, "a clock must hold one
+    timestamp per frame"): a channel whose `timestamps.txt` or borrowed
+    `timestamps_from` clock does not match its frame count is refused at
+    construction, and `check` reports it -- and a channel with no clock at all
+    -- without loading. The positional default itself does not exist yet
+    (a clockless async channel is refused); when it lands, the same
+    count-naming refusal applies across channels.
   - **First slice: a bare channel directory is a single-channel dataset.**
     Data files directly inside the pointed directory (no channel subdirs) →
     one channel named after the directory, alphabetical/numeric order, no
