@@ -72,9 +72,9 @@ RawDataset - rgbd_dataset_freiburg1_xyz   (sequence)
 start       1305031098.38s   (span shown relative to this)
 channel        kind  loader  frames  rate      span         shape
 accelerometer  raw   csv     15158   498.8 Hz  0.00-30.39s  (3) float64
-depth          raw   img     798     -         -            ?
+depth          raw   img     798     30.0 Hz   3.78-30.37s  (480, 640) uint16
 groundtruth    raw   csv     3000    99.7 Hz   0.28-30.37s  (7) float64
-rgb            raw   img     798     -         -            ?
+rgb            raw   img     798     30.0 Hz   3.79-30.37s  (480, 640, 3) uint8
 events      19754
 issues      none
 ```

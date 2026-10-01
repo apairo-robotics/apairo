@@ -92,14 +92,71 @@ def _rate_span(ts):
     return rate, (t0, t1)
 
 
+def _first_frame_file(
+    channel_dir: Path, meta: dict | None, exts: set[str]
+) -> Path | None:
+    """The first per-frame data file of a channel: the loader-extension files,
+    narrowed to the stems its ``key``/``order`` regex matches when it has one."""
+    spec = (meta.get("order") or meta.get("key") or {}) if meta else {}
+    pattern = spec.get("name") if isinstance(spec, dict) else None
+    try:
+        regex = re.compile(pattern) if pattern else None
+    except re.error:
+        regex = None
+    names = sorted(
+        p.name
+        for p in channel_dir.iterdir()
+        if p.is_file()
+        and not p.name.startswith(".")
+        and p.suffix.lower() in exts
+        and (regex is None or regex.search(p.stem))
+    )
+    return channel_dir / names[0] if names else None
+
+
+def _frame_file_shape(channel_dir: Path, loader: str, meta: dict | None):
+    """Shape + dtype of a per-frame ``img`` / ``bin`` / ``pcd`` channel, read off
+    its first frame the way the loader would return it. One small read: an image
+    is decoded, a ``.bin`` is sized, a ``.pcd`` is parsed."""
+    first = _first_frame_file(channel_dir, meta, _HINT_EXTS[loader])
+    if first is None:
+        return None, None
+    try:
+        if loader == "img":
+            from PIL import Image
+
+            with Image.open(first) as img:
+                arr = np.array(img)
+            return list(arr.shape), str(arr.dtype)
+        if loader == "bin":  # headerless float32 (x, y, z, intensity)
+            return [first.stat().st_size // 16, 4], "float32"
+        from apairo.loader.pcd_loader import read_pcd
+
+        fields = meta.get("fields") if meta else None
+        cloud = (
+            read_pcd(str(first), fields=list(fields))
+            if fields
+            else read_pcd(str(first))
+        )
+        return list(cloud.shape), str(cloud.dtype)
+    except Exception:
+        return None, None
+
+
 def _channel_shape(
-    channel_dir: Path, loader: str | None, array_file: str | None = None
+    channel_dir: Path,
+    loader: str | None,
+    array_file: str | None = None,
+    meta: dict | None = None,
 ):
-    """Per-frame shape + dtype from a ``.npy`` header (mmap -- no data read).
+    """Per-frame shape + dtype: from a ``.npy`` header (mmap -- no data read), or
+    from the first frame of an ``img`` / ``bin`` / ``pcd`` channel.
 
     When *array_file* is given (a channel colocated with others in one directory),
     read that exact stacked file rather than the directory's first ``.npy``.
     """
+    if loader in {"img", "bin", "pcd"} and channel_dir.is_dir():
+        return _frame_file_shape(channel_dir, loader, meta)
     if array_file is not None:
         target = channel_dir / array_file
         npys = [target] if target.is_file() else []
@@ -145,6 +202,34 @@ def _keyed_frame_count(channel_dir: Path, meta: dict) -> int | None:
         and (exts is None or p.suffix.lower() in exts)
         and regex.search(p.stem)
     )
+
+
+def _keyed_clock(channel_dir: Path, meta: dict):
+    """The clock a declarative ``key`` gives a channel -- parsed from its
+    filenames (``{name: <regex>}``) or read from a named sidecar (``{file}``),
+    as loading does -- sorted, for the rate and the span. ``None`` when the
+    channel declares no such key or it does not parse; ``check`` says why."""
+    from apairo.core.keys import parse_filename_key
+
+    spec = meta.get("key")
+    if not isinstance(spec, dict) or not ("name" in spec or "file" in spec):
+        return None
+    try:
+        names: list[str] = []
+        if "name" in spec:
+            regex = re.compile(spec["name"])
+            exts = _HINT_EXTS.get(meta.get("loader", ""))
+            names = [
+                p.name
+                for p in channel_dir.iterdir()
+                if p.is_file()
+                and not p.name.startswith(".")
+                and (exts is None or p.suffix.lower() in exts)
+                and regex.search(p.stem)
+            ]
+        return np.sort(parse_filename_key(names, spec, directory=channel_dir))
+    except Exception:
+        return None
 
 
 def _table_facts(cdir: Path, meta: dict):
@@ -254,15 +339,22 @@ def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
 
 
 def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
-    """Per-channel facts for an explicit directory, all cheap: timestamps give
-    frames/rate/span, the .npy header gives shape/dtype (mmap). ``meta=None``
+    """Per-channel facts for an explicit directory, all cheap: the clock (a
+    timestamps.txt, or a declared ``key`` parsed from the filenames) gives
+    frames/rate/span, the .npy header or the first frame gives shape/dtype.
+    ``meta=None``
     marks an untracked channel.  Taking the directory explicitly lets a profiled
     dataset point this at a nested, resolved channel dir (canonical name != dir)."""
     ts = _read_timestamps(cdir)
+    if meta and cdir.is_dir():
+        # A declared key is the channel's clock, ahead of any timestamps.txt --
+        # the precedence loading uses.
+        keyed_ts = _keyed_clock(cdir, meta)
+        ts = keyed_ts if keyed_ts is not None else ts
     rate, span = _rate_span(ts)
     loader = meta.get("loader") if meta else _detect_loader(cdir)
     shape, dtype = _channel_shape(
-        cdir, loader, meta.get("array_file") if meta else None
+        cdir, loader, meta.get("array_file") if meta else None, meta
     )
     keyed = _keyed_frame_count(cdir, meta) if meta and cdir.is_dir() else None
     if loader == "csv" and meta and cdir.is_dir():

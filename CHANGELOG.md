@@ -53,6 +53,15 @@ All notable changes to apairo are documented here. The format is based on
   dataset that loads fine with `declare=` broken. Both now merge the file
   last, as loading does, so they describe what `RawDataset(..., declare=...)`
   sees. Found while checking the TUM declaration against a real sequence.
+- **`status` shows the rate and the shape of every channel.** A channel whose
+  clock is a declared `key` -- parsed from its filenames, or read from a named
+  sidecar -- printed `-` for its rate and span, because only a
+  `timestamps.txt` was read; `img`, `bin` and `pcd` channels printed `?` for
+  their shape, because only `.npy` headers were. The key is now parsed the
+  way loading parses it (and ahead of a `timestamps.txt`, as loading does),
+  and the shape and dtype come from the channel's first frame. Seen on the TUM
+  and EuRoC guides, whose image channels now read `30.0 Hz` and
+  `(480, 640, 3) uint8`.
 - **`check` sees what loading refuses.** It now reports, without loading
   anything, a channel whose clock does not match its frame count and a
   channel with no clock at all (no `timestamps.txt`, `key` or

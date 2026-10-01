@@ -74,8 +74,8 @@ RawDataset - mav0   (sequence)
 ----------------------------------------------------
 start       1403715271.71s   (span shown relative to this)
 channel                                    kind  loader  frames  rate      span          shape
-cam0                                       raw   img     2912    -         -             ?
-cam1                                       raw   img     2912    -         -             ?
+cam0                                       raw   img     2912    20.0 Hz   1.56-147.11s  (480, 752) uint8
+cam1                                       raw   img     2912    20.0 Hz   1.56-147.11s  (480, 752) uint8
 imu0                                       raw   csv     29120   200.0 Hz  1.56-147.15s  (6) float64
 groundtruth (state_groundtruth_estimate0)  raw   csv     28712   200.0 Hz  2.60-146.15s  (16) float64
 vicon0                                     raw   csv     14629   100.0 Hz  0.00-146.28s  (7) float64
