@@ -26,7 +26,7 @@ about a day, **M** a few days, **L** a week or more.
 | R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | planned |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | planned |
-| R4 | Schema and status hygiene | S | W42 (12 Oct) | planned |
+| R4 | Schema and status hygiene | S | W42 (12 Oct) | status part ✅ landed; schema part planned |
 | R5 | `hdf5` loader | L | W43–W44 (19 Oct) | planned |
 | R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
@@ -256,3 +256,7 @@ The public API and the `.apairo` format are declared stable at 1.0
   through `--declare`. EuRoC needed one declaration per hall rather than one
   file, because the tracker directory differs and an undeclared table has no
   clock.
+- **2026-10-01**: the `status` half of R4 landed early, because both guides
+  showed it: rate and span from a declared `key`, shape from the first frame
+  of `img` / `bin` / `pcd` channels. Left in R4: the `source` transform field
+  and the `has_timestamps` deprecation notice.
