@@ -23,7 +23,7 @@ about a day, **M** a few days, **L** a week or more.
 | — | `csv` loader, `key: {column}` | M | — | ✅ landed (`20f843e`), unreleased |
 | — | A clock must hold one timestamp per frame | S | — | ✅ landed (`b6b6eb0`), unreleased |
 | — | `check` reports what loading refuses | S | — | ✅ landed (`53300f9`), unreleased |
-| R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | planned |
+| R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | planned |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | planned |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | planned |
@@ -250,3 +250,9 @@ The public API and the `.apairo` format are declared stable at 1.0
 
 - **2026-09-24**: roadmap written. Already landed and unreleased: the `csv`
   loader, the clock-coverage guard, the `check` reports.
+- **2026-10-01**: R1 landed. Both guides are checked against real sequences
+  (TUM `freiburg1_xyz`; EuRoC `V1_01_easy` and `MH_05_difficult`), which is
+  what surfaced a fix on the way: `status` and `check` now read the layout
+  through `--declare`. EuRoC needed one declaration per hall rather than one
+  file, because the tracker directory differs and an undeclared table has no
+  clock.
