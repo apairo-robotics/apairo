@@ -24,7 +24,7 @@ about a day, **M** a few days, **L** a week or more.
 | — | A clock must hold one timestamp per frame | S | — | ✅ landed (`b6b6eb0`), unreleased |
 | — | `check` reports what loading refuses | S | — | ✅ landed (`53300f9`), unreleased |
 | R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
-| R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | planned |
+| R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | planned |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | status part ✅ landed; schema part planned |
 | R5 | `hdf5` loader | L | W43–W44 (19 Oct) | planned |
@@ -260,3 +260,7 @@ The public API and the `.apairo` format are declared stable at 1.0
   showed it: rate and span from a declared `key`, shape from the first frame
   of `img` / `bin` / `pcd` channels. Left in R4: the `source` transform field
   and the `has_timestamps` deprecation notice.
+- **2026-10-01**: R2 landed. The runner zips inputs with identical timestamps
+  and refuses different clocks by name. Checked on 30 real TartanDrive scans
+  with `GroundHeightFromLabels`. Tier 2 (a preprocess over a synchronised
+  view) stays in "After 0.9", behind R7.
