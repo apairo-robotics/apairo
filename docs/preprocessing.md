@@ -125,6 +125,39 @@ dict; `output=` cannot rename a multi-output preprocessor.
 
 ---
 
+## Several inputs
+
+A preprocessor may declare several `input_keys`. On a synchronous dataset every
+sample already holds all of them. On an asynchronous dataset each timeline index
+holds a single channel, so the runner looks at the inputs' clocks:
+
+- **Inputs on one clock are grouped.** When the inputs have identical timestamps
+  -- typically channels derived from the same sensor, such as a voxelised cloud
+  and the ground labels computed from it -- row `i` of each is one moment. The
+  runner zips them row for row: the preprocessor receives one sample per row,
+  holding every input, and the output is numbered by row and stamped by that
+  clock.
+
+    ```python
+    RawDataset.run_preprocess(VoxelisePointCloud(lidar_key="velodyne_0"), seq)
+    RawDataset.run_preprocess(GroundSegmentationRANSAC(), seq)       # voxelised -> ground_ransac
+    RawDataset.run_preprocess(                                       # two inputs, one clock
+        GroundHeightFromLabels(ground_key="ground_ransac"), seq
+    )
+    ```
+
+- **Inputs on different clocks are refused**, by name and with each channel's
+  frame count, before anything is written. Pairing a 10 Hz lidar with a 50 Hz
+  pose is a synchronisation, with a method and a tolerance to choose; the
+  runner does not guess one. Running a preprocess over a `synchronize()` view is
+  not supported yet. Until it is, write the channel yourself from the view with
+  [`ChannelWriter`](#channelwriter-channels-produced-outside-apairo).
+
+"Identical" means the same timestamps, not merely the same number of frames: two
+channels of equal length on shifted clocks are refused too.
+
+---
+
 ## Overwrite protection
 
 By default, `run_preprocess` raises `FileExistsError` if the first output file already exists (every declared key is checked). Pass `overwrite=True` to recompute:

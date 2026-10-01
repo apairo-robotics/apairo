@@ -46,6 +46,20 @@ All notable changes to apairo are documented here. The format is based on
   built fine and died later on a bare `IndexError`. Loading now refuses such a
   channel at construction, naming both counts and where the clock came from.
   Checked on every apairo dataset at hand before landing: none was affected.
+- **A preprocessor with several inputs runs on an asynchronous dataset.**
+  `run_preprocess` iterated the interleaved event timeline, one channel per
+  sample, so a preprocessor with two or more `input_keys` died on its first
+  frame with a `KeyError` -- every multi-input preprocessor was limited to the
+  synchronous profiled datasets. When the inputs share one clock (identical
+  timestamps: a channel derived through `timestamps_from`, or derived channels
+  with equal `timestamps.txt`), the runner now zips them row for row, for
+  frame and sequence preprocessors, on a sequence or a root; the output is
+  numbered by row and stamped by that clock. Inputs on different clocks are
+  refused before anything is written, naming each channel and its frame
+  count: pairing them is a synchronisation, which the runner does not guess.
+  Checked on a real TartanDrive sequence with `GroundHeightFromLabels`
+  (voxelised cloud + ground labels), which failed on `KeyError:
+  'ground_ransac'`.
 - **`status` and `check` read the layout through `--declare`.** An external
   declaration was only validated, not applied: a channel whose clock it
   declared showed up without its rate, a table channel it added did not show

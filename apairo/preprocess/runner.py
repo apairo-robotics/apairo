@@ -13,6 +13,7 @@ from apairo.core.preprocessor import (
     SequencePreprocessor,
     as_output_dict,
 )
+from apairo.core.sample import Sample
 from apairo.writer import WRITERS
 
 if TYPE_CHECKING:
@@ -70,6 +71,100 @@ def _registered_recipe(seq_dir: Path, key: str) -> str | None:
     return read_config(seq_dir).get("channels", {}).get(key, {}).get("recipe")
 
 
+class _SameClockFrames:
+    """The input channels of an asynchronous dataset, zipped row for row.
+
+    An asynchronous dataset iterates its interleaved event timeline, one channel
+    per sample, so a preprocessor with several inputs never sees them together.
+    When every input sits on the *same* clock -- identical timestamps, typically
+    a derived channel and the channel it was derived from -- interleaving them is
+    pure loss: row ``i`` of each is one moment. This view serves that moment as
+    one sample, and places outputs by row, the way a single-input run does.
+
+    It exposes only what :func:`run` and its helpers use.
+    """
+
+    def __init__(self, dataset: Any) -> None:
+        self._is_root: bool = bool(getattr(dataset, "_is_root", False))
+        self.sequences: list[Any] = dataset.sequences if self._is_root else [dataset]
+        self._clocks = [
+            np.asarray(seq.timestamps[seq.keys[0]], dtype=float)
+            for seq in self.sequences
+        ]
+        self._starts = np.concatenate([[0], np.cumsum([len(c) for c in self._clocks])])
+
+    def __len__(self) -> int:
+        return int(self._starts[-1])
+
+    def _locate(self, idx: int) -> tuple[int, int]:
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        seq_idx = int(np.searchsorted(self._starts[1:], idx, side="right"))
+        return seq_idx, idx - int(self._starts[seq_idx])
+
+    def __getitem__(self, idx: int) -> Sample:
+        seq_idx, row = self._locate(idx)
+        seq = self.sequences[seq_idx]
+        return Sample(
+            data={key: seq.loaders[key][row] for key in seq.keys},
+            timestamp=float(self._clocks[seq_idx][row]),
+        )
+
+    def __iter__(self):
+        return (self[i] for i in range(len(self)))
+
+    @property
+    def _seq_groups(self) -> dict[str, list[int]] | None:
+        if not self._is_root:
+            return None
+        return {
+            seq.root_dir.name: list(range(int(a), int(b)))
+            for seq, a, b in zip(
+                self.sequences, self._starts[:-1], self._starts[1:], strict=True
+            )
+        }
+
+    def derived_path(self, idx: int, key: str, ext: str) -> Path:
+        seq_idx, row = self._locate(idx)
+        return self.sequences[seq_idx].derived_path(row, key, ext)
+
+
+def _group_same_clock(dataset: Any, preprocessor: Preprocessor) -> Any:
+    """Zip a multi-input preprocessor's inputs when they share one clock.
+
+    Synchronous datasets and single-input runs are returned unchanged. On an
+    asynchronous dataset, inputs on different clocks are refused: pairing them
+    is a synchronisation, with a method and a tolerance to choose, not something
+    the runner can guess.
+    """
+    if dataset.is_synchronous or len(preprocessor.input_keys) < 2:
+        return dataset
+    sequences = dataset.sequences if getattr(dataset, "_is_root", False) else [dataset]
+    for seq in sequences:
+        clocks = {key: np.asarray(seq.timestamps[key], dtype=float) for key in seq.keys}
+        first = clocks[seq.keys[0]]
+        if all(
+            c.shape == first.shape and np.array_equal(c, first) for c in clocks.values()
+        ):
+            continue
+        counts = ", ".join(f"'{key}' ({len(c)} frames)" for key, c in clocks.items())
+        raise ValueError(
+            f"{type(preprocessor).__name__} needs its inputs together in one "
+            f"sample, but in '{seq.root_dir.name}' they are on different clocks: "
+            f"{counts}. Inputs that share a clock -- identical timestamps, as "
+            f"with a channel derived from another through timestamps_from -- are "
+            f"grouped automatically. Channels on different clocks have to be "
+            f"synchronized first, and running a preprocess over a synchronized "
+            f"view is not supported yet."
+        )
+    logger.info(
+        "%-20s  inputs %s share one clock -- grouped row for row",
+        preprocessor.__class__.__name__,
+        ", ".join(preprocessor.input_keys),
+    )
+    return _SameClockFrames(dataset)
+
+
 def run(
     preprocessor: Preprocessor,
     dataset_cls: type[Any],
@@ -84,6 +179,11 @@ def run(
     Uses ``dataset.derived_path()`` to determine where each output file is
     written, so every dataset can control its own file layout.  Registration
     is written to ``root_dir/.apairo``.
+
+    On an asynchronous dataset a preprocessor with several ``input_keys`` gets
+    them in one sample when they share one clock (identical timestamps, as with
+    a channel derived through ``timestamps_from``): they are zipped row for row,
+    and the output is numbered and stamped by that clock.
 
     Args:
         preprocessor: A :class:`~apairo.core.preprocessor.FramePreprocessor`
@@ -105,9 +205,12 @@ def run(
             ``reuse`` is set.
         TypeError: If ``preprocessor`` is neither ``FramePreprocessor`` nor
             ``SequencePreprocessor``.
+        ValueError: If a multi-input preprocessor's inputs are on different
+            clocks of an asynchronous dataset.
     """
     root_dir = Path(root_dir)
     dataset = dataset_cls(root_dir, keys=preprocessor.input_keys, **dataset_kwargs)
+    dataset = _group_same_clock(dataset, preprocessor)
     n = len(dataset)
 
     ext = _LOADER_TO_EXT[preprocessor.output_loader]

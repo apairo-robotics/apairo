@@ -188,7 +188,12 @@ The workaround today is manual and lossy in ergonomics: build a
 with `ChannelWriter` — four steps re-implementing what `run_preprocess` does
 in one, minus overwrite protection and provenance defaults.
 
-Two-tier proposal:
+Two-tier proposal. *Tier 1 has landed* (see CHANGELOG, "a preprocessor with
+several inputs runs on an asynchronous dataset"): the runner zips inputs whose
+timestamps are identical and refuses inputs on different clocks by name. It
+compares the resolved timestamp arrays rather than following `timestamps_from`
+chains, so it also groups derived channels that each carry their own, equal,
+`timestamps.txt`. Tier 2 is still open.
 
 - **Cheap tier — same-clock grouping.** Channels sharing an identical clock
   (`timestamps_from` chains resolving to the same `timestamps.txt`) are
