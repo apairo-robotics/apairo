@@ -10,6 +10,14 @@
 | `RawDataset` | asynchronous | any channel | Profile-free; channels & loaders from `.apairo/channels.yaml`. Loads `apairo-extractor` output |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel | Fixed channel profile; auto-discovers channels via `.apairo` |
 
+`RawDataset` also reads datasets it has no class for, from a declaration alone.
+Two worked guides, each checked against real sequences:
+
+| Dataset | Domain | What the declaration says |
+|---|---|---|
+| [TUM RGB-D](tum-rgbd.md) | indoor RGB-D SLAM | image clocks in `<sec>.<usec>` filenames, trajectory and accelerometer tables at the sequence root |
+| [EuRoC MAV](euroc.md) | drone visual-inertial odometry | image clocks in nanosecond filenames, one `data.csv` per sensor |
+
 ---
 
 ## Synchronous datasets

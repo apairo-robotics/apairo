@@ -1,0 +1,24 @@
+# apairo declaration for one EuRoC MAV sequence in ASL format
+# (https://projects.asl.ethz.ch/datasets/euroc-mav), Vicon Room (V1_*, V2_*),
+# entered at mav0/:
+#
+#   cam0/data/<ns>.png   cam1/data/<ns>.png   imu0/data.csv
+#   vicon0/data.csv   state_groundtruth_estimate0/data.csv
+#
+# The Machine Hall sequences have leica0/ instead of vicon0/: use
+# euroc_machine_hall.yaml for those.
+#
+# Save it as <sequence>/mav0/apairo.yaml, or keep it outside the dataset and pass
+# RawDataset("<sequence>/mav0", declare="euroc_vicon_room.yaml").
+version: 1
+channels:
+  # The clock of each image is its filename, a nanosecond epoch.
+  cam0: {loader: img, directory: cam0/data, key: {name: '(\d+)', units: [ns]}}
+  cam1: {loader: img, directory: cam1/data, key: {name: '(\d+)', units: [ns]}}
+  # One table per sensor, its clock in the first column (nanoseconds).
+  imu0: {loader: csv, key: {column: timestamp, units: [ns]}}     # w_RS_S_xyz, a_RS_S_xyz
+  vicon0: {loader: csv, key: {column: timestamp, units: [ns]}}   # motion capture: p, q
+  state_groundtruth_estimate0:                                   # p, q, v, gyro and accel biases
+    loader: csv
+    alias: groundtruth
+    key: {column: timestamp, units: [ns]}

@@ -3,8 +3,9 @@
 A1-class bugs (an example referencing a channel that does not exist, a consumed
 channel that is never created, ...) are only caught by *running* the file, not by
 importing it. So every example is compile-checked, and the ones with a mini
-fixture (Rellis-3D, TartanDrive) are executed end-to-end as subprocesses with the
-dataset root injected via an environment variable.
+fixture (Rellis-3D, TartanDrive, and the synthetic TUM RGB-D / EuRoC layouts) are
+executed end-to-end as subprocesses with the dataset root injected via an
+environment variable.
 
 Examples without a fixture (Goose / cross-dataset) are compile-checked only.
 """
@@ -29,6 +30,12 @@ RELLIS_EXAMPLES = [
     "rellis_traversability.py",
     "sequence_kfold.py",
     "training_pipeline_rellis.py",
+]
+# Dataset guides: (example, env var, fixture sequence under test/assets).
+GUIDE_EXAMPLES = [
+    ("tum_rgbd_associate.py", "APAIRO_TUM_SEQ", "mini_tum/rgbd_dataset_freiburg1_xyz"),
+    ("euroc_synchronize.py", "APAIRO_EUROC_SEQ", "mini_euroc/V1_01_easy/mav0"),
+    ("euroc_synchronize.py", "APAIRO_EUROC_SEQ", "mini_euroc/MH_05_difficult/mav0"),
 ]
 TARTAN_EXAMPLES = [
     "tartan_frame_transform.py",
@@ -75,3 +82,12 @@ def test_rellis_example_runs(name: str, tmp_path: Path) -> None:
     root = tmp_path / "mini_rellis"
     shutil.copytree(ASSETS / "mini_rellis", root)
     _run(name, {"APAIRO_RELLIS_ROOT": str(root)}, cwd=tmp_path)
+
+
+@pytest.mark.parametrize("name, env_var, fixture", GUIDE_EXAMPLES)
+def test_guide_example_runs(
+    name: str, env_var: str, fixture: str, tmp_path: Path
+) -> None:
+    seq = tmp_path / fixture
+    shutil.copytree(ASSETS / fixture, seq)
+    _run(name, {env_var: str(seq)}, cwd=tmp_path)

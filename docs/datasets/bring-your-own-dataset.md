@@ -182,8 +182,10 @@ groundtruth: {loader: csv, directory: ".", array_file: groundtruth.txt,
               key: {column: timestamp}}
 ```
 
-`ds.synchronize(reference="rgb", method="nearest", tolerance=0.02)` then does
-what TUM's `associate.py` does, and reports each match's offset.
+`ds.synchronize(reference="rgb", method="nearest", tolerance=0.02)` is then the
+association TUM's `associate.py` computes, for every channel at once and with
+each match's offset reported. The [TUM RGB-D guide](tum-rgbd.md) walks through a
+real sequence, and the [EuRoC guide](euroc.md) through the `data.csv` layout.
 
 ---
 

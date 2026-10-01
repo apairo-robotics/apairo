@@ -21,6 +21,21 @@ All notable changes to apairo are documented here. The format is based on
   reaches a table at the sequence root. `init` detects a `.csv` directory,
   `status` reports its rows, rate and width, and `check` validates the column
   key.
+- **Dataset guides: TUM RGB-D and EuRoC MAV, read from a declaration only.**
+  Two docs pages walk through a well-known SLAM dataset loaded in place by
+  `RawDataset` -- no subclass, no conversion: where each clock lives (image
+  filenames in seconds or nanoseconds, a column of a text table), the
+  `apairo.yaml` that says so, and a `synchronize()` call with what each
+  match's offset tells you. The declarations ship in `examples/declarations/`
+  (`tum_rgbd.yaml`, `euroc_vicon_room.yaml`, `euroc_machine_hall.yaml`) with
+  two runnable examples, `tum_rgbd_associate.py` and `euroc_synchronize.py`.
+  All three were checked against real sequences (`freiburg1_xyz`,
+  `V1_01_easy`, `MH_05_difficult`); CI runs the examples on synthetic
+  miniatures of the layouts (`test/assets/mini_tum`, `mini_euroc`, generated
+  by `make_slam_fixtures.py`). The TUM guide compares `synchronize(nearest)`
+  with TUM's own `associate.py` on a real sequence: 789 of its 792 pairs are
+  identical, and the difference -- per-frame matching against one-to-one --
+  is stated rather than glossed over.
 
 ### Fixed
 - **A clock must hold one timestamp per frame.** The timeline gives a channel

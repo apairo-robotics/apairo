@@ -1,0 +1,24 @@
+# apairo declaration for one TUM RGB-D sequence
+# (https://cvg.cit.tum.de/data/datasets/rgbd-dataset), as downloaded:
+#
+#   rgb/<sec>.<usec>.png   depth/<sec>.<usec>.png
+#   groundtruth.txt        accelerometer.txt
+#
+# Save it as <sequence>/apairo.yaml, or keep it outside the dataset and pass
+# RawDataset(<sequence>, declare="tum_rgbd.yaml").
+version: 1
+channels:
+  # The clock of each image is its filename: <sec>.<usec>.
+  rgb:   {loader: img, key: {name: '(\d+)\.(\d+)'}}
+  depth: {loader: img, key: {name: '(\d+)\.(\d+)'}}
+  # Two tables at the sequence root, their clock in the first column (seconds).
+  groundtruth:
+    loader: csv
+    directory: "."
+    array_file: groundtruth.txt      # tx ty tz qx qy qz qw
+    key: {column: timestamp}
+  accelerometer:
+    loader: csv
+    directory: "."
+    array_file: accelerometer.txt    # ax ay az
+    key: {column: timestamp}
