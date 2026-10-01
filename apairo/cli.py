@@ -312,15 +312,16 @@ def _untracked_channels(seq_dir: Path) -> list[str]:
     ]
 
 
-def _seq_info(seq_dir: Path) -> dict:
+def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
     cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
     # Status must see what loading sees: the inherited root declaration, then
-    # the in-tree one, overlay the registry (key/order specs drive the frame
-    # count below). A broken declaration is skipped here -- verify_declaration
-    # reports it in issues.
+    # the in-tree one, then an external ``--declare`` file (``declare=`` at load
+    # time) overlay the registry -- key/order specs drive the frame count and
+    # the clock checks below. A broken declaration is skipped here --
+    # verify_declaration reports it in issues.
     own = declaration_path(seq_dir) if declaration_exists(seq_dir) else None
-    for decl in (inherited_declaration(seq_dir), own):
-        if decl is None:
+    for decl in (inherited_declaration(seq_dir), own, declare):
+        if decl is None or not Path(decl).is_file():
             continue
         try:
             cfg = merge_declared_channels(cfg, read_declaration(decl))
@@ -476,7 +477,9 @@ def _available_sequences(path: Path) -> list[str]:
     return [d.name for d in _sequence_dirs(path)]
 
 
-def _build_sequence_status(path: Path, seq_id: str) -> dict | None:
+def _build_sequence_status(
+    path: Path, seq_id: str, declare: Path | None = None
+) -> dict | None:
     """Per-sequence status addressed by id from the root (``status -s <id>``).
 
     Profiled datasets resolve the sequence through the profile; generic datasets
@@ -487,10 +490,13 @@ def _build_sequence_status(path: Path, seq_id: str) -> dict | None:
     seq_dir = path / seq_id
     if not _is_sequence(seq_dir):
         return None
-    return _build_status(seq_dir)
+    return _build_status(seq_dir, declare)
 
 
-def _build_status(path: Path) -> dict | None:
+def _build_status(path: Path, declare: Path | None = None) -> dict | None:
+    """Status of a dataset root or sequence. *declare* is an external
+    declaration file to read the generic (RawDataset) layout through, exactly as
+    ``RawDataset(..., declare=...)`` would; profiled datasets ignore it."""
     profiled = _profiled_status_class(path)
     if profiled is not None:
         return _build_profiled_status(path, profiled)
@@ -501,13 +507,13 @@ def _build_status(path: Path) -> dict | None:
             "class": "RawDataset",
             "kind": "sequence",
             "calibration": sorted(read_calibration(path)),
-            **_seq_info(path),
+            **_seq_info(path, declare),
         }
 
     seq_dirs = _sequence_dirs(path)
     if not seq_dirs:
         return None
-    per = {d.name: _seq_info(d) for d in seq_dirs}
+    per = {d.name: _seq_info(d, declare) for d in seq_dirs}
     raw: dict = {}
     preprocess: dict = {}
     tf: dict = {}
@@ -726,8 +732,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     if not path.is_dir():
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
+    declare = Path(args.declare).expanduser() if args.declare else None
     if args.sequence:
-        status = _build_sequence_status(path, args.sequence)
+        status = _build_sequence_status(path, args.sequence, declare)
         if status is None:
             avail = _available_sequences(path)
             hint = f" Available: {', '.join(avail)}." if avail else ""
@@ -737,7 +744,7 @@ def cmd_status(args: argparse.Namespace) -> int:
             )
             return 1
     else:
-        status = _build_status(path)
+        status = _build_status(path, declare)
         if status is None:
             print(
                 f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
@@ -781,13 +788,14 @@ def _external_declare_issues(path: Path, declare: str) -> list[str]:
     return [f"{d.name}: {i}" for d in seq_dirs for i in verify_declaration(f, d)]
 
 
-def _check_issues(path: Path) -> list[str] | None:
+def _check_issues(path: Path, declare: Path | None = None) -> list[str] | None:
     """All version-1 schema / consistency issues for a dataset, or ``None`` if
     *path* is not an apairo dataset.
 
     Reuses the (profile-aware) ``status`` reading to validate channels, then adds
-    the optional manifest and calibration files."""
-    status = _build_status(path)
+    the optional manifest and calibration files. *declare* is an external
+    declaration the layout is read through, as loading would."""
+    status = _build_status(path, declare)
     if status is None:
         return None
     issues = list(status.get("issues", []))
@@ -806,7 +814,9 @@ def cmd_check(args: argparse.Namespace) -> int:
     if not path.is_dir():
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
-    issues = _check_issues(path)
+    issues = _check_issues(
+        path, Path(args.declare).expanduser() if args.declare else None
+    )
     if issues is None:
         print(
             f"'{path}' is not an apairo dataset (no .apairo, no sequences). "
@@ -1042,7 +1052,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         _print_registered(path)
         _hint_unregistered(cls, path)
     else:
-        status = _build_status(path)
+        status = _build_status(
+            path, Path(args.declare).expanduser() if args.declare else None
+        )
         if status is not None:
             _print_status(status)
     return 0

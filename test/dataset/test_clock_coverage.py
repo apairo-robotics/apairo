@@ -119,3 +119,34 @@ def test_check_leaves_a_declared_key_to_loading(tmp_path, capsys):
     _config(tmp_path, camera={"key": {"name": r"(\d+)", "units": ["ms"]}})
     code, out = _check(tmp_path, capsys)
     assert code == 0, out["issues"]
+
+
+def test_check_reads_the_layout_through_an_external_declaration(tmp_path, capsys):
+    """A key declared in an external file (``--declare``, ``declare=`` at load
+    time) is a clock: ``check`` must not call the channel clockless, and
+    ``status`` must show what loading with that declaration sees."""
+    d = tmp_path / "seq" / "camera"
+    d.mkdir(parents=True)
+    for t in (100, 200, 300):
+        np.save(d / f"{t}.npy", np.zeros(3, np.float32))
+    _config(tmp_path / "seq", camera={})
+    declaration = tmp_path / "outside.yaml"
+    declaration.write_text(
+        "version: 1\n"
+        "channels:\n"
+        "  camera: {loader: npys, key: {name: '(\\d+)', units: [ms]}}\n"
+    )
+
+    code, out = _check(tmp_path / "seq", capsys)
+    assert code == 1
+    assert any("channel 'camera': no clock" in i for i in out["issues"])
+
+    try:
+        code = main(
+            ["check", str(tmp_path / "seq"), "--declare", str(declaration), "--json"]
+        )
+    except SystemExit as exc:
+        code = exc.code
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == {"ok": True, "issues": []}
+    assert len(RawDataset(tmp_path / "seq", declare=declaration)) == 3

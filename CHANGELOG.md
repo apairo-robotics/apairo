@@ -31,6 +31,13 @@ All notable changes to apairo are documented here. The format is based on
   built fine and died later on a bare `IndexError`. Loading now refuses such a
   channel at construction, naming both counts and where the clock came from.
   Checked on every apairo dataset at hand before landing: none was affected.
+- **`status` and `check` read the layout through `--declare`.** An external
+  declaration was only validated, not applied: a channel whose clock it
+  declared showed up without its rate, a table channel it added did not show
+  at all, and `check` -- since it reports clockless channels -- called a
+  dataset that loads fine with `declare=` broken. Both now merge the file
+  last, as loading does, so they describe what `RawDataset(..., declare=...)`
+  sees. Found while checking the TUM declaration against a real sequence.
 - **`check` sees what loading refuses.** It now reports, without loading
   anything, a channel whose clock does not match its frame count and a
   channel with no clock at all (no `timestamps.txt`, `key` or
