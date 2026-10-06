@@ -257,3 +257,105 @@ Remaining, outside this repo:
 - **apairo_transform**: the projection/undistortion ops consuming
   `ds.calibration.get_intrinsics(...)` (e.g. `ProjectPoints`), including the
   lidar->image preprocessor that motivated this.
+
+## Containers: HDF5, Zarr and the episode patterns inside them
+
+*Design note for ROADMAP R5 -- validated in principle on 2026-10-06; the
+implementation lives on the `feature/containers` branch until it is whole.*
+
+### Why a family, and not a loader
+
+Robot-learning data is mostly stored in **containers**: one file (or store)
+holding a tree of named N-D arrays. HDF5 and Zarr are the same data model --
+groups of arrays, sliced lazily, with attributes -- Zarr being the cloud-native
+rework of HDF5. Bolting "a file is a sequence" onto `RawDataset` would mix a
+second storage convention into the directory layout family (registry, derived
+channels, export all assume a sequence directory). A sibling family contains
+that instead: everything after loading -- channel contracts, `synchronize()`,
+views, transforms, the clock checks -- is reused as is, and `RawDataset` does
+not change.
+
+### What varies is not the format, it is the episode pattern
+
+| Pattern | How a sequence is delimited | Seen in |
+|---|---|---|
+| **file** | one file per episode | ALOHA / ACT (`episode_N.hdf5`), REASSEMBLE, MIT Push |
+| **group** | one group per episode in one file | robomimic, MimicGen, LIBERO (`/data/demo_0/...`) |
+| **ends** | arrays concatenated over episodes, an index of episode ends | Diffusion Policy and UMI replay buffers (Zarr: `data/<key>` + `meta/episode_ends`) |
+| **flags** | concatenated arrays, an episode-boundary flag per row | D4RL (`terminals`, `timeouts`) |
+
+The same pattern appears in both formats, so the declaration names the
+pattern, and the format is read off the file:
+
+```yaml
+version: 1
+container: {episodes: {files: "*.hdf5"}}     # or {groups: "/data/demo_*"}, {ends: /meta/episode_ends}
+channels:
+  qpos:   {array: /observations/qpos}
+  cam:    {array: /observations/images/cam_high}
+  action: {array: /action}
+```
+
+### Clocks: two regimes, both already in the model
+
+- **Synchronous episodes** (ALOHA, robomimic, Diffusion Policy): every array
+  has one row per step and no clock of its own. The row *is* the clock -- the
+  position-as-default of the "unify the families" note, here scoped to a
+  container, where it is safe because the arrays come from one writer. The
+  equal-count guard applies: arrays of different lengths in one episode are
+  refused by name, never paired by position.
+- **Asynchronous recordings** (REASSEMBLE, DROID raw): each sensor has its own
+  timestamps, a sibling array or a column:
+  `key: {array: /timestamps/joint_positions}` or `key: {column: 0}`.
+
+### Naming
+
+`array:` for the path inside the container -- Zarr's word, and neutral across
+formats (HDF5 calls it a dataset, which would also collide with apairo's own
+"dataset"). It is only valid in a container declaration.
+
+### Backends
+
+A small interface -- open a container, list its arrays, read rows, read an
+attribute -- with one implementation per format:
+
+- **HDF5** through `h5py` (`apairo[hdf5]`). Handles are not fork-safe: a file
+  is opened lazily, once per process, so a `DataLoader` with workers gets its
+  own handle in each. NetCDF4 and MATLAB v7.3 `.mat` files are HDF5 underneath
+  and come for free.
+- **Zarr** through `zarr` (already `apairo[zarr]`), for stores holding groups.
+  The existing `zarr` loader stays: there a channel *directory* is one Zarr
+  array, in the directory layout.
+- **NPZ** is a flat container read by numpy alone -- a cheap third backend if
+  a dataset asks for it.
+
+Two backends from the start keep the interface honest: an HDF5-only design
+would grow HDF5-shaped corners.
+
+### Out of the family, deliberately
+
+- **Tables** (Parquet / Arrow -- LeRobot v2 and v3 store steps as Parquet rows
+  with an `episode_index` column, frames as MP4): a row store, closer to the
+  `csv` loader than to a tree of arrays. Reading LeRobot datasets back would
+  close the loop with `apairo_huggingface`, which exports to it -- a later item,
+  with the video loader.
+- **Encoded media** inside a container (REASSEMBLE's MP4 and MP3 byte strings):
+  the video loader.
+- **TFRecord / RLDS** (Open X-Embodiment) needs TensorFlow, and **WebDataset**
+  tar shards are sequential by design; neither offers the random access apairo
+  is built on. Those datasets are reachable through their LeRobot conversions.
+- **Message logs** (rosbag, MCAP) stay with `apairo_extractor`.
+
+### Writes
+
+A container is read-only, like every dataset apairo reads. Derived channels
+(`run_preprocess`) need a place of their own: a sidecar tree beside the
+container, one directory per episode. Until that exists, a preprocess on a
+container dataset is refused with that explanation.
+
+### Validation data
+
+- REASSEMBLE: one demonstration range-read out of the 59 GB `data.zip` on TUData
+  (async, file pattern, per-sensor timestamps).
+- Diffusion Policy Push-T replay buffer (Zarr, ends pattern).
+- An ALOHA / ACT simulated episode (HDF5, file pattern, synchronous).

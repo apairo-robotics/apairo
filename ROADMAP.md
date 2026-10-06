@@ -27,7 +27,7 @@ about a day, **M** a few days, **L** a week or more.
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
-| R5 | `hdf5` loader | L | W43–W44 (19 Oct) | planned |
+| R5 | Container datasets: HDF5 and Zarr (branch `feature/containers`) | L | W43–W44 (19 Oct) | planned |
 | R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
@@ -123,26 +123,37 @@ them with the clock checks that make those alignments trustworthy.
   channels; tests cover each change.
 - **Placement.** Core.
 
-### R5. `hdf5` loader
+### R5. Container datasets: HDF5 and Zarr
 
-- **Goal.** Read channels stored inside HDF5 files in place.
-- **Why.** HDF5 is the most common container missing from the loaders. It is
-  used by REASSEMBLE (the best multi-rate manipulation dataset found: every
-  sensor keeps its own timestamps, with no resynchronisation), the MIT Push
-  dataset and many lab recordings.
-- **Scope.** A design note in `IDEAS.md` first, because HDF5 breaks the
-  "channel = directory" rule: a channel becomes a dataset path inside a file,
-  and a sequence becomes a file. Expected surface:
-  `loader: hdf5, array_file: <file>.h5, dataset: </path>`, with a clock from a
-  sibling dataset (`key: {dataset: </path/to/timestamps>}`). `h5py` as an
-  optional extra, `apairo[hdf5]`, like `zarr`. Lazy row access (no whole-array
-  read). **Out:** encoded video or audio stored inside the file (see "After
-  0.9").
-- **Done when.** A synthetic multi-rate HDF5 fixture loads and synchronises
-  in tests; one REASSEMBLE demo file loads its proprioception and F/T
-  channels in place; the extra is documented in `installation.md`.
-- **Placement.** Core (`loader/`), optional dependency. **Depends on.** The
-  design note.
+*Redefined on 2026-10-06 from an `hdf5` loader. Design: `IDEAS.md`,
+"Containers: HDF5, Zarr and the episode patterns inside them".*
+
+- **Goal.** Read datasets stored in containers -- one file or store holding a
+  tree of named arrays -- in place, as a family of their own beside the
+  directory layout.
+- **Why.** HDF5 and Zarr are where robot-learning data lives: ALOHA / ACT,
+  robomimic, LIBERO, MimicGen, DROID raw, REASSEMBLE in HDF5; Diffusion Policy
+  and UMI replay buffers in Zarr. Reading them is what takes apairo from
+  navigation logs to manipulation. As a sibling family, the change stays out
+  of `RawDataset`, which keeps its directory convention untouched.
+- **Scope.** A container dataset class with a small backend interface and two
+  backends, HDF5 (`h5py`, new extra `apairo[hdf5]`) and Zarr (existing extra).
+  Episode patterns `files`, `groups` and `ends`. Channels named by `array:`
+  paths. Both clock regimes: synchronous episodes (the row is the clock, with
+  the equal-count refusal) and asynchronous recordings (`key: {array: ...}` or
+  `key: {column: ...}`). Lazy row reads, one file handle per process. `status`
+  and `check` describe a container. Read-only: a preprocess on a container is
+  refused with an explanation. **Out:** the `flags` pattern (D4RL), derived
+  channels in a sidecar tree, encoded media inside a container, tables
+  (Parquet / LeRobot) -- see "After 0.9".
+- **Done when.** Synthetic fixtures for each pattern and both regimes pass in
+  CI, for both backends; three real checks pass and are named in the docs:
+  one REASSEMBLE demonstration (HDF5, files, async), the Diffusion Policy Push-T
+  replay buffer (Zarr, ends), one ALOHA / ACT episode (HDF5, files, sync); a
+  docs page explains the declaration; the extra is in `installation.md`.
+- **Placement.** Core, `apairo/dataset/container/`, developed on the
+  `feature/containers` branch and merged into `main` only when whole.
+  **Size.** L. **Depends on.** Nothing.
 
 ### R6. Manipulation examples: KUKA F/T, then REASSEMBLE
 
@@ -153,7 +164,8 @@ them with the clock checks that make those alignments trustworthy.
 - **Scope.** KUKA LBR Med F/T and IMU (Zenodo 10.5281/zenodo.11096791, CC BY
   4.0, 1.5 MB). Three clocks read in place; the IMU's documented 8.4 ms lag
   shown through `time_offsets()`. Then REASSEMBLE, one demo (TU Wien, CC BY
-  4.0): F/T and joint states aligned onto a camera clock with a tolerance.
+  4.0), read through the container family: F/T and joint states aligned onto
+  a camera clock with a tolerance.
 - **Done when.** The KUKA example runs in CI against its data, downloaded and
   cached, or against a committed extract if the licence allows it (CC BY
   does, with attribution). The REASSEMBLE example is documented with the
@@ -217,7 +229,13 @@ scheduled.
 - **Aggregating `synchronize`.** Return every event between two reference
   ticks, for example all F/T samples between two camera frames, with a
   reducer in `apairo_transform`.
-- **Video frame loader** (`mp4`), for RH20T and REASSEMBLE's cameras.
+- **Container datasets, part two.** The `flags` episode pattern (D4RL),
+  derived channels in a sidecar tree beside the container, an NPZ backend.
+- **Video frame loader** (`mp4`), for RH20T, REASSEMBLE's encoded cameras and
+  LeRobot's videos.
+- **Reading LeRobot datasets** (Parquet rows with an `episode_index`, MP4
+  frames): closes the loop with `apairo_huggingface`, which exports to it.
+  Needs the video loader.
 - **Export of filtered, transformed or synchronised views** through the
   writers.
 - **nuScenes-mini guide.** The canonical multi-rate driving dataset; its
@@ -274,3 +292,8 @@ The public API and the `.apairo` format are declared stable at 1.0
   field, and `has_timestamps` is one deprecation line per file. `check` is
   clean on the rosbag barakuda extraction and down to that one line on the
   KITTI-style one.
+- **2026-10-06**: R5 redefined from an `hdf5` loader to a container family
+  (HDF5 and Zarr backends, episode patterns `files`, `groups`, `ends`), after
+  looking at where robot-learning data is stored. It lives on the
+  `feature/containers` branch until whole. Part two and a LeRobot reader join
+  "After 0.9".
