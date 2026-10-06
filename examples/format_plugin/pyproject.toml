@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apairo-xyz"
+version = "0.1.0"
+description = "ASCII .xyz point clouds as an apairo format"
+requires-python = ">=3.11"
+dependencies = ["apairo>=0.9"]
+
+# The one line that makes apairo find the format.
+[project.entry-points."apairo.formats"]
+xyz = "apairo_xyz:XyzFormat"
+
+[tool.setuptools]
+py-modules = ["apairo_xyz"]
