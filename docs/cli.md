@@ -60,7 +60,14 @@ apairo init [PATH] [--name NAME] [--force] [--as CLASS]
 
 - **Sequence** (its sub-directories hold data files) -> writes
   `.apairo/channels.yaml`, inferring each channel's loader from the files on
-  disk (`npy`, `npys`, `bin`, `img`, `zarr`).
+  disk (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`).
+- **A directory with its data files directly inside**, and no sub-directory ->
+  a sequence of its own: its frames are one channel named after the directory
+  (a channel directory such as `seq/velodyne_0`, opened alone), and each table
+  is one channel named after its file (a logger's folder of CSV files). Every
+  such channel reads from `directory: "."`. A `.csv` or `.txt` counts as a table
+  only when it reads as a numeric one, so an index file pairing stamps with
+  filenames is left out.
 - **Root** (its sub-directories are sequences) -> initializes each sequence, then
   writes the root `.apairo/dataset.yaml` (name + sequence order + channel union).
 
@@ -133,9 +140,12 @@ apairo declare /data/seq -o eval/seq.yaml     # your name, passed via --declare
 
 The scaffold names every detected channel with its loader, then adds commented
 hints to adapt: the **actual field list** read from the first frame's PCD
-header, and a **`key:` suggestion** when a channel has no `timestamps.txt`
-(unit guessed from the width of a trailing digit run in the stems -- a 19-digit
-epoch suggests `units: [ns]`). It never overwrites an existing declaration --
+header, and a **`key:` suggestion** when a channel has no `timestamps.txt`:
+from the stems (unit guessed from the width of a trailing digit run -- a
+19-digit epoch suggests `units: [ns]`), or, for a table, from the column whose
+header names a clock (`timestamp`, `time`, `t`, ...) and never decreases -- a
+16-digit epoch suggests `units: [us]`. A confident suggestion is written
+uncommented, so the scaffold loads as generated; check it all the same. It never overwrites an existing declaration --
 the file is yours the moment it exists.
 
 | Option | Meaning |

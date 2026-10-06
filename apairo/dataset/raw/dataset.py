@@ -55,6 +55,7 @@ from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
 from apairo.dataset.async_layout import AsyncLayoutDataset
 from apairo.dataset.async_layout.dataset import (
+    _bare_channel_entries,
     _declared_key_channels,
     _detect_loader,
     _suffix_channel_entries,
@@ -228,12 +229,14 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
     @staticmethod
     def _is_sequence_layout(path: Path) -> bool:
-        """True when *path*'s own sub-directories include a recognizable channel."""
+        """True when *path*'s own sub-directories include a recognizable channel,
+        or when *path* has no sub-directory and holds data files itself -- a
+        channel directory (or a folder of tables) opened as a dataset of its own."""
         return any(
             _detect_loader(d) is not None
             for d in path.iterdir()
             if d.is_dir() and not d.name.startswith(".")
-        )
+        ) or bool(_bare_channel_entries(path))
 
     @classmethod
     def _write_manifest(cls, root: str | Path, *, name: str | None = None) -> Path:
@@ -352,4 +355,5 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
                 continue
             for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
                 channels[f"{key}_{suffix}"] = {"kind": "raw", **frag}
+        channels.update(_bare_channel_entries(Path(sequence_dir)))
         return {"version": 1, "channels": channels}

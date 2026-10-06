@@ -189,6 +189,34 @@ real sequence, and the [EuRoC guide](euroc.md) through the `data.csv` layout.
 
 ---
 
+## A directory on its own
+
+A directory that holds its data files itself, with no sub-directory, is a
+dataset too. Point apairo at a channel directory (`seq/velodyne_0`, frames and
+their `timestamps.txt`) or at a logger's folder of CSV files, and each one is a
+channel that reads from `directory: "."`: the frames are one channel named after
+the directory, every table is one channel named after its file.
+
+```console
+$ apairo init kuka/          # 1-baseline_accel.csv  1-baseline_orientations.csv  1-baseline_wrench.csv
+$ apairo declare kuka/       # writes key: {column: t, units: [us]} for each table
+$ apairo status kuka/
+channel                  kind  loader  frames  rate      span        shape
+1-baseline_accel         raw   csv     1593    254.1 Hz  0.00-6.27s  (3) float64
+1-baseline_orientations  raw   csv     627     100.0 Hz  0.00-6.26s  (9) float64
+1-baseline_wrench        raw   csv     4376    698.1 Hz  0.00-6.27s  (6) float64
+```
+
+That is a real recording: a KUKA arm's IMU, orientation and force/torque sensor
+on three clocks ([Zenodo 10.5281/zenodo.11096791](https://doi.org/10.5281/zenodo.11096791)).
+
+A directory with a sub-directory keeps its meaning -- a sequence whose channels
+are its sub-directories, or a root. A table lying beside channel directories (a
+KITTI-style `poses.txt`) is not picked up on its own; declare it with
+`directory: "."` and `array_file`, as the [TUM RGB-D guide](tum-rgbd.md) does.
+
+---
+
 ## The `order` field
 
 `order` is a **separate contract** from `key`: it decides which files are

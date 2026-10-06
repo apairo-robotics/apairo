@@ -53,9 +53,92 @@ def _detect_loader(channel_dir: Path) -> str | None:
     if npy_files:
         # Multiple per-frame files → npys; single file → npy.
         return "npys" if len(npy_files) > 1 else "npy"
-    if ".csv" in exts:
+    # A .csv is a channel only when it reads as a numeric table: an index file
+    # pairing stamps with filenames (EuRoC's cam0/data.csv) is not data.
+    if any(f.suffix.lower() == ".csv" and _looks_like_table(f) for f in data_files):
         return "csv"
     return None
+
+
+# A .txt file is only taken for a table when its first rows read as one: many are
+# notes, index files (TUM's rgb.txt pairs a stamp with a filename) or sidecars.
+_TABLE_SNIFF_ROWS = 20
+
+
+def _looks_like_table(path: Path) -> bool:
+    """True when *path* starts like a numeric table the ``csv`` loader reads:
+    ``#`` comments, at most one header row, then rows of numbers of one width.
+    Only the first rows are read."""
+    width: int | None = None
+    header_seen = False
+    rows = 0
+    try:
+        with open(path, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                sep = "," if "," in line else ("\t" if "\t" in line else None)
+                cells = [c.strip() for c in (line.split(sep) if sep else line.split())]
+                try:
+                    [float(c) for c in cells]
+                except ValueError:
+                    if width is not None or header_seen:
+                        return False  # text after the first data row: not a table
+                    header_seen = True
+                    continue
+                if width is not None and len(cells) != width:
+                    return False
+                width = len(cells)
+                rows += 1
+                if rows >= _TABLE_SNIFF_ROWS:
+                    break
+    except (OSError, UnicodeDecodeError):
+        return False
+    return width is not None
+
+
+def _bare_channel_entries(directory: Path) -> dict[str, dict]:
+    """Channels of a directory that holds its data files itself, with no
+    sub-directory at all -- a channel directory opened on its own
+    (``seq/velodyne_0``), or a folder of tables (a logger's CSV files).
+
+    Per-frame files (or a stacked array) are one channel named after the
+    directory, with its suffixed variants. Tables -- a ``.csv`` or ``.txt`` that
+    reads as a numeric table, never ``timestamps.txt`` -- are one channel each,
+    named after the file stem, or after the directory when the table is alone.
+    Every entry reads from ``directory: "."``. Empty as soon as the directory
+    has a sub-directory: that is a sequence or a root, and its channels are its
+    sub-directories."""
+    if any(p.is_dir() and not p.name.startswith(".") for p in directory.iterdir()):
+        return {}
+    name = directory.name
+    entries: dict[str, dict] = {}
+    frames = _detect_loader(directory)
+    if frames is not None and frames != "csv":
+        entries[name] = {"kind": "raw", "loader": frames, "directory": "."}
+        for suffix, frag in _suffix_channel_entries(directory, frames).items():
+            entries[f"{name}_{suffix}"] = {"kind": "raw", **frag, "directory": "."}
+    tables = sorted(
+        p.name
+        for p in directory.iterdir()
+        if p.is_file()
+        and not p.name.startswith(".")
+        and p.name != "timestamps.txt"
+        and p.suffix.lower() in {".csv", ".txt"}
+        and _looks_like_table(p)
+    )
+    for table in tables:
+        key = name if (len(tables) == 1 and not entries) else Path(table).stem
+        if key in entries:
+            key = table.replace(".", "_")
+        entries[key] = {
+            "kind": "raw",
+            "loader": "csv",
+            "directory": ".",
+            "array_file": table,
+        }
+    return entries
 
 
 def _declared_key_channels(directory: Path, *declares: str | Path | None) -> set[str]:
@@ -299,9 +382,10 @@ class AsyncLayoutDataset(AbstractDataset):
             source_public = self._public(meta.get("directory", real))
             if source_public in self._files:
                 self._files[public] = self._files[source_public]
-            elif meta.get("array_file") and meta.get("directory"):
-                # A table beside the channel directories rather than in one (TUM's
-                # groundtruth.txt at the sequence root: `directory: "."`).
+            elif meta.get("directory"):
+                # A directory that is not another channel's: the sequence itself
+                # (`directory: "."` -- a table at the root, as TUM's
+                # groundtruth.txt, or a bare channel directory opened on its own).
                 resolved = directory / safe_config_name(
                     str(meta["directory"]), label=f"channel '{real}' directory"
                 )
@@ -427,6 +511,18 @@ class AsyncLayoutDataset(AbstractDataset):
                         suffix=frag["suffix"],
                     )
                     added += 1
+            for key, entry in _bare_channel_entries(directory).items():
+                if key in existing or (raw_keys is not None and key not in raw_keys):
+                    continue
+                _register_raw_channel(
+                    directory,
+                    key,
+                    entry["loader"],
+                    directory=entry["directory"],
+                    suffix=entry.get("suffix"),
+                    array_file=entry.get("array_file"),
+                )
+                added += 1
             if added == 0:
                 detail = f" (checked: {raw_keys})" if raw_keys else ""
                 raise ValueError(
@@ -457,12 +553,18 @@ class AsyncLayoutDataset(AbstractDataset):
                 continue
             for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
                 channels[f"{channel_dir.name}_{suffix}"] = {"kind": "raw", **frag}
+        # A directory holding its data files itself is a channel (or a set of
+        # tables) of its own.
+        for key, entry in _bare_channel_entries(directory).items():
+            if raw_keys is None or key in raw_keys:
+                channels[key] = entry
 
         if not channels:
             detail = f" (checked: {raw_keys})" if raw_keys else ""
             raise ValueError(
                 f"No recognizable channels found in '{directory}'{detail}. "
-                f"Expected subdirectories containing .bin, .pcd, .npy, or image files."
+                f"Expected subdirectories containing .bin, .pcd, .npy, .csv or "
+                f"image files, or such files directly in the directory."
             )
 
         write_config(directory, {"version": 1, "channels": channels})

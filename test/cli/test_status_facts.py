@@ -126,3 +126,14 @@ def test_a_pcd_channel_reports_its_declared_fields(tmp_path, capsys):
     cloud = _status(tmp_path, capsys)["cloud"]
     assert cloud["shape"] == [2, 3]
     assert cloud["dtype"] == "float32"
+
+
+def test_a_sparse_channel_does_not_round_to_zero_hz(tmp_path, capsys):
+    _frames(tmp_path / "eval", [f"{i:06d}" for i in range(3)])
+    np.savetxt(tmp_path / "eval" / "timestamps.txt", [0.0, 50.0, 100.0])  # 0.02 Hz
+    _config(tmp_path, eval={"loader": "npys"})
+    try:
+        main(["status", str(tmp_path)])
+    except SystemExit:
+        pass
+    assert "0.02 Hz" in capsys.readouterr().out

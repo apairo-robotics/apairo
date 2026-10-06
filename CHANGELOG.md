@@ -21,6 +21,22 @@ All notable changes to apairo are documented here. The format is based on
   reaches a table at the sequence root. `init` detects a `.csv` directory,
   `status` reports its rows, rate and width, and `check` validates the column
   key.
+- **A directory that holds its data files itself is a dataset.** `init`
+  answered "no channels" for a channel directory opened on its own
+  (`seq/velodyne_0`) and for a logger's folder of CSV tables. A directory with
+  no sub-directory is now a sequence of its own: its frames are one channel
+  named after the directory (with its suffixed variants), and each table is one
+  channel named after its file -- or after the directory when it is alone --
+  all reading from `directory: "."`. Loading, `init` (and `--merge`), `status`,
+  `check` and `declare` accept both entry points; a directory with a
+  sub-directory keeps its meaning, so a table beside channel directories is
+  not picked up on its own.
+- **`declare` suggests a table's clock column.** For a `csv` channel with no
+  `timestamps.txt`, the column whose header names a clock (`timestamp`, `time`,
+  `t`, ...) and never decreases becomes `key: {column: ...}`, its unit guessed
+  from the width of an epoch. On a real KUKA recording (three CSV logs at 100,
+  254 and 698 Hz), `init`, `declare` and `status` now give every rate with no
+  edit.
 - **Dataset guides: TUM RGB-D and EuRoC MAV, read from a declaration only.**
   Two docs pages walk through a well-known SLAM dataset loaded in place by
   `RawDataset` -- no subclass, no conversion: where each clock lives (image
@@ -46,6 +62,15 @@ All notable changes to apairo are documented here. The format is based on
   built fine and died later on a bare `IndexError`. Loading now refuses such a
   channel at construction, naming both counts and where the clock came from.
   Checked on every apairo dataset at hand before landing: none was affected.
+- **An index file is not a channel.** Since the `csv` loader, any directory
+  holding a `.csv` was detected as a table channel -- EuRoC's `cam0/`, whose
+  `data.csv` pairs each stamp with an image filename, became a channel that
+  could not load. A `.csv` (or `.txt`) is now detected only when its first rows
+  read as a numeric table.
+- **`status` shows a suffixed variant's own shape, and a sparse rate.** A
+  suffixed channel (`velodyne_0_intensity`) showed the shape of the base
+  frames beside it; it now reads its own files. A channel with a frame every
+  few seconds printed `0.0 Hz`; it prints `0.021 Hz`.
 - **A preprocessor with several inputs runs on an asynchronous dataset.**
   `run_preprocess` iterated the interleaved event timeline, one channel per
   sample, so a preprocessor with two or more `input_keys` died on its first

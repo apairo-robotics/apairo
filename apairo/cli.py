@@ -52,7 +52,7 @@ from apairo.core.config import (
     verify_manifest,
 )
 from apairo.core.profiled_dataset import ProfiledDataset
-from apairo.dataset.async_layout.dataset import _detect_loader
+from apairo.dataset.async_layout.dataset import _bare_channel_entries, _detect_loader
 from apairo.dataset.goose import Goose3DDataset
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.rellis import Rellis3DDataset
@@ -157,9 +157,18 @@ def _channel_shape(
     """
     if loader in {"img", "bin", "pcd"} and channel_dir.is_dir():
         return _frame_file_shape(channel_dir, loader, meta)
+    from apairo.core.naming import is_frame_file, suffixed_frame_files
+
+    suffix = meta.get("suffix") if meta else None
     if array_file is not None:
         target = channel_dir / array_file
         npys = [target] if target.is_file() else []
+    elif suffix and channel_dir.is_dir():
+        # A suffixed variant shares its base channel's directory: read its own
+        # files (000000_intensity.npy), not the base frames beside them.
+        npys = [channel_dir / f for f in suffixed_frame_files(channel_dir, str(suffix))]
+    elif loader == "npys" and channel_dir.is_dir():
+        npys = sorted(p for p in channel_dir.glob("*.npy") if is_frame_file(p.name))
     else:
         npys = sorted(channel_dir.glob("*.npy"))
     if not npys:
@@ -313,7 +322,7 @@ def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
             issues.append(
                 f"channel '{ch}': no clock -- no timestamps.txt, `key` or "
                 f"`timestamps_from`; loading refuses it (`apairo declare` suggests "
-                f"a `key` when the filenames carry one)"
+                f"a `key` when the filenames or a table column carry one)"
             )
             continue
         if clock is None:
@@ -691,7 +700,9 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: float | None) 
     )
     rows = []
     for name, c in all_ch:
-        rate = f"{c['rate_hz']:.1f} Hz" if c["rate_hz"] else "-"
+        r = c["rate_hz"]
+        # A sparse channel (a frame every few seconds) would round to 0.0 Hz.
+        rate = (f"{r:.1f} Hz" if r >= 1 else f"{r:.2g} Hz") if r else "-"
         span = (
             f"{c['span'][0] - ref:.2f}-{c['span'][1] - ref:.2f}s" if c["span"] else "-"
         )
@@ -956,6 +967,72 @@ _HINT_EXTS: dict[str, set[str]] = {
 }
 
 
+# Header names (after the csv loader drops '#' and '[unit]') that name a clock.
+_CLOCK_COLUMNS = frozenset(
+    {"t", "time", "times", "timestamp", "timestamps", "stamp", "stamps", "ts"}
+)
+
+
+def _epoch_unit(value: float) -> tuple[int, str | None]:
+    """Digits in the integer part of *value*, and the epoch unit that many
+    digits implies (``None`` below a seconds epoch)."""
+    n = len(str(int(abs(value))))
+    unit = (
+        "ns"
+        if n >= 18
+        else "us"
+        if n >= 15
+        else "ms"
+        if n >= 12
+        else "s"
+        if n >= 9
+        else None
+    )
+    return n, unit
+
+
+def _declare_column_key_hint(table: Path) -> str | None:
+    """A ``key: {column: ...}`` line for a ``csv`` table with no clock on disk.
+
+    A column whose header names a clock (``timestamp``, ``time``, ``t``, ...)
+    and whose values never decrease is the key; its unit is guessed from the
+    width of an epoch. Emitted **uncommented** when both hold, so the scaffold
+    loads as generated; a commented hint otherwise."""
+    from apairo.loader import CSVLoader
+
+    homework = (
+        "    # key: {column: <index or name>, units: [s]}"
+        "   # no timestamps.txt -- name the clock column"
+    )
+    try:
+        table_data = CSVLoader(table.parent, file=table.name)
+    except Exception:
+        return homework
+    names = table_data.columns or []
+    candidates = [i for i, n in enumerate(names) if n.lower() in _CLOCK_COLUMNS]
+    if not candidates:
+        return homework
+    i = candidates[0]
+    values = table_data.array[:1000, i]
+    if values.size == 0 or (values.size > 1 and np.any(np.diff(values) < 0)):
+        return homework
+    n, unit = _epoch_unit(float(values[0]))
+    column = (
+        names[i]
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", names[i])
+        else f"'{names[i]}'"
+    )
+    if unit is None:
+        return (
+            f"    key: {{column: {column}}}"
+            f"   # clock column '{names[i]}', seconds assumed -- verify"
+        )
+    return (
+        f"    key: {{column: {column}, units: [{unit}]}}"
+        f"   # {n}-digit epoch in column '{names[i]}' -- verify"
+    )
+
+
 def _declare_key_hint(channel_dir: Path, loader: str) -> str | None:
     """A ``key:`` line for a channel with no clock on disk.
 
@@ -1048,24 +1125,49 @@ def cmd_declare(args: argparse.Namespace) -> int:
         )
         return 1
 
-    channels: dict[str, tuple[str, Path]] = {}
+    # name -> (loader, channel directory, location fields to declare)
+    channels: dict[str, tuple[str, Path, dict]] = {}
     for seq in seq_dirs:
         for d in sorted(seq.iterdir()):
             if not d.is_dir() or d.name.startswith(".") or d.name in channels:
                 continue
             loader = _detect_loader(d)
             if loader is not None:
-                channels[d.name] = (loader, d)
+                channels[d.name] = (loader, d, {})
+        # A directory holding its data files itself: its channels read from ".".
+        for name, entry in _bare_channel_entries(seq).items():
+            if name in channels or entry.get("suffix"):
+                continue
+            location = {k: entry[k] for k in ("directory", "array_file") if k in entry}
+            channels[name] = (entry["loader"], seq, location)
     if not channels:
         print(f"No recognizable channels under '{path}'.", file=sys.stderr)
         return 1
 
     lines = [_DECLARE_HEADER]
-    for name, (loader, d) in channels.items():
+    for name, (loader, d, location) in channels.items():
         lines.append(f"  {_yaml_channel_key(name)}:")
         lines.append(f"    loader: {loader}")
+        if "directory" in location:
+            lines.append(f'    directory: "{location["directory"]}"')
+        if "array_file" in location:
+            lines.append(f"    array_file: {location['array_file']}")
         lines.append("    # alias: <public name at load time>")
-        for hint in (_declare_fields_hint(d, loader), _declare_key_hint(d, loader)):
+        if loader == "csv":
+            table = (
+                d / location["array_file"]
+                if "array_file" in location
+                else next(iter(sorted(d.glob("*.csv"))), None)
+            )
+            has_clock = "array_file" not in location and (d / "timestamps.txt").exists()
+            key_hint = (
+                _declare_column_key_hint(table)
+                if table is not None and not has_clock
+                else None
+            )
+        else:
+            key_hint = _declare_key_hint(d, loader)
+        for hint in (_declare_fields_hint(d, loader), key_hint):
             if hint:
                 lines.append(hint)
     text = "\n".join(lines) + "\n"

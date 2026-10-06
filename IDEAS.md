@@ -63,6 +63,10 @@ Remaining, parked:
     (a clockless async channel is refused); when it lands, the same
     count-naming refusal applies across channels.
   - **First slice: a bare channel directory is a single-channel dataset.**
+    *Landed* (see CHANGELOG, "a directory that holds its data files itself is
+    a dataset"), for directories with no sub-directory at all; a folder of
+    tables gives one channel per table. The clock rules are unchanged: a bare
+    channel still needs a `timestamps.txt` or a declared `key`.
     Data files directly inside the pointed directory (no channel subdirs) →
     one channel named after the directory, alphabetical/numeric order, no
     clock needed since there is nothing to align against. Already expressible
