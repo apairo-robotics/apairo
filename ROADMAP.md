@@ -27,7 +27,7 @@ about a day, **M** a few days, **L** a week or more.
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
-| R5 | The format contract: a new format is a plugin (branch `feature/format-plugins`) | L | W42–W44 | in progress |
+| R5 | The format contract: a new format is a plugin (branch `feature/format-plugins`) | L | W42–W44 | landed on the branch |
 | R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
@@ -305,3 +305,12 @@ The public API and the `.apairo` format are declared stable at 1.0
   format, the format contract that lets anyone add one without touching the
   core. Containers become the first plugin on it, after 0.9, asynchronous
   recordings first.
+- **2026-10-06**: R5 landed on `feature/format-plugins`. The seven built-in
+  formats implement `Format`; the CLI, the configuration checks and the
+  asynchronous dataset ask the registry, and a test keeps format names out of
+  the read path. The `.xyz` example plugin goes through `init`, `declare`,
+  `check`, `status`, loading and `synchronize()` from its entry point, and
+  passes `check_format` like every built-in. The core shrank by about 200
+  lines. Compared with `main` on seven real datasets, the only difference is
+  a fix: `status` now reads a cloud export's shape off the frame loading
+  calls frame 0. Merge to `main` pending.

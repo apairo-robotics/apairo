@@ -388,10 +388,25 @@ own bytes.
 
 Registration: built-ins register when `apairo.loader` is imported; plugins
 through the `apairo.formats` entry point group, loaded on first use; a name
-that collides with a built-in is refused. `str_to_loader` and `KNOWN_LOADERS`
-stay as views of the registry, for code that reads them.
+that collides with a built-in is refused. `str_to_loader` stays as a view of
+the registry; `KNOWN_LOADERS` is gone (`format_names()`).
 
 A conformance kit (`apairo.testing.check_format`) runs a plugin's format
 against a sample directory it writes: detection, frame count, shape agreeing
 with `facts`, a load through `RawDataset` with a `timestamps.txt`, and
 validation of its own metadata.
+
+*Landed (R5).* Two decisions made while building it:
+
+- **The core resolves frame files, the format reads them.** A `key`/`order`
+  regex and a suffixed variant select files the same way for every per-frame
+  format (`apairo.core.naming.channel_frame_files`), and `open()` and
+  `facts()` receive the result. Loading and `status` share that one function,
+  so they count the same frames.
+- **`validate()` checks the fields present, never requires one.** `check`
+  reads `channels.yaml` and the declaration apart, and a declaration may
+  supply a field the registry entry lacks; a field still missing at load time
+  is `open()`'s to refuse.
+
+Out of the contract, on purpose: the write side (`WRITERS`, preprocess
+outputs) and the profiled family's readers, which have their own registries.

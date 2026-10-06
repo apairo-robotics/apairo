@@ -8,6 +8,23 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **A new storage format is a plugin, not a core change.** Every channel is
+  now read through one public contract, `apairo.core.formats.Format`: which
+  directories hold the format, which files are its frames, the loader that
+  decodes one, the clock forms its data provides, the channel fields it reads,
+  what `status` shows and what `declare` suggests. A package registers one
+  through the `apairo.formats` entry point group (or `register_format()` in
+  process), and `loader: <name>` then works in `init`, `declare`, `check`,
+  `status`, loading and `synchronize()`, with its own fields and `key` forms
+  accepted by `check`. The seven built-in formats moved onto the same
+  contract, and the read path no longer names a format (a test enforces it):
+  the CLI, the configuration checks and the asynchronous dataset ask the
+  registry. `apairo.testing.check_format` is the conformance check a plugin
+  runs in its own tests. The new guide "Write a Format Plugin" builds a
+  complete `.xyz` point-cloud plugin in about forty lines, and the test suite
+  installs that plugin through its entry point and runs it end to end. A
+  plugin that fails to import is skipped with a warning; a built-in name
+  cannot be taken over.
 - **`csv` loader: a text table is a channel, its clock a column.** IMU logs
   and ground-truth trajectories in most SLAM datasets are one table with one
   row per frame and the timestamp in a column -- EuRoC's `imu0/data.csv`, TUM
@@ -52,6 +69,26 @@ All notable changes to apairo are documented here. The format is based on
   with TUM's own `associate.py` on a real sequence: 789 of its 792 pairs are
   identical, and the difference -- per-frame matching against one-to-one --
   is stated rather than glossed over.
+
+### Changed
+- **`status` counts what loading reads.** A channel's frame count, shape and
+  dtype now come from its format, over the same frame files loading resolves
+  (a `key`/`order` regex, a suffixed variant), rather than from the length of
+  its `timestamps.txt`; a mismatch between the two is still reported by
+  `check`. The shape is read off the frame loading calls frame 0: on an
+  export of clouds named `<scene>_<stamp>.pcd`, `status` showed the
+  alphabetically first file (45658 points) where loading starts at the
+  earliest stamp (48533). A `zarr` channel now shows its shape. On the TUM,
+  EuRoC (both halls), KUKA, TartanDrive and evaluation exports at hand,
+  `status`, `check` and `declare` are otherwise unchanged, byte for byte.
+- **`declare` gives a stacked array a sidecar hint.** A lone `.npy` without a
+  `timestamps.txt` used to get a filename `key` regex, which `check` then
+  refused on a stacked loader; it now gets a commented `key: {file: ...}`.
+
+### Removed
+- `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,
+  `apairo.core.formats.format_names()`. `apairo.loader.str_to_loader` stays, as
+  a read-only view of the registry.
 
 ### Fixed
 - **A clock must hold one timestamp per frame.** The timeline gives a channel

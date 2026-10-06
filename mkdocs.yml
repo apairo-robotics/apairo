@@ -60,6 +60,9 @@ markdown_extensions:
       alternate_style: true
   - attr_list
   - tables
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 
 nav:
   - Home: index.md
@@ -76,6 +79,7 @@ nav:
     - YAML Profiles: datasets/yaml-profiles.md
     - Adding a Dataset: datasets/adding-a-dataset.md
     - Bring Your Own Dataset: datasets/bring-your-own-dataset.md
+    - Write a Format Plugin: datasets/format-plugins.md
     - Async Datasets: async-datasets.md
     - "Guide: TUM RGB-D": datasets/tum-rgbd.md
     - "Guide: EuRoC MAV": datasets/euroc.md

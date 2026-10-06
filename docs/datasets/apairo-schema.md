@@ -73,7 +73,7 @@ channels:
 | Field | Required | Meaning |
 |---|---|---|
 | `kind` | yes | `raw` (on-disk modality) or `preprocess` (derived/persisted). |
-| `loader` | yes | Storage format: `npy` (one stacked file, row per frame), `npys` (one file per frame), `bin`, `img`, `zarr`, `pcd`, `csv` (one text table, row per frame). |
+| `loader` | yes | Storage format: `npy` (one stacked file, row per frame), `npys` (one file per frame), `bin`, `img`, `zarr`, `pcd`, `csv` (one text table, row per frame) -- or the name of an installed [format plugin](format-plugins.md), whose own fields and `key` forms are then accepted. |
 | `timestamps_from` | no | The channel whose timestamps this one shares (provenance). |
 | `sources` | no | Channels this one was derived from (provenance). |
 | `frame` | no | Coordinate frame the data is expressed in. Descriptive only — apairo never applies transforms. |

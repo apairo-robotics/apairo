@@ -112,6 +112,27 @@ Reused by `RawDataset` and `TartanKittiDataset`.
 
 ---
 
+### Format
+
+The format contract: one storage format of a channel. A new format is a
+plugin -- see [Write a Format Plugin](../datasets/format-plugins.md).
+
+::: apairo.core.formats.Format
+
+---
+
+### register_format
+
+::: apairo.core.formats.register_format
+
+---
+
+### check_format
+
+::: apairo.testing.check_format
+
+---
+
 ### WRITERS
 
 Format writers used by the preprocessing runner.
