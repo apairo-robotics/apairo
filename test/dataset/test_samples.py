@@ -87,3 +87,14 @@ def test_the_check_catches_the_goose_label_bug_it_was_written_for(tmp_path):
     assert breaches and all(
         "'labels' frame" in b and "outside [0, 63]" in b for b in breaches
     )
+
+
+def test_the_check_copies_where_links_are_refused(monkeypatch):
+    """Windows refuses symlinks without a privilege: the stand-in copies."""
+
+    def refuse(*args, **kwargs):
+        raise OSError("symlinks are not allowed")
+
+    monkeypatch.setattr("os.symlink", refuse)
+    card = CARDS["mini_tum"]
+    check_dataset(card["dataset"], ASSETS / card["root"], **check_args(card))
