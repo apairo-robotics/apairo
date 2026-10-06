@@ -25,7 +25,7 @@ about a day, **M** a few days, **L** a week or more.
 | — | `check` reports what loading refuses | S | — | ✅ landed (`53300f9`), unreleased |
 | R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
-| R3 | A directory is a dataset | M | W42 (12 Oct) | planned |
+| R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | status part ✅ landed; schema part planned |
 | R5 | `hdf5` loader | L | W43–W44 (19 Oct) | planned |
 | R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
@@ -264,3 +264,9 @@ The public API and the `.apairo` format are declared stable at 1.0
   and refuses different clocks by name. Checked on 30 real TartanDrive scans
   with `GroundHeightFromLabels`. Tier 2 (a preprocess over a synchronised
   view) stays in "After 0.9", behind R7.
+- **2026-10-06**: R3 landed. A directory with no sub-directory is a dataset:
+  its frames are one channel and each table is another. `declare` suggests a
+  table's clock column. Checked on the real KUKA recording, which now goes
+  through `init`, `declare` and `status` with no edit, and on an evaluation
+  export of `.pcd` clouds. Found along the way: EuRoC's `cam0/data.csv`, an
+  index file, had been detected as a channel since the `csv` loader landed.
