@@ -26,7 +26,7 @@ about a day, **M** a few days, **L** a week or more.
 | R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
-| R4 | Schema and status hygiene | S | W42 (12 Oct) | status part ✅ landed; schema part planned |
+| R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
 | R5 | `hdf5` loader | L | W43–W44 (19 Oct) | planned |
 | R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
@@ -270,3 +270,7 @@ The public API and the `.apairo` format are declared stable at 1.0
   through `init`, `declare` and `status` with no edit, and on an evaluation
   export of `.pcd` clouds. Found along the way: EuRoC's `cam0/data.csv`, an
   index file, had been detected as a channel since the `csv` loader landed.
+- **2026-10-06**: R4 landed with its schema half: `source` is a transform
+  field, and `has_timestamps` is one deprecation line per file. `check` is
+  clean on the rosbag barakuda extraction and down to that one line on the
+  KITTI-style one.
