@@ -72,7 +72,16 @@ _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
 # run_preprocess into .apairo/channels.yaml and record what apairo *did*, not
 # how to read the tree.
 _DECLARATION_REFUSED: frozenset[str] = frozenset({"sources", "recipe"})
-_TRANSFORM_FIELDS: frozenset[str] = frozenset({"parent", "child", "static", "format"})
+# `source` is provenance: the stream the transform was read from (apairo_extractor
+# records the TF topic).
+_TRANSFORM_FIELDS: frozenset[str] = frozenset(
+    {"parent", "child", "static", "format", "source"}
+)
+# Fields older versions wrote and the current schema dropped: reported once per
+# file as deprecated, with what to do, rather than once per channel as unknown.
+_DEPRECATED_CHANNEL_FIELDS: dict[str, str] = {
+    "has_timestamps": "dropped from the schema in apairo 0.2.1 and never read",
+}
 
 # class (profiled root) | name/sequences/channels (generic root roll-up).
 _MANIFEST_FIELDS: frozenset[str] = frozenset(
@@ -1006,6 +1015,8 @@ def verify_config(root_dir: str | Path) -> list[str]:
     * Every ``loader`` value is a known loader type.
     * Every ``timestamps_from`` reference names an existing channel.
     * Every ``sources`` entry names an existing channel.
+    * A field the schema dropped (``has_timestamps``) is reported once, as
+      deprecated, rather than as an unknown field on every channel.
 
     Args:
         root_dir: Dataset root (or sequence) directory that contains
@@ -1042,6 +1053,14 @@ def verify_config(root_dir: str | Path) -> list[str]:
         issues.append("'channels' field is not a mapping")
         return issues
 
+    for name, why in _DEPRECATED_CHANNEL_FIELDS.items():
+        holders = [k for k, m in channels.items() if isinstance(m, dict) and name in m]
+        if holders:
+            issues.append(
+                f"channels.yaml: '{name}' on {len(holders)} channel(s) "
+                f"({', '.join(holders)}) is deprecated -- {why}; delete those lines"
+            )
+
     for key, meta in channels.items():
         if not isinstance(meta, dict):
             issues.append(f"Channel '{key}': entry is not a mapping")
@@ -1053,7 +1072,11 @@ def verify_config(root_dir: str | Path) -> list[str]:
                 f"Channel '{key}': directory not found on disk ({storage_dir})"
             )
 
-        issues += _unknown(meta, _CHANNEL_FIELDS, f"channel '{key}'")
+        issues += _unknown(
+            {k: v for k, v in meta.items() if k not in _DEPRECATED_CHANNEL_FIELDS},
+            _CHANNEL_FIELDS,
+            f"channel '{key}'",
+        )
 
         kind = meta.get("kind")
         if kind is not None and kind not in _CHANNEL_KINDS:

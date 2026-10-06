@@ -39,6 +39,40 @@ def test_verify_config_unknown_field_is_a_warning(tmp_path):
     assert any("unknown field 'frmae'" in i for i in verify_config(tmp_path))
 
 
+def test_verify_config_accepts_a_transform_source(tmp_path):
+    """apairo_extractor records the TF topic a transform was read from."""
+    _channels(
+        tmp_path,
+        {
+            "tf__odom__base_link": {
+                "kind": "raw",
+                "loader": "npy",
+                "transform": {"parent": "odom", "child": "base_link", "source": "/tf"},
+            }
+        },
+    )
+    assert verify_config(tmp_path) == []
+
+
+def test_verify_config_reports_a_deprecated_field_once(tmp_path):
+    """Sidecars written before 0.2.1 carry `has_timestamps` on every channel:
+    one line names them all and says what to do, instead of one unknown-field
+    warning per channel."""
+    _channels(
+        tmp_path,
+        {
+            "imu": {"kind": "raw", "loader": "npy", "has_timestamps": True},
+            "gps": {"kind": "raw", "loader": "npy", "has_timestamps": True},
+            "lidar": {"kind": "raw", "loader": "bin"},
+        },
+    )
+    issues = verify_config(tmp_path)
+    assert issues == [
+        "channels.yaml: 'has_timestamps' on 2 channel(s) (gps, imu) is deprecated "
+        "-- dropped from the schema in apairo 0.2.1 and never read; delete those lines"
+    ]
+
+
 def test_verify_config_bad_kind(tmp_path):
     _channels(tmp_path, {"lidar": {"kind": "rawww", "loader": "bin"}})
     assert any("unknown kind 'rawww'" in i for i in verify_config(tmp_path))

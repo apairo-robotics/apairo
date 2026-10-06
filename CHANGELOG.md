@@ -62,6 +62,14 @@ All notable changes to apairo are documented here. The format is based on
   built fine and died later on a bare `IndexError`. Loading now refuses such a
   channel at construction, naming both counts and where the clock came from.
   Checked on every apairo dataset at hand before landing: none was affected.
+- **`check` is quiet on what apairo's own tools write.** Every dataset from
+  `apairo_extractor` was reported for `transform: unknown field 'source'` --
+  the extractor records the TF topic a transform was read from. `source` is now
+  a v1 transform field (provenance, descriptive like the rest). A sidecar
+  written before 0.2.1 carried `has_timestamps` on every channel, one warning
+  each; it is now reported once per file as deprecated, naming the channels
+  and saying to delete the lines. On the local barakuda extractions, `check`
+  goes from two warnings to none, and from two to one notice.
 - **An index file is not a channel.** Since the `csv` loader, any directory
   holding a `.csv` was detected as a table channel -- EuRoC's `cam0/`, whose
   `data.csv` pairs each stamp with an image filename, became a channel that
