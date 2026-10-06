@@ -12,6 +12,9 @@ there -- not from a user's ``apairo status`` -- what it gets wrong::
         check_format(XyzFormat(), tmp_path)
 
 The built-in formats pass the same check, in apairo's own tests.
+
+:func:`check_dataset` is its pendant for a dataset: a standard one, on its
+sample in apairo's tests, or one a package adds, on a sample of its own.
 """
 
 from __future__ import annotations
@@ -24,8 +27,9 @@ import numpy as np
 
 from apairo.core.abstract_loader import AbstractLoader
 from apairo.core.formats import Facts, Format
+from apairo.testing.datasets import check_dataset
 
-__all__ = ["check_format"]
+__all__ = ["check_dataset", "check_format"]
 
 # The core's clock forms: a format provides others, never these.
 _CORE_KEY_FIELDS = frozenset({"name", "file", "units", "scale"})

@@ -58,6 +58,29 @@ All notable changes to apairo are documented here. The format is based on
     the `apairo.datasets` entry point group.
   - Adding a standard dataset is a pull request: a declaration or a profiled
     class, a miniature fixture, a guide and an extra ("Adding a Dataset").
+- **Every standard dataset is checked on a sample of it, against one
+  contract.**
+  - `apairo.testing.check_dataset` opens a sample as a user would, with
+    `init` then loading. It checks:
+    - that every channel's frames keep their dtype, rank and shape;
+    - that the clock is finite, has one timestamp per frame and never goes
+      back;
+    - that `apairo check` reports nothing;
+    - that the splits do not overlap;
+    - that a preprocess output writes and reads back;
+    - what the sample's card expects: shapes, dtypes, label ranges.
+  - Each sample is described by a card in `test/assets/samples.yaml`: its
+    source, licence and expectations. CI fails when a standard dataset or a
+    shipped declaration has no sample.
+  - `pytest -m realdata` runs the same checks on full copies named by
+    `APAIRO_REAL_*` variables, through a stand-in of links, so nothing is
+    written next to the data.
+  - New real samples: `mini_goose`, 9 scans of the GOOSE archives, and
+    `mini_semantic_kitti`, real SemanticKITTI labels with synthetic clouds,
+    since KITTI's scans need a registration. Both are rebuilt by
+    `fetch_public_samples.py` from the official archives with HTTP range
+    requests.
+  - A dataset package runs the same check in its own tests.
 - **`csv` loader: a text table is a channel, its clock a column.** IMU logs
   and ground-truth trajectories in most SLAM datasets are one table with one
   row per frame and the timestamp in a column -- EuRoC's `imu0/data.csv`, TUM
@@ -135,6 +158,15 @@ All notable changes to apairo are documented here. The format is based on
   a read-only view of the registry.
 
 ### Fixed
+- **GOOSE labels are the class, and GOOSE has a clock.** A GOOSE label holds
+  the class in its lower 16 bits and the instance in the upper 16, like
+  SemanticKITTI, but the profile did not mask it. On real scans, 13 to 20% of
+  the points came back as values up to 18,939,940 instead of a class from 0 to
+  59. The tests drew labels from 0 to 63, so they could not see it; the real
+  sample's expected range does. The profile also reads each scan's capture
+  time from its file name (`<scene>__<frame>_<ns>_vls128.bin`), which GOOSE
+  had been loaded without. A tree in the GOOSE format whose files are named
+  otherwise stays clockless, as one without its clock source does.
 - **A clock must hold one timestamp per frame.** The timeline gives a channel
   one slot per timestamp, and nothing checked that this matched its frames: a
   `timestamps.txt` one line short silently dropped the last frame (a gap in

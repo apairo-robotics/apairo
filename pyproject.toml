@@ -73,6 +73,9 @@ docs = [
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
+markers = [
+    "realdata: checks a full copy of a standard dataset, named by the APAIRO_REAL_* variable of its sample card; skipped when unset",
+]
 
 [tool.ruff]
 target-version = "py311"

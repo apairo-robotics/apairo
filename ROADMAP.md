@@ -326,3 +326,14 @@ The public API and the `.apairo` format are declared stable at 1.0
     the others, the TUM and EuRoC declarations by name, `--as` from a registry
     open to packages.
   - `apairo_preprocess`'s suite passes against the branch.
+- **2026-10-06**: the standard datasets audited, at the user's request. Only
+  Rellis and TartanDrive had real samples. GOOSE and SemanticKITTI were tested
+  on trees their own tests invented.
+  - A real GOOSE excerpt found its labels unmasked (now fixed) and its
+    clock unread (now read).
+  - `check_dataset`, the sample cards with a CI completeness rule, and
+    `pytest -m realdata` landed.
+  - On the local full copies, Tartan passes. Rellis passes except its clock,
+    because the local copy has no camera directory.
+  - SemanticKITTI's clouds still wait for a KITTI registration (the user's
+    call).

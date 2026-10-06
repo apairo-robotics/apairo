@@ -1,18 +1,32 @@
 # Test fixtures
 
+## Samples of the standard datasets
+
+Every standard dataset and shipped declaration has a sample here, described
+in `samples.yaml`: where it comes from, its licence, and what
+`apairo.testing.check_dataset` must find in it. `test/dataset/test_samples.py`
+checks every card, and fails when a standard dataset has none.
+`pytest -m realdata` runs the same checks on full copies named by each
+card's `real_env` variable.
+
 ## Real-data excerpts
 
-Tiny excerpts of real datasets (~300 KB total), used by
-`test/dataset/test_smoke_real_data.py` to exercise the full loading path on
-data the synthetic tests cannot fake.
+Tiny excerpts of real datasets (~700 KB total), used by
+`test/dataset/test_samples.py` and `test/dataset/test_smoke_real_data.py` to
+exercise the full loading path on data the synthetic tests cannot fake.
 
-| Fixture | Source | Layout | Contents |
+| Fixture | Source | Licence | Contents |
 |---|---|---|---|
-| `mini_rellis` | Rellis-3D | synchronous (ProfiledDataset) | 2 sequences × 5 frames, clouds subsampled to 1024 pts, poses, calib, `.lst` splits |
-| `mini_tartan` | TartanDrive v2, `2023-11-14-15-02-21_figure_8` | asynchronous (KITTI layout) | 8 velodyne frames (512 pts), cmd @ ~10 Hz, imu @ ~400 Hz, real timestamps |
+| `mini_rellis` | Rellis-3D | CC BY-NC-SA 3.0 | 2 sequences × 5 frames, clouds subsampled to 1024 pts, poses, calib, `.lst` splits |
+| `mini_tartan` | TartanDrive v2, `2023-11-14-15-02-21_figure_8` | CC BY 4.0 | 8 velodyne frames (512 pts), cmd @ ~10 Hz, imu @ ~400 Hz, real timestamps |
+| `mini_goose` | GOOSE 3D, `goose_3d_train.zip` and `goose_3d_val.zip` | CC BY-SA 4.0 | 9 scans of 3 scenes (train, val), clouds and labels strided to 1024 pts, official names |
+| `mini_semantic_kitti` | SemanticKITTI labels, sequences 00 and 08 | CC BY-NC-SA 3.0 | 6 real label files strided to 1024 pts; clouds and `times.txt` synthetic (KITTI needs a registration) |
 
-Regenerate with `python test/assets/extract_mini_datasets.py` (requires the
-full datasets on lab storage — see paths in the script).
+`mini_rellis` and `mini_tartan` come from `python test/assets/extract_mini_datasets.py`
+(requires the full datasets on lab storage — see paths in the script).
+`mini_goose` and `mini_semantic_kitti` come from
+`python test/assets/fetch_public_samples.py`, which reads a few members of
+the official archives with HTTP range requests (about 60 MB downloaded).
 
 ## Synthetic layouts
 

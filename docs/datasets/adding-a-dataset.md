@@ -15,7 +15,8 @@ and installed for everyone with apairo:
 
 Either way, add an extra in `pyproject.toml` named after the dataset, listing
 what reading it needs (Pillow for images). Users then install it with
-`pip install apairo[<dataset>]`.
+`pip install apairo[<dataset>]`. And add its sample, below: CI refuses a
+standard dataset without one.
 
 A dataset you would rather keep in a package of your own registers its class
 through an entry point. It is then selectable by name like a standard one:
@@ -140,6 +141,65 @@ def test_getitem_shape(pandaset_root):
 
 def test_available_keys():
     assert PandaSetDataset.available_keys == frozenset({"lidar", "camera"})
+```
+
+---
+
+## Step 4 -- Add a sample, and describe it
+
+Every standard dataset has a sample in `test/assets/`: a few frames, in the
+dataset's real tree and file names. CI fails if a registered dataset or a
+shipped declaration has none. Use a real excerpt whenever the licence
+allows it, made by a script that fetches it from the official archive. See
+`test/assets/fetch_public_samples.py`, which reads a few members of a zip with
+HTTP range requests. A synthetic layout is the fallback; say which real data
+it was checked against.
+
+Then describe the sample in `test/assets/samples.yaml`:
+
+```yaml
+  mini_pandaset:
+    dataset: PandaSetDataset
+    root: mini_pandaset
+    source: >-
+      real excerpt: 6 scans of 2 sequences, strided to 1024 points;
+      test/assets/fetch_public_samples.py
+    license: CC BY 4.0
+    real_env: APAIRO_REAL_PANDASET
+    keys: [lidar]
+    frames: 6
+    clock: true
+    expect:
+      lidar: {shape: [null, 4], dtype: float32}
+```
+
+`test/dataset/test_samples.py` runs `apairo.testing.check_dataset` on it:
+
+- it runs `init` and loading the way a user does;
+- it reads the first, middle and last frames of every channel, and checks
+  their dtype, rank and shape against `expect`;
+- it checks the clock: finite, one timestamp per frame, never going back
+  within a sequence;
+- it checks that `apairo check` reports nothing;
+- it checks the splits;
+- it writes a preprocess output into the sample and reads it back.
+
+`expect` is where the dataset's own knowledge goes. A label `range`, for
+example, is what caught GOOSE's instance ids hidden in the upper bits of its
+labels.
+
+A sample shows the layout, but only the full dataset shows that the layout
+holds on every sequence. Point the sample's `real_env` variable at a full copy
+and run `pytest -m realdata` before a release. The check works on a stand-in
+whose files are links, so it writes nothing next to the data.
+
+A dataset kept in a package of its own runs the same check in its own tests:
+
+```python
+from apairo.testing import check_dataset
+
+def test_my_dataset_follows_the_contract():
+    check_dataset(MyLabDataset, "tests/sample", keys=["lidar"], clock=True)
 ```
 
 ---

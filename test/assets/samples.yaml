@@ -1,0 +1,134 @@
+# One card per sample of a standard dataset: where it comes from, and what
+# apairo.testing.check_dataset expects of it. test/dataset/test_samples.py
+# runs every card, and fails when a standard dataset or a shipped declaration
+# has none -- adding a dataset to apairo means adding its sample here.
+#
+# source:   what the sample is made of, and how to rebuild it.
+# checked:  for a synthetic layout, the real data it was compared to.
+# real_env: the variable naming a full copy of the dataset, for
+#           `pytest -m realdata` (test/dataset/test_real_datasets.py).
+# real:     check_dataset's arguments that differ on a full copy.
+# The rest are check_dataset's arguments.
+
+samples:
+  mini_goose:
+    dataset: Goose3DDataset
+    root: mini_goose
+    source: >-
+      real excerpt: 9 scans of 3 scenes (train and val), clouds and labels
+      strided to 1024 points, from goose_3d_train.zip and goose_3d_val.zip
+      (goose-dataset.de); test/assets/fetch_public_samples.py
+    license: CC BY-SA 4.0
+    real_env: APAIRO_REAL_GOOSE
+    keys: [lidar, labels]
+    frames: 9
+    clock: true
+    splits: [train, val]
+    paired: [[lidar, labels]]
+    expect:
+      lidar: {shape: [null, 4], dtype: float32}
+      labels: {shape: [null], dtype: int64, range: [0, 63]}
+
+  mini_semantic_kitti:
+    dataset: SemanticKittiDataset
+    root: mini_semantic_kitti
+    source: >-
+      partly real: the labels of 3 scans of sequences 00 and 08, strided to
+      1024 points, from data_odometry_labels.zip (semantic-kitti.org); the
+      clouds and times.txt are synthetic, with the real point counts, as the
+      KITTI odometry archives need a registration;
+      test/assets/fetch_public_samples.py
+    license: CC BY-NC-SA 3.0
+    real_env: APAIRO_REAL_SEMANTIC_KITTI
+    keys: [lidar, labels]
+    frames: 6
+    clock: true
+    paired: [[lidar, labels]]
+    expect:
+      lidar: {shape: [null, 4], dtype: float32}
+      labels: {shape: [null], dtype: int64, range: [0, 259]}
+
+  mini_rellis:
+    dataset: Rellis3DDataset
+    root: mini_rellis
+    source: >-
+      real excerpt: 2 sequences x 5 scans, clouds strided to 1024 points,
+      poses, splits; test/assets/extract_mini_datasets.py
+    license: CC BY-NC-SA 3.0
+    real_env: APAIRO_REAL_RELLIS
+    keys: [lidar, labels]
+    frames: 10
+    clock: true
+    splits: [train, val]
+    paired: [[lidar, labels]]
+    expect:
+      lidar: {shape: [null, 4], dtype: float32}
+      labels: {shape: [null], dtype: int64, range: [0, 34]}
+
+  mini_tartan:
+    dataset: TartanKittiDataset
+    root: mini_tartan/figure_8
+    source: >-
+      real excerpt: 8 velodyne scans strided to 512 points, the commands and
+      the IMU over the same span, of 2023-11-14-15-02-21_figure_8;
+      test/assets/extract_mini_datasets.py
+    license: CC BY 4.0
+    real_env: APAIRO_REAL_TARTAN
+    # Sequences differ in their channels: name one with a velodyne_0.
+    real: {keys: [velodyne_0, multisense_imu]}
+    keys: [velodyne_0, cmd, multisense_imu]
+    clock: true
+    expect:
+      velodyne_0: {shape: [null, 3], dtype: float32}
+      cmd: {shape: [2], dtype: float64}
+      multisense_imu: {shape: [6], dtype: float64}
+
+  mini_tum:
+    dataset: RawDataset
+    declare: tum_rgbd
+    root: mini_tum/rgbd_dataset_freiburg1_xyz
+    source: synthetic layout, no TUM data; test/assets/make_slam_fixtures.py
+    checked: >-
+      the declaration against the real rgbd_dataset_freiburg1_xyz
+      (docs/datasets/tum-rgbd.md)
+    license: generated
+    real_env: APAIRO_REAL_TUM
+    keys: [rgb, depth, groundtruth, accelerometer]
+    clock: true
+    expect:
+      rgb: {shape: [null, null, 3], dtype: uint8}
+      depth: {shape: [null, null], dtype: uint16}
+      groundtruth: {shape: [7], dtype: float64}
+      accelerometer: {shape: [3], dtype: float64}
+
+  mini_euroc_vicon_room:
+    dataset: RawDataset
+    declare: euroc_vicon_room
+    root: mini_euroc/V1_01_easy/mav0
+    source: synthetic layout, no EuRoC data; test/assets/make_slam_fixtures.py
+    checked: the declaration against the real V1_01_easy (docs/datasets/euroc.md)
+    license: generated
+    real_env: APAIRO_REAL_EUROC_VICON_ROOM
+    keys: [cam0, cam1, imu0, groundtruth, vicon0]
+    clock: true
+    expect:
+      cam0: {shape: [null, null], dtype: uint8}
+      imu0: {shape: [6], dtype: float64}
+      groundtruth: {shape: [16], dtype: float64}
+      vicon0: {shape: [7], dtype: float64}
+
+  mini_euroc_machine_hall:
+    dataset: RawDataset
+    declare: euroc_machine_hall
+    root: mini_euroc/MH_05_difficult/mav0
+    source: synthetic layout, no EuRoC data; test/assets/make_slam_fixtures.py
+    checked: the declaration against the real MH_05_difficult (docs/datasets/euroc.md)
+    license: generated
+    real_env: APAIRO_REAL_EUROC_MACHINE_HALL
+    keys: [cam0, cam1, imu0, groundtruth, leica0]
+    clock: true
+    expect:
+      cam0: {shape: [null, null], dtype: uint8}
+      imu0: {shape: [6], dtype: float64}
+      groundtruth: {shape: [16], dtype: float64}
+      leica0: {shape: [3], dtype: float64}

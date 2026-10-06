@@ -133,6 +133,12 @@ plugin -- see [Write a Format Plugin](../datasets/format-plugins.md).
 
 ---
 
+### check_dataset
+
+::: apairo.testing.check_dataset
+
+---
+
 ### Standard datasets
 
 The dataset classes apairo selects by name (`apairo init --as`), built-in or
