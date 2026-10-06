@@ -33,6 +33,44 @@ def _is_number(token: str) -> bool:
     return True
 
 
+# A .txt file is only taken for a table when its first rows read as one: many are
+# notes, index files (TUM's rgb.txt pairs a stamp with a filename) or sidecars.
+_TABLE_SNIFF_ROWS = 20
+
+
+def looks_like_table(path: Path) -> bool:
+    """True when *path* starts like a numeric table the ``csv`` loader reads:
+    ``#`` comments, at most one header row, then rows of numbers of one width.
+    Only the first rows are read."""
+    width: int | None = None
+    header_seen = False
+    rows = 0
+    try:
+        with open(path, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                sep = "," if "," in line else ("\t" if "\t" in line else None)
+                cells = [c.strip() for c in (line.split(sep) if sep else line.split())]
+                try:
+                    [float(c) for c in cells]
+                except ValueError:
+                    if width is not None or header_seen:
+                        return False  # text after the first data row: not a table
+                    header_seen = True
+                    continue
+                if width is not None and len(cells) != width:
+                    return False
+                width = len(cells)
+                rows += 1
+                if rows >= _TABLE_SNIFF_ROWS:
+                    break
+    except (OSError, UnicodeDecodeError):
+        return False
+    return width is not None
+
+
 class CSVLoader(AbstractLoader):
     r"""Loader for a delimited text table in a channel directory, one row per frame.
 

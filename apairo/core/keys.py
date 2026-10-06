@@ -149,3 +149,20 @@ def parse_column_key(
             ) from exc
         out[i] = value * factor
     return out
+
+
+def epoch_unit(value: float | str) -> tuple[int, str | None]:
+    """Digits in the integer part of *value* (a number, or a digit run read
+    off a filename), and the epoch unit that width implies -- 19 digits are
+    nanoseconds, 16 microseconds, 13 milliseconds, 10 seconds -- or ``None``
+    below a seconds epoch (an index, a relative time)."""
+    n = len(value) if isinstance(value, str) else len(str(int(abs(value))))
+    if n >= 18:
+        return n, "ns"
+    if n >= 15:
+        return n, "us"
+    if n >= 12:
+        return n, "ms"
+    if n >= 9:
+        return n, "s"
+    return n, None

@@ -20,82 +20,19 @@ from apairo.core.config import (
 from apairo.core.config import (
     register_raw_channel as _register_raw_channel,
 )
-from apairo.core.naming import suffixed_frame_files
+from apairo.core.formats import Format, detect_format, find_format, formats, get_format
+from apairo.core.naming import channel_frame_files
 from apairo.core.sample import Sample
-from apairo.loader import load_profile, load_timestamps, loads_timestamps, str_to_loader
+from apairo.loader import load_profile, load_timestamps, loads_timestamps
 from apairo.utils.files import get_files
 from apairo.utils.timestamps import get_end_of_time
 
 
 def _detect_loader(channel_dir: Path) -> str | None:
-    """Infer loader type from the contents of *channel_dir*.
-
-    A channel directory that is itself a Zarr array store (it holds a
-    ``.zarray`` / ``zarr.json`` metadata file, with ``timestamps.txt`` placed
-    beside the chunks) is detected as ``"zarr"``; otherwise the loader is
-    inferred from the data-file extensions.
-    """
-    if (channel_dir / ".zarray").exists() or (channel_dir / "zarr.json").exists():
-        return "zarr"
-    data_files = [
-        f for f in channel_dir.iterdir() if f.is_file() and f.name != "timestamps.txt"
-    ]
-    if not data_files:
-        return None
-    exts = {f.suffix.lower() for f in data_files}
-    if ".bin" in exts:
-        return "bin"
-    if ".pcd" in exts:
-        return "pcd"
-    if exts & {".png", ".jpg", ".jpeg", ".bmp"}:
-        return "img"
-    npy_files = [f for f in data_files if f.suffix == ".npy"]
-    if npy_files:
-        # Multiple per-frame files → npys; single file → npy.
-        return "npys" if len(npy_files) > 1 else "npy"
-    # A .csv is a channel only when it reads as a numeric table: an index file
-    # pairing stamps with filenames (EuRoC's cam0/data.csv) is not data.
-    if any(f.suffix.lower() == ".csv" and _looks_like_table(f) for f in data_files):
-        return "csv"
-    return None
-
-
-# A .txt file is only taken for a table when its first rows read as one: many are
-# notes, index files (TUM's rgb.txt pairs a stamp with a filename) or sidecars.
-_TABLE_SNIFF_ROWS = 20
-
-
-def _looks_like_table(path: Path) -> bool:
-    """True when *path* starts like a numeric table the ``csv`` loader reads:
-    ``#`` comments, at most one header row, then rows of numbers of one width.
-    Only the first rows are read."""
-    width: int | None = None
-    header_seen = False
-    rows = 0
-    try:
-        with open(path, encoding="utf-8") as f:
-            for raw in f:
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                sep = "," if "," in line else ("\t" if "\t" in line else None)
-                cells = [c.strip() for c in (line.split(sep) if sep else line.split())]
-                try:
-                    [float(c) for c in cells]
-                except ValueError:
-                    if width is not None or header_seen:
-                        return False  # text after the first data row: not a table
-                    header_seen = True
-                    continue
-                if width is not None and len(cells) != width:
-                    return False
-                width = len(cells)
-                rows += 1
-                if rows >= _TABLE_SNIFF_ROWS:
-                    break
-    except (OSError, UnicodeDecodeError):
-        return False
-    return width is not None
+    """The name of the format storing the channel in *channel_dir*, or ``None``
+    -- asked of every registered format, in detection order."""
+    fmt = detect_format(channel_dir)
+    return fmt.name if fmt is not None else None
 
 
 def _bare_channel_entries(directory: Path) -> dict[str, dict]:
@@ -103,40 +40,39 @@ def _bare_channel_entries(directory: Path) -> dict[str, dict]:
     sub-directory at all -- a channel directory opened on its own
     (``seq/velodyne_0``), or a folder of tables (a logger's CSV files).
 
-    Per-frame files (or a stacked array) are one channel named after the
-    directory, with its suffixed variants. Tables -- a ``.csv`` or ``.txt`` that
-    reads as a numeric table, never ``timestamps.txt`` -- are one channel each,
-    named after the file stem, or after the directory when the table is alone.
-    Every entry reads from ``directory: "."``. Empty as soon as the directory
-    has a sub-directory: that is a sequence or a root, and its channels are its
-    sub-directories."""
+    Frames of a directory format are one channel named after the directory,
+    with their suffixed variants. Files of a format whose files are each a
+    channel (a table) are one channel each, named after the file stem, or after
+    the directory when the file is alone. Every entry reads from
+    ``directory: "."``. Empty as soon as the directory has a sub-directory: that
+    is a sequence or a root, and its channels are its sub-directories."""
     if any(p.is_dir() and not p.name.startswith(".") for p in directory.iterdir()):
         return {}
     name = directory.name
     entries: dict[str, dict] = {}
-    frames = _detect_loader(directory)
-    if frames is not None and frames != "csv":
-        entries[name] = {"kind": "raw", "loader": frames, "directory": "."}
-        for suffix, frag in _suffix_channel_entries(directory, frames).items():
-            entries[f"{name}_{suffix}"] = {"kind": "raw", **frag, "directory": "."}
-    tables = sorted(
-        p.name
-        for p in directory.iterdir()
-        if p.is_file()
-        and not p.name.startswith(".")
-        and p.name != "timestamps.txt"
-        and p.suffix.lower() in {".csv", ".txt"}
-        and _looks_like_table(p)
+    frames = next(
+        (f for f in formats() if not f.one_channel_per_file and f.detect(directory)),
+        None,
     )
-    for table in tables:
-        key = name if (len(tables) == 1 and not entries) else Path(table).stem
+    if frames is not None:
+        entries[name] = {"kind": "raw", "loader": frames.name, "directory": "."}
+        for suffix, frag in _suffix_channel_entries(directory, frames.name).items():
+            entries[f"{name}_{suffix}"] = {"kind": "raw", **frag, "directory": "."}
+    per_file = [
+        (fmt, p.name)
+        for fmt in formats()
+        if fmt.one_channel_per_file
+        for p in fmt.data_files(directory)
+    ]
+    for fmt, filename in per_file:
+        key = name if (len(per_file) == 1 and not entries) else Path(filename).stem
         if key in entries:
-            key = table.replace(".", "_")
+            key = filename.replace(".", "_")
         entries[key] = {
             "kind": "raw",
-            "loader": "csv",
+            "loader": fmt.name,
             "directory": ".",
-            "array_file": table,
+            "array_file": filename,
         }
     return entries
 
@@ -157,22 +93,27 @@ def _declared_key_channels(directory: Path, *declares: str | Path | None) -> set
     return {k for k, v in declared.items() if v.get("key") or v.get("order")}
 
 
+def _suffix_names(channel_dir: Path, fmt: Format) -> set[str]:
+    """Suffixes of the variants beside a channel's frames: ``000000_intensity.npy``
+    gives ``intensity``."""
+    return {p.stem.split("_")[-1] for p in fmt.data_files(channel_dir) if "_" in p.stem}
+
+
 def _suffix_channel_entries(channel_dir: Path, loader: str) -> dict[str, dict]:
-    """Suffixed npy sub-channels found in *channel_dir*, keyed by suffix.
+    """Suffixed sub-channels found in *channel_dir*, keyed by suffix.
 
     A directory holding ``000000.npy`` *and* ``000000_intensity.npy`` yields
     ``{"intensity": {"loader": "npys", "directory": channel_dir.name, "suffix":
     "intensity"}}`` -- one sibling channel entry per suffix present, sharing
     *channel_dir* rather than owning a directory of its own. Empty (no fan-out)
-    for any loader other than ``"npys"``, or when no suffixed files exist.
+    for a format without suffixed variants, or when none exist.
     """
-    if loader != "npys":
+    fmt = find_format(loader)
+    if fmt is None or not fmt.suffixes:
         return {}
-    from apairo.utils import npy_analyser
-
     return {
-        suffix: {"loader": "npys", "directory": channel_dir.name, "suffix": suffix}
-        for suffix in sorted(npy_analyser(channel_dir) - {""})
+        suffix: {"loader": fmt.name, "directory": channel_dir.name, "suffix": suffix}
+        for suffix in sorted(_suffix_names(channel_dir, fmt))
     }
 
 
@@ -186,8 +127,8 @@ class AsyncLayoutDataset(AbstractDataset):
 
     It describes *how* channels are stored, never *which* channels exist: each
     channel is a subdirectory with its own ``timestamps.txt`` and data files in
-    a format known to the loader registry (``npys``, ``npy``, ``bin``, ``img``,
-    ``zarr``). A channel may instead carry its alignment key in its filenames --
+    a registered format (``npys``, ``npy``, ``bin``, ``img``, ``zarr``, ``pcd``,
+    ``csv``, or a plugin's -- see :mod:`apairo.core.formats`). A channel may instead carry its alignment key in its filenames --
     a ``key: {name: <regex>}`` / ``{file: <name>}`` spec parses it in memory at
     read time (nothing written), with an optional ``order`` enumeration policy;
     see ``docs/datasets/bring-your-own-dataset.md``. The set of channels is
@@ -317,6 +258,11 @@ class AsyncLayoutDataset(AbstractDataset):
             self._public(k): list(v["fields"])
             for k, v in channels.items()
             if v.get("fields")
+        }
+        # Each channel's whole entry, for its format to read what it needs --
+        # including the fields a plugin format adds to the schema.
+        self._meta_of: dict[str, dict] = {
+            self._public(k): dict(v) for k, v in channels.items() if isinstance(v, dict)
         }
 
         if dataset_profile is not None:
@@ -599,113 +545,43 @@ class AsyncLayoutDataset(AbstractDataset):
         self._init_loaders()
         self._init_timeline()
 
+    def _channel_meta(self, key: str) -> dict:
+        """The channel's entry as the layout declares it -- what its format reads
+        (``array_file``, ``fields``, ``key``, ``suffix``, plugin fields)."""
+        meta = dict(getattr(self, "_meta_of", {}).get(key, {}))
+        meta["loader"] = self._profile[key]
+        if key in self._key_spec:
+            meta["key"] = self._key_spec[key]
+        if key in self._order_spec:
+            meta["order"] = self._order_spec[key]
+        if key in self._suffix_of:
+            meta["suffix"] = self._suffix_of[key]
+        if key in self._array_file_of:
+            meta["array_file"] = self._array_file_of[key]
+        if key in self._fields_of:
+            meta["fields"] = self._fields_of[key]
+        return meta
+
     def _init_loaders(self) -> None:
         loaders: dict[str, AbstractLoader] = {}
         for key in self._keys:
-            loader_cls = str_to_loader[self._profile[key]]
+            fmt = get_format(self._profile[key])
             directory = self._files[key]
-            suffix = self._suffix_of.get(key)
+            meta = self._channel_meta(key)
             order_provider = getattr(self, "_order_providers", {}).get(key)
-            enumerate_by_regex = key in self._order_spec or (
-                key in self._key_spec and "name" in self._key_spec[key]
-            )
-            # The `pcd` field contract travels with every construction path: it is
-            # the channel's declared width, not an artefact of how files are named.
-            extra: dict = {}
-            if self._profile[key] == "pcd" and key in self._fields_of:
-                extra["fields"] = self._fields_of[key]
-            if self._profile[key] == "csv":
-                # A table: one row per frame, its clock (if declared) in a column.
-                spec = self._key_spec.get(key, {})
-                loaders[key] = loader_cls(
-                    directory,
-                    file=self._array_file_of.get(key),
-                    key_column=spec.get("column"),
-                    fields=self._fields_of.get(key),
-                )
-            elif (
-                order_provider is not None
-            ):  # subclass callable: directory -> filenames
-                loaders[key] = loader_cls(
-                    directory, files=list(order_provider(directory)), **extra
-                )
-            elif enumerate_by_regex:
-                # Declarative enumeration policy (the `order` regex, else the `key`
-                # regex): a channel whose names carry a '_' (a Rellis <epoch>_<ms>),
-                # which the default frame-file convention reserves for suffixes, still
-                # enumerates, and the loader's own name sort is bypassed.
-                if self._profile[key] not in {"npys", "img", "bin", "pcd"}:
-                    raise ValueError(
-                        f"Channel '{key}' declares a filename key/order but its loader "
-                        f"'{self._profile[key]}' has no per-frame files -- filename "
-                        f"keys/order need a per-frame loader (npys, img, bin, pcd)."
-                    )
-                loaders[key] = loader_cls(
-                    directory, files=self._enumerate(key, directory), **extra
-                )
-            elif suffix:
-                loaders[key] = loader_cls(
-                    directory, files=suffixed_frame_files(directory, suffix), **extra
-                )
-            elif self._array_file_of.get(key) and self._profile[key] == "npy":
-                # A colocated stacked array named explicitly (valid_mask.npy in a
-                # shared gicp_poses/): load that file, not the directory's glob[0].
-                loaders[key] = loader_cls(directory, file=self._array_file_of[key])
+            if order_provider is not None:  # subclass callable: directory -> filenames
+                files: list[str] | None = list(order_provider(directory))
             else:
-                loaders[key] = loader_cls(directory, **extra)
+                # An `order` / `key` regex or a suffix picks the files; otherwise
+                # the format lists its own.
+                files = channel_frame_files(
+                    fmt, directory, meta, label=f"Channel '{key}'"
+                )
+            loaders[key] = fmt.open(Path(directory), meta, files)
         self.loaders: dict[str, AbstractLoader] = loaders
         self.timestamps: dict[str, np.ndarray] = self._collect_timestamps()
         self._check_clock_coverage()
         self.end_of_time: float = get_end_of_time(self.timestamps) + 1.0
-
-    def _enumerate(self, key: str, directory: str) -> list[str]:
-        """Ordered filenames for a channel with a declarative enumeration policy:
-        the loader-extension files whose stem matches its ``order`` regex (else its
-        ``key`` regex), sorted by the numeric value of the regex's first capture
-        group (else lexicographically). This is the ``order`` contract -- it lets a
-        channel whose names carry a '_' (a Rellis ``<epoch>_<ms>``, which the default
-        frame-file convention reserves for suffixes) enumerate anyway, filters out
-        strays (a ``timestamps.txt``, a dotfile, a wrong-extension note), and orders
-        even non-zero-padded frame indices correctly."""
-        import re
-
-        spec = self._order_spec.get(key) or self._key_spec.get(key, {})
-        pattern = spec.get("name")
-        if pattern is None:
-            raise ValueError(
-                f"Channel '{key}' needs an 'order' or 'key' regex ('name') to "
-                f"enumerate by; got {spec!r}."
-            )
-        regex = re.compile(pattern)
-        exts = {
-            "npys": {".npy"},
-            "npy": {".npy"},
-            "bin": {".bin"},
-            "pcd": {".pcd"},
-            "img": {".png", ".jpg", ".jpeg", ".bmp"},
-        }.get(self._profile[key])
-
-        def matched(p: Path) -> bool:
-            if not p.is_file() or p.name == "timestamps.txt" or p.name.startswith("."):
-                return False
-            if exts is not None and p.suffix.lower() not in exts:
-                return False
-            return regex.search(p.stem) is not None
-
-        def order_key(name: str) -> tuple[int, str]:
-            match = regex.search(Path(name).stem)
-            first = match.groups()[0] if (match and match.groups()) else None
-            return (int(first) if (first and first.isdigit()) else 0, name)
-
-        names = sorted(
-            (p.name for p in Path(directory).iterdir() if matched(p)), key=order_key
-        )
-        if not names:
-            raise FileNotFoundError(
-                f"Channel '{key}': no files in '{directory}' match the enumeration "
-                f"regex {pattern!r}."
-            )
-        return names
 
     def _as_key_array(self, key: str, values) -> np.ndarray:
         """Validate + normalize a channel's key array: 1-D float, one value per
@@ -845,40 +721,47 @@ class AsyncLayoutDataset(AbstractDataset):
 
     def _parse_key(self, key: str) -> np.ndarray:
         r"""A channel's alignment key from its ``key`` spec, computed in memory --
-        nothing is written. Two forms:
+        nothing is written. The core's forms:
 
-        - ``{name: '<regex>'}``: parse the key from each filename stem. Capture
-          groups become a number: with ``scale: [s0, s1, ...]`` as
-          ``sum(int(group_i) * s_i)`` (e.g. ``<sec>_<ms>`` with ``scale [1, 0.001]``),
-          else ``float('.'.join(groups))`` (one group = an index; two = ``<int>.<frac>``).
+        - ``{name: '<regex>'}``: parse the key from each filename stem (a
+          per-frame format). Capture groups become a number: with
+          ``scale: [s0, s1, ...]`` as ``sum(int(group_i) * s_i)`` (e.g.
+          ``<sec>_<ms>`` with ``scale [1, 0.001]``), else
+          ``float('.'.join(groups))`` (one group = an index; two =
+          ``<int>.<frac>``).
         - ``{file: '<name>'}``: read the keys from a named sidecar in the channel
           directory (one float per line -- a differently-named ``timestamps.txt``).
-        - ``{column: <index or name>}``: a ``csv`` table's clock column, with an
-          optional one-entry ``units``/``scale``.
+
+        Any other form is the format's own (a table's ``{column: ...}``), and
+        its :meth:`~apairo.core.formats.Format.clock` computes it.
         """
-        from apairo.core.keys import parse_column_key, parse_filename_key
+        from apairo.core.keys import parse_filename_key
 
         spec = self._key_spec[key]
-        if "column" in spec:
-            tokens = getattr(self.loaders[key], "key_tokens", None)
-            if tokens is None:
-                raise ValueError(
-                    f"Channel '{key}' declares a column key but its loader "
-                    f"('{self._profile[key]}') is not a table -- column keys need "
-                    f"the 'csv' loader."
-                )
-            return parse_column_key(tokens, spec, label=f"Channel '{key}'")
+        label = f"Channel '{key}'"
+        fmt = get_format(self._profile[key])
+        own = [form for form in spec if form in fmt.key_forms]
+        if own:
+            return fmt.clock(self.loaders[key], spec, label)
+        extra = [
+            form for form in spec if form not in ("name", "file", "units", "scale")
+        ]
+        if extra:
+            providers = [f.name for f in formats() if extra[0] in f.key_forms]
+            raise ValueError(
+                f"{label} declares a '{extra[0]}' key, which its loader "
+                f"('{fmt.name}') does not provide"
+                + (f" -- {', '.join(providers)} does." if providers else ".")
+            )
         directory = Path(self._files[key])
         files = getattr(self.loaders[key], "files", None)
         if "file" not in spec and files is None:
             raise ValueError(
-                f"Channel '{key}' declares a filename-parsed key but its loader "
-                f"('{self._profile[key]}') is stacked and has no per-frame filenames. "
-                f"Filename keys need a per-frame loader (npys/img/bin)."
+                f"{label} declares a filename-parsed key but its loader "
+                f"('{fmt.name}') is stacked and has no per-frame filenames. "
+                f"Filename keys need a per-frame loader."
             )
-        return parse_filename_key(
-            files or [], spec, directory=directory, label=f"Channel '{key}'"
-        )
+        return parse_filename_key(files or [], spec, directory=directory, label=label)
 
     def _init_timeline(self) -> None:
         """Build the interleaved timeline as two parallel numpy arrays."""

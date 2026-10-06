@@ -1,5 +1,5 @@
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 
 import numpy as np
@@ -15,15 +15,32 @@ from .tar_loader import TarImageLoader
 from .txt_loader import TXTLoader
 from .zarr_loader import ZarrLoader
 
-str_to_loader = {
-    "img": IMGLoader,
-    "npys": NPYSLoader,
-    "npy": NPYLoader,
-    "bin": BINLoader,
-    "zarr": ZarrLoader,
-    "pcd": PCDLoader,
-    "csv": CSVLoader,
-}
+
+class _LoaderView(Mapping):
+    """``{loader name: loader class}`` for every registered format, built-in and
+    plugin -- a read-only view of :mod:`apairo.core.formats`, kept for code
+    that looked loaders up here before formats were pluggable."""
+
+    def __getitem__(self, name: str) -> type:
+        from apairo.core.formats import find_format
+
+        fmt = find_format(name)
+        if fmt is None:
+            raise KeyError(name)
+        return fmt.loader
+
+    def __iter__(self) -> Iterator[str]:
+        from apairo.core.formats import format_names
+
+        return iter(sorted(format_names()))
+
+    def __len__(self) -> int:
+        from apairo.core.formats import format_names
+
+        return len(format_names())
+
+
+str_to_loader: Mapping[str, type] = _LoaderView()
 
 
 def _load_img(path: Path) -> np.ndarray:

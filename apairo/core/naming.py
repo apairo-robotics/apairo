@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from apairo.core.formats import Format
 
 
 def frame_stem_is_valid(stem: str) -> bool:
@@ -59,3 +63,69 @@ def require_frame_stem(stem: str) -> str:
             f"000000_intensity.npy) and would skip this file."
         )
     return stem
+
+
+def channel_frame_files(
+    fmt: Format, directory: str | Path, meta: dict, *, label: str = "channel"
+) -> list[str] | None:
+    """The frame filenames the core resolves for a channel, before its format's
+    own listing -- shared by loading and ``apairo status``, so both read the
+    same frames:
+
+    - an ``order`` (else a ``key: {name: ...}``) regex: the format's data files
+      whose stem matches, sorted by the numeric value of the regex's first
+      capture group (else by name). This is the ``order`` contract -- it lets a
+      channel whose names carry a '_' (a Rellis ``<epoch>_<ms>``, which the
+      default convention reserves for suffixes) enumerate anyway, filters out
+      strays, and orders non-zero-padded indices correctly;
+    - a ``suffix``: the variant's own files (``000000_intensity.npy``);
+    - otherwise ``None``: the format lists its own frames.
+    """
+    import re
+
+    order, key = meta.get("order"), meta.get("key")
+    spec = (
+        order
+        if order is not None
+        else key
+        if isinstance(key, dict) and "name" in key
+        else None
+    )
+    if spec is None:
+        suffix = meta.get("suffix")
+        if not suffix:
+            return None
+        ext = sorted(fmt.extensions)[0] if fmt.extensions else ""
+        return suffixed_frame_files(directory, str(suffix), ext=ext)
+    if not fmt.per_frame:
+        from apairo.core.formats import formats
+
+        per_frame = ", ".join(f.name for f in formats() if f.per_frame)
+        raise ValueError(
+            f"{label} declares a filename key/order but its loader '{fmt.name}' has "
+            f"no per-frame files -- filename keys/order need a per-frame loader "
+            f"({per_frame})."
+        )
+    pattern = spec.get("name") if isinstance(spec, dict) else None
+    if pattern is None:
+        raise ValueError(
+            f"{label} needs an 'order' or 'key' regex ('name') to enumerate by; "
+            f"got {spec!r}."
+        )
+    regex = re.compile(pattern)
+
+    def order_key(name: str) -> tuple[int, str]:
+        match = regex.search(Path(name).stem)
+        first = match.groups()[0] if (match and match.groups()) else None
+        return (int(first) if (first and first.isdigit()) else 0, name)
+
+    names = sorted(
+        (p.name for p in fmt.data_files(Path(directory)) if regex.search(p.stem)),
+        key=order_key,
+    )
+    if not names:
+        raise FileNotFoundError(
+            f"{label}: no files in '{directory}' match the enumeration regex "
+            f"{pattern!r}."
+        )
+    return names
