@@ -88,6 +88,13 @@ class Format:
             filename and sidecar forms -- ``{"column"}`` for a table.
         priority: Detection order, lowest first, when several formats could
             claim a directory.
+        write_suffix: The suffix of the frame files a per-frame format writes
+            (``".png"`` for ``img``, which reads several).
+
+    A format that can store a channel -- a preprocess output, a conversion --
+    implements :meth:`write_frame` (per-frame) or :meth:`write_channel`
+    (stacked), and :meth:`can_write`. Without them it is read-only. What it
+    writes, it must read back unchanged.
     """
 
     name: ClassVar[str]
@@ -99,6 +106,7 @@ class Format:
     fields: ClassVar[frozenset[str]] = frozenset()
     key_forms: ClassVar[frozenset[str]] = frozenset()
     priority: ClassVar[int] = 50
+    write_suffix: ClassVar[str] = ""
 
     # ------------------------------------------------------------ discovery
 
@@ -147,6 +155,30 @@ class Format:
             f"{label}: format '{self.name}' declares key forms "
             f"{sorted(self.key_forms)} but does not implement clock()."
         )
+
+    # ---------------------------------------------------------------- writing
+
+    @property
+    def writes(self) -> bool:
+        """Can this format store a channel? It does when it implements
+        :meth:`write_frame` (per-frame) or :meth:`write_channel` (stacked)."""
+        method = "write_frame" if self.per_frame else "write_channel"
+        return getattr(type(self), method) is not getattr(Format, method)
+
+    def can_write(self, array: np.ndarray) -> bool:
+        """Can *array* -- one frame for a per-frame format, the whole channel
+        ``(N, ...)`` for a stacked one -- be stored so that it reads back
+        unchanged? Asked of the first output, before anything is written."""
+        return self.writes
+
+    def write_frame(self, path: Path, frame: np.ndarray) -> None:
+        """Store one frame at *path*, ``<channel dir>/<stem><write_suffix>``."""
+        raise NotImplementedError(f"format '{self.name}' does not write frames")
+
+    def write_channel(self, directory: Path, name: str, array: np.ndarray) -> None:
+        """Store channel *name* whole in *directory*, row ``i`` being frame
+        ``i`` -- a file named after the channel, or the directory itself."""
+        raise NotImplementedError(f"format '{self.name}' does not write channels")
 
     # ---------------------------------------------------- describing, checking
 

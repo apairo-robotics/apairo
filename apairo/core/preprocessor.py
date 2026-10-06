@@ -36,9 +36,14 @@ class Preprocessor(ABC):
         ``output_loader``) and registers all of them with shared provenance.
         Use this when one computation naturally produces several channels
         (e.g. a voxel structure emitting ``cell_coords`` + ``cell_inv``).
-    output_loader : str
-        Storage format -- ``"npys"`` (one file per frame), ``"npy"`` (single
-        stacked file), or ``"bin"`` (raw binary, one file per frame).
+    output_loader : str or None
+        The format to store the output in -- any registered format that
+        writes: ``"npys"`` (one ``.npy`` per frame), ``"npy"`` (one stacked
+        array), ``"img"`` (PNG), ``"zarr"``, ``"csv"``, ``"bin"``, or a
+        plugin's. Leave it unset unless the output's nature dictates one: the
+        output is then written in its input channel's format when that format
+        can hold it, else in ``npys`` / ``npy``. ``run_preprocess(...,
+        output_format=...)`` overrides it.
     input_keys : list[str]
         Dataset channels needed as input.
     timestamps_from : str or None
@@ -56,7 +61,7 @@ class Preprocessor(ABC):
 
     output_key: ClassVar[str]
     output_keys: ClassVar[list[str] | None] = None
-    output_loader: ClassVar[str]
+    output_loader: ClassVar[str | None] = None
     input_keys: ClassVar[list[str]]
     timestamps_from: ClassVar[str | None] = None
     sources: ClassVar[list[str] | None] = None

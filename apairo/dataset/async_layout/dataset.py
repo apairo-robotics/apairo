@@ -545,6 +545,11 @@ class AsyncLayoutDataset(AbstractDataset):
         self._init_loaders()
         self._init_timeline()
 
+    def channel_format(self, key: str) -> str | None:
+        """The name of the format channel *key* is stored in (its ``loader``),
+        or ``None`` when the channel is unknown."""
+        return self._profile.get(self._resolve_key(key))
+
     def _channel_meta(self, key: str) -> dict:
         """The channel's entry as the layout declares it -- what its format reads
         (``array_file``, ``fields``, ``key``, ``suffix``, plugin fields)."""

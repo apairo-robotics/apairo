@@ -408,5 +408,11 @@ validation of its own metadata.
   supply a field the registry entry lacks; a field still missing at load time
   is `open()`'s to refuse.
 
-Out of the contract, on purpose: the write side (`WRITERS`, preprocess
-outputs) and the profiled family's readers, which have their own registries.
+Writing joined the contract before the merge (2026-10-06): a format stores a
+frame or a whole channel and must read back unchanged what it wrote. A
+preprocess output goes in the run's `output_format`, else the preprocessor's
+`output_loader`, else its input's format when that format can hold it, else
+`npys` / `npy`: apairo does not impose a storage. A conversion is a preprocess
+(`Convert`). The profiled family reads its *derived* channels through the
+contract; its raw modalities stay described by their YAML profiles. `pcd` is
+read-only until a field-naming rule for written clouds is decided.

@@ -39,7 +39,12 @@ class _RunPreprocessDescriptor:
             root_dir = obj.root_dir
 
             def _instance_run(
-                preprocessor, *, overwrite=False, reuse=False, **dataset_kwargs
+                preprocessor,
+                *,
+                overwrite=False,
+                reuse=False,
+                output_format=None,
+                **dataset_kwargs,
             ):
                 run(
                     preprocessor,
@@ -47,13 +52,20 @@ class _RunPreprocessDescriptor:
                     root_dir,
                     overwrite=overwrite,
                     reuse=reuse,
+                    output_format=output_format,
                     **dataset_kwargs,
                 )
 
             return _instance_run
 
         def _class_run(
-            preprocessor, root_dir, *, overwrite=False, reuse=False, **dataset_kwargs
+            preprocessor,
+            root_dir,
+            *,
+            overwrite=False,
+            reuse=False,
+            output_format=None,
+            **dataset_kwargs,
         ):
             run(
                 preprocessor,
@@ -61,6 +73,7 @@ class _RunPreprocessDescriptor:
                 root_dir,
                 overwrite=overwrite,
                 reuse=reuse,
+                output_format=output_format,
                 **dataset_kwargs,
             )
 

@@ -85,6 +85,11 @@ def _check_attributes(fmt: Format, problems: list[str]) -> None:
             problems.append(
                 f"`key_forms` {sorted(fmt.key_forms)} needs `clock()` implemented"
             )
+        if fmt.writes and fmt.per_frame and fmt.write_suffix not in fmt.extensions:
+            problems.append(
+                f"`write_suffix` {fmt.write_suffix!r} is not one of the `extensions` "
+                f"it reads"
+            )
     if not isinstance(fmt.priority, int) or isinstance(fmt.priority, bool):
         problems.append(f"`priority` must be an int, got {fmt.priority!r}")
     for attr in ("per_frame", "one_channel_per_file", "suffixes"):
@@ -183,6 +188,8 @@ def _check_on_disk(
                     problems.append(
                         f"facts() says span {facts.span}, clock() runs {ends}"
                     )
+    if fmt.writes:
+        _check_round_trip(fmt, loader, n, first, problems)
     hints = _safe(lambda: fmt.declare_hints(directory, meta), None, problems)
     if hints is not None:
         if not isinstance(hints, list) or not all(
@@ -196,6 +203,48 @@ def _check_on_disk(
         problems.append("validate() returns a list of issue strings")
     elif issues:
         problems.append(f"validate() rejects the sample: {issues}")
+
+
+def _check_round_trip(
+    fmt: Format, loader, n: int, first: np.ndarray, problems: list[str]
+) -> None:
+    """What a format reads, it writes back unchanged: frame 0 for a per-frame
+    format, the whole sample for a stacked one."""
+    if fmt.per_frame:
+        sample = first
+    else:
+        sample = np.stack([np.asarray(loader[i]) for i in range(n)])
+    if not fmt.can_write(sample):
+        problems.append(
+            f"can_write() refuses what the format itself read ({sample.dtype}, "
+            f"shape {sample.shape})"
+        )
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp) / "written"
+        try:
+            if fmt.per_frame:
+                fmt.write_frame(directory / f"000000{fmt.write_suffix}", sample)
+            else:
+                fmt.write_channel(directory, "written", sample)
+            back = fmt.open(directory, {"loader": fmt.name}, None)
+            if fmt.per_frame:
+                got = np.asarray(back[0])
+            else:
+                got = np.stack([np.asarray(back[i]) for i in range(len(back))])
+        except Exception as exc:
+            problems.append(f"writing the sample and reading it back raised {exc!r}")
+            return
+    nan = sample.dtype.kind in "fc"
+    if (
+        got.dtype != sample.dtype
+        or got.shape != sample.shape
+        or not np.array_equal(got, sample, equal_nan=nan)
+    ):
+        problems.append(
+            f"what the format writes does not read back unchanged: wrote "
+            f"{sample.dtype} {sample.shape}, read {got.dtype} {got.shape}"
+        )
 
 
 def _safe(call, arg, problems: list[str]):

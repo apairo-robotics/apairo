@@ -92,7 +92,7 @@ TartanKittiDataset.run_preprocess(GICPPoses(), "/data/tartan/seq_001")
 |---|---|---|
 | `output_key` | `str` | Subdirectory name for the output channel |
 | `output_keys` | `list[str]` | Multi-output alternative to `output_key` (exclusive). `__call__` returns a `dict` with exactly these keys; one derived channel is written and registered per key, all sharing `output_loader` and provenance. |
-| `output_loader` | `str` | Storage format: `"npys"` (one file/frame), `"npy"` (stacked), `"bin"` (raw binary/frame), `"pt"` |
+| `output_loader` | `str \| None` | The format to write the output in -- any format that writes (see [the output format](#the-output-format)). Leave it unset unless the output's nature calls for one. |
 | `input_keys` | `list[str]` | Dataset channels required as input |
 | `timestamps_from` | `str \| None` | If set to a channel name, the output inherits that channel's timestamps and no `timestamps.txt` is written. If `None`, timestamps are written from the input sample timestamps. |
 | `sources` | `list[str] \| None` | Provenance recorded in `.apairo` for reference. |
@@ -158,9 +158,61 @@ channels of equal length on shifted clocks are refused too.
 
 ---
 
+## The output format
+
+apairo does not impose a storage format. Each output channel is written in the
+first format of this list that applies:
+
+1. the format the run asks for: `run_preprocess(prep, root, output_format="zarr")`;
+2. the preprocessor's `output_loader`, when it declares one;
+3. the format of its input channel (its `timestamps_from` channel, else its
+   first input), when that format can hold the output. An image mask stays a
+   PNG image, and a crop of `.xyz` clouds stays `.xyz` clouds;
+4. otherwise `npys`, one `.npy` per frame, for a `FramePreprocessor`, or
+   `npy`, one stacked array, for a `SequencePreprocessor`.
+
+The choice is made on the first output, before anything is written, and each
+output channel is recorded in `.apairo` with its format. In cases 1 and 2,
+apairo refuses a format that cannot hold the output and names the format. A
+read-only format is refused with the list of formats that write.
+
+| Format | Writes | Holds |
+| --- | --- | --- |
+| `npys` | one `.npy` per frame | any numeric array |
+| `npy` | one stacked `.npy` | any numeric array, one row per frame |
+| `img` | one `.png` per frame | `uint8` images (grey, RGB, RGBA), `uint16` depth maps |
+| `bin` | one `.bin` per frame | `(N, 4)` `float32` points |
+| `zarr` | the channel directory is the store | any numeric array, one row per frame |
+| `csv` | one table, its clock in `timestamps.txt` | `(N, k)` `float64` rows |
+| `pcd` | read-only for now | |
+
+A [format plugin](datasets/format-plugins.md) that writes is a target like
+the others. What a format writes, it reads back unchanged: the conformance
+check `check_format` verifies it.
+
+A stacked format (`npy`, `zarr`, `csv`) can also take a `FramePreprocessor`'s
+output: the frames of each sequence are stacked once the run is over, which
+needs one shape per frame.
+
+### A format conversion is a preprocess
+
+Copying a channel into another format is just another derived channel. It
+is written by the runner, stamped with the source's clock, and recorded with
+its `sources` and recipe:
+
+```python
+from apairo.preprocess import Convert
+
+RawDataset.run_preprocess(Convert("velodyne_0", to="zarr"), seq)
+# -> seq/velodyne_0_zarr/, a zarr channel with sources [velodyne_0]
+RawDataset.run_preprocess(Convert("imu", to="npy", output_key="imu_array"), seq)
+```
+
+---
+
 ## Overwrite protection
 
-By default, `run_preprocess` raises `FileExistsError` if the first output file already exists (every declared key is checked). Pass `overwrite=True` to recompute:
+By default, `run_preprocess` raises `FileExistsError` if an output channel's directory already holds data (every declared key is checked). Pass `overwrite=True` to recompute:
 
 ```python
 Goose3DDataset.run_preprocess(preprocessor, "/data/goose", overwrite=True)

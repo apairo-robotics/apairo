@@ -201,6 +201,46 @@ def test_an_installed_plugin_is_a_channel_like_any_other(tmp_path, plugins, caps
     check_format(XyzFormat(), seq / "lidar")
 
 
+def test_a_preprocess_on_plugin_data_writes_the_plugin_format(tmp_path, plugins):
+    """No output_loader: a crop of .xyz clouds is written as .xyz clouds, and a
+    conversion into the plugin's format is a preprocess like any other."""
+    from apairo.core.config import read_config
+    from apairo.core.preprocessor import FramePreprocessor
+    from apairo.preprocess import Convert
+
+    plugins(("xyz", "apairo_xyz:XyzFormat"))
+    seq = _xyz_sequence(tmp_path / "seq")
+    (seq / "apairo.yaml").write_text(
+        "version: 1\nchannels:\n  lidar:\n    loader: xyz\n"
+        "    key: {name: '(\\d+)$', units: [ns]}\n"
+    )
+    RawDataset.init(seq)
+
+    class _Crop(FramePreprocessor):
+        output_key = "near"
+        input_keys = ["lidar"]
+
+        def __call__(self, sample):
+            cloud = sample.data["lidar"]
+            return cloud[cloud[:, 1] < 3]
+
+    RawDataset.run_preprocess(_Crop(), seq)
+    assert read_config(seq)["channels"]["near"]["loader"] == "xyz"
+    assert len(list((seq / "near").glob("*.xyz"))) == 4
+    ds = RawDataset(seq, keys=["near"])
+    assert ds.loaders["near"][0].shape == (3, 3)
+
+    clouds = seq / "cloud"
+    clouds.mkdir()
+    for i in range(2):
+        np.save(clouds / f"{i:06d}.npy", np.full((2, 3), i, np.float32))
+    np.savetxt(clouds / "timestamps.txt", [1.0, 2.0])
+    RawDataset.init(seq, merge=True)
+    RawDataset.run_preprocess(Convert("cloud", to="xyz"), seq)
+    ds = RawDataset(seq, keys=["cloud", "cloud_xyz"])
+    np.testing.assert_array_equal(ds.loaders["cloud_xyz"][1], ds.loaders["cloud"][1])
+
+
 def test_a_filename_order_reaches_the_plugin_loader(tmp_path, plugins):
     """The core resolves ``order`` for a plugin as for a built-in: strays are
     filtered and unpadded indices sort numerically."""

@@ -135,8 +135,9 @@ plugin -- see [Write a Format Plugin](../datasets/format-plugins.md).
 
 ### WRITERS
 
-Format writers used by the preprocessing runner.
-Keyed by loader name (`"npy"`, `"npys"`, `"bin"`, `"zarr"`, `"img"`).
+File writers used by dataset layouts (`DatasetLayout` export: Zarr stores, tar
+archives of images). Preprocess outputs are written through the format
+contract instead -- see `Format.write_frame` / `write_channel`.
 
 ```python
 from apairo import WRITERS
@@ -176,6 +177,12 @@ tensor = DERIVED_LOADERS["npy"](Path("/data/output/000000.npy"))
 ### SequencePreprocessor
 
 ::: apairo.core.preprocessor.SequencePreprocessor
+
+---
+
+### Convert
+
+::: apairo.preprocess.convert.Convert
 
 ---
 

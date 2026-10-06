@@ -5,7 +5,7 @@ import re
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -31,6 +31,7 @@ from apairo.core.config import (
     remove_channel as _remove_channel,
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
+from apairo.core.formats import Format, get_format
 from apairo.core.sample import Sample
 from apairo.core.synchronous_dataset import SynchronousDataset
 from apairo.loader import DERIVED_LOADERS
@@ -242,6 +243,35 @@ class _PerFrameLoader:
 
 def _loadtxt_2d(path: Path) -> np.ndarray:
     return np.atleast_2d(np.loadtxt(path))
+
+
+class _FormatFrames:
+    """A derived per-frame channel, read through its format: the files grouped
+    by directory, each directory opened once by the format's loader with exactly
+    the files selected (a split, a filter), in order."""
+
+    def __init__(self, fmt: Format, paths: list[Path], meta: dict) -> None:
+        self.paths = paths
+        self._fmt = fmt
+        self._meta = meta
+        self._files: dict[Path, list[str]] = {}
+        self._where: list[tuple[Path, int]] = []
+        for path in paths:
+            names = self._files.setdefault(path.parent, [])
+            self._where.append((path.parent, len(names)))
+            names.append(path.name)
+        self._opened: dict[Path, Any] = {}
+
+    def __len__(self) -> int:
+        return len(self.paths)
+
+    def __getitem__(self, idx: int) -> np.ndarray:
+        directory, row = self._where[idx]
+        loader = self._opened.get(directory)
+        if loader is None:
+            loader = self._fmt.open(directory, self._meta, self._files[directory])
+            self._opened[directory] = loader
+        return np.asarray(loader[row])
 
 
 class _StackedSequenceLoader:
@@ -663,19 +693,17 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             if mapped in rel_parts:
                 self._modality_idx = rel_parts.index(mapped)
 
-        stacked_derived: list[str] = []
+        # A derived channel is read through its format, whatever wrote it: a
+        # per-frame one file by file; a stacked one -- one array per sequence,
+        # row per frame -- deferred until the frame order is known.
+        stacked_derived: dict[str, Format] = {}
         for key in derived_keys:
-            loader = channels[key]["loader"]
-            # "npy" == one stacked file per sequence (NPYLoader-style, row per
-            # frame); "npys"/"bin"/"img" == one file per frame. Stacked channels
-            # are deferred until the frame order is known.
-            if loader == "npy":
-                stacked_derived.append(key)
+            fmt = get_format(channels[key]["loader"])
+            if not fmt.per_frame:
+                stacked_derived[key] = fmt
                 continue
-            ext = "npy" if loader == "npys" else loader
-            paths = self._discover_derived(key, ext)
-            spec = ModalitySpec(ext=f".{ext}", loader=ext)
-            self._loaders[key] = _PerFrameLoader(paths, spec)
+            paths = self._discover_derived(key, fmt)
+            self._loaders[key] = _FormatFrames(fmt, paths, channels[key])
 
         # If no native key was loaded (e.g. preprocessing a derived channel),
         # fall back to the first derived key as the path reference so that
@@ -723,11 +751,13 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             self._loaders[key] = self._build_stacked_loader(
                 seq_paths, reshape=spec.reshape, reader=_loadtxt_2d
             )
-        for key in stacked_derived:
-            paths = self._discover_derived(key, "npy", apply_frame_filter=False)
-            seq_paths = {self._seq_root(p).name: p for p in paths}
+        for key, fmt in stacked_derived.items():
+            paths = self._discover_derived(key, fmt, apply_frame_filter=False)
+            seq_dirs = {self._seq_root(p).name: p.parent for p in paths}
             self._loaders[key] = self._build_stacked_loader(
-                seq_paths, reshape=None, reader=np.load
+                seq_dirs,
+                reshape=None,
+                reader=functools.partial(fmt.open, meta=channels[key]),
             )
 
         # Expose loaders and keys under their public (alias) name; file
@@ -1027,16 +1057,29 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         return paths
 
     def _discover_derived(
-        self, key: str, ext: str, apply_frame_filter: bool = True
+        self, key: str, fmt: Format, apply_frame_filter: bool = True
     ) -> list[Path]:
+        """The files of derived channel *key*: the frames of a per-frame format,
+        or, for a stacked one, the files of each directory the format detects
+        (their parent is the channel's directory in that sequence)."""
         fixed_parts = _fixed_layer_parts(self._layers)
         if fixed_parts:
             prefix = Path(*fixed_parts)
-            pattern = str(prefix / "**" / key / f"*.{ext}")
+            pattern = str(prefix / "**" / key / "*")
         else:
-            pattern = f"**/{key}/**/*.{ext}"
+            pattern = f"**/{key}/**/*"
 
-        files = sorted(self._root.glob(pattern), key=_natural_key)
+        def keep(p: Path) -> bool:
+            if not p.is_file() or p.name.startswith(".") or p.name == "timestamps.txt":
+                return False
+            # A stacked channel's directory is the one its format detects --
+            # named after the channel (<seq>/<key>/) or after the sequence
+            # (<key>/<split>/<seq>/), as the layout places it.
+            return fmt.matches(p) if fmt.per_frame else fmt.detect(p.parent)
+
+        files = sorted(
+            (p for p in self._root.glob(pattern) if keep(p)), key=_natural_key
+        )
         # Directory-based splits live in the path (filter by it); lst-based splits
         # have no split layer and are resolved by _frame_filter below -- mirror
         # _discover_native so a derived channel splits the same way a native one does.
@@ -1062,8 +1105,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             ]
         if not files:
             raise FileNotFoundError(
-                f"Derived key '{key}': no .{ext} files found under '{self._root}'. "
-                f"Run run_preprocess(...) to generate them."
+                f"Derived key '{key}': no '{fmt.name}' data found under "
+                f"'{self._root}'. Run run_preprocess(...) to generate it."
             )
         return files
 

@@ -10,7 +10,9 @@ installed, `loader: <name>` works everywhere a built-in name does:
 - `apairo declare` scaffolds its clock;
 - `apairo check` validates it;
 - `apairo status` describes it;
-- `RawDataset` loads it, and `synchronize()` aligns it with the other channels.
+- `RawDataset` loads it, and `synchronize()` aligns it with the other channels;
+- and, when the format writes, a preprocess on its channels writes its output
+  in it, and `Convert` copies any channel into it.
 
 ## What the core keeps, what a format answers
 
@@ -21,7 +23,8 @@ installed, `loader: <name>` works everywhere a built-in name does:
 | the `key: {name: ...}` and `key: {file: ...}` clocks, the `order` regex | the loader that decodes a frame (`loader`, `open`) |
 | suffixed variants, colocated channels (`directory: "."`) | clock forms its data provides (`key_forms`, `clock`) |
 | the clock checks, the timeline, `synchronize()`, views, caching | the channel fields it reads (`fields`, `validate`) |
-| | what `status` shows and `declare` suggests (`facts`, `declare_hints`) |
+| the output format of a preprocess, `Convert` | what `status` shows and `declare` suggests (`facts`, `declare_hints`) |
+| | how a channel is stored, if it writes (`write_frame` or `write_channel`, `can_write`) |
 
 A per-frame format gets a filename clock, an `order` regex and the `status`
 facts without writing any code for them.
@@ -30,7 +33,8 @@ facts without writing any code for them.
 
 The `.xyz` format, which some scanners and photogrammetry tools export, stores
 one ASCII point cloud per frame, with one `x y z` point per line. Here is the
-whole plugin:
+whole plugin. Its last two methods are optional: they let it write as well as
+read.
 
 ```python title="apairo_xyz.py"
 --8<-- "examples/format_plugin/apairo_xyz.py"
@@ -84,6 +88,8 @@ The check covers the following:
 - **File lists.** A per-frame loader exposes `files` and honors the `files` it
   is given.
 - **Status.** `facts()` agrees with the loader.
+- **Writing.** A format that writes stores the sample and reads it back
+  unchanged.
 - **Scaffold and check.** `declare_hints()` and `validate()` answer in the
   expected shape.
 
@@ -107,6 +113,7 @@ frame, recognized by its extension, opened as `loader(directory)` or
 | `fields` | `{}` | The channel fields the format reads, which may include fields of its own. `check` accepts them on its channels and flags them on others. |
 | `key_forms` | `{}` | Clock forms the data provides, such as `{"column"}` for `csv`. Declared as `key: {<form>: ...}`. |
 | `priority` | `50` | The detection order, lowest first. The built-ins use `zarr` 10, `bin` 20, `pcd` 30, `img` 40, `npys` 50, `npy` 51 and `csv` 90. |
+| `write_suffix` | `""` | The suffix of the frame files a per-frame format writes, one of its `extensions`. |
 
 | Method | Default | Override when |
 | --- | --- | --- |
@@ -117,6 +124,9 @@ frame, recognized by its extension, opened as `loader(directory)` or
 | `facts(directory, meta, files)` | open, then read frame 0 | reading frame 0 is not cheap |
 | `declare_hints(directory, meta)` | none | a scaffold line would help, such as the fields a header lists |
 | `validate(key, meta, storage_dir)` | no issues | the format has fields of its own |
+| `write_frame(path, frame)` | read-only | a per-frame format writes: store one frame at `path` |
+| `write_channel(directory, name, array)` | read-only | a stacked format writes: store the whole channel, row `i` being frame `i` |
+| `can_write(array)` | `True` when the format writes | only some arrays come back unchanged, such as `float32` clouds or `uint8` images |
 
 `files` is the list of frame filenames the core resolved from an `order` or
 `key` regex, or for a suffixed variant. It is `None` when the format should list
@@ -172,6 +182,7 @@ channels:
 - **Heavy dependencies.** apairo imports every installed plugin when it first
   looks a format up. Import heavy libraries inside `open()` or the loader, not
   at the top of the module.
-- **Reading only.** A format plugin adds a way to read data. Preprocessing
-  outputs are still written by apairo's writers (`npys`, `npy`, `bin`, `zarr`,
-  `img`).
+- **Writing is optional, and exact.** A format without `write_frame` or
+  `write_channel` is read-only, and a preprocess never writes its output in it.
+  A format that writes must read back unchanged what it wrote, and
+  `can_write` refuses any array for which that would not hold.

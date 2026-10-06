@@ -25,6 +25,27 @@ All notable changes to apairo are documented here. The format is based on
   installs that plugin through its entry point and runs it end to end. A
   plugin that fails to import is skipped with a warning; a built-in name
   cannot be taken over.
+- **A preprocess writes in any format, its input's by default.** The format
+  contract covers writing too:
+  - a format stores a frame (`write_frame`) or a whole channel
+    (`write_channel`), says what it can hold (`can_write`), and must read back
+    unchanged what it wrote, which `check_format` verifies;
+  - `npys`, `npy`, `img` (PNG), `bin`, `zarr` and `csv` write, and a plugin
+    can too;
+  - an output goes in the format the run asks for
+    (`run_preprocess(..., output_format=...)`), else the preprocessor's
+    `output_loader` (now optional), else its input channel's format when that
+    format can hold it, else `npys` / `npy`. An image mask stays an image, a
+    crop of `.xyz` clouds stays `.xyz`;
+  - a stacked format can take a frame preprocessor's output, stacked per
+    sequence;
+  - a format conversion is a preprocess: `Convert("velodyne_0", to="zarr")`
+    writes a derived channel with its clock and provenance;
+  - a format that cannot hold an output, or is read-only, is refused by name
+    before anything is written.
+
+  Existing preprocessors declare `output_loader` and write exactly as before;
+  `apairo_preprocess`'s suite passes unchanged.
 - **`csv` loader: a text table is a channel, its clock a column.** IMU logs
   and ground-truth trajectories in most SLAM datasets are one table with one
   row per frame and the timestamp in a column -- EuRoC's `imu0/data.csv`, TUM
@@ -84,6 +105,17 @@ All notable changes to apairo are documented here. The format is based on
 - **`declare` gives a stacked array a sidecar hint.** A lone `.npy` without a
   `timestamps.txt` used to get a filename `key` regex, which `check` then
   refused on a stacked loader; it now gets a commented `key: {file: ...}`.
+
+- **A profiled dataset reads its derived channels through their format.**
+  SemanticKITTI, Rellis, GOOSE and the other profiled datasets read a
+  preprocess output by its file extension. A derived `bin` channel came back
+  flat instead of `(N, 4)`, and a derived image channel was not found. It is
+  now opened by its format, so every format that writes reads back there too,
+  per frame or stacked per sequence. Their raw modalities are unchanged: their
+  YAML profiles describe them.
+- **Overwrite protection looks at the output channel's directory.**
+  `run_preprocess` refuses to write into a channel directory that already
+  holds data, whatever the format; it used to look for the first frame file.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,

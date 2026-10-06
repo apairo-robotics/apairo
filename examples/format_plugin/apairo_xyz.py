@@ -41,8 +41,17 @@ class XYZLoader(AbstractLoader):
 
 class XyzFormat(Format):
     """Per-frame, found by its extension: the defaults of :class:`Format`
-    cover the rest -- detection, opening, status facts."""
+    cover detection, opening and the status facts. Writing is optional; with
+    it, a preprocess on .xyz clouds writes .xyz clouds."""
 
     name = "xyz"
     loader = XYZLoader
     extensions = frozenset({".xyz"})
+    write_suffix = ".xyz"
+
+    def can_write(self, array: np.ndarray) -> bool:
+        return array.ndim == 2 and array.shape[1] == 3 and array.dtype == np.float32
+
+    def write_frame(self, path: Path, frame: np.ndarray) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savetxt(path, frame, fmt="%.9g")  # 9 digits read a float32 back exactly

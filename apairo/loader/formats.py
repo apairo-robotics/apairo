@@ -30,10 +30,18 @@ class NpysFormat(Format):
     extensions = frozenset({".npy"})
     suffixes = True
     priority = 50
+    write_suffix = ".npy"
 
     def detect(self, directory: Path) -> bool:
         # Several .npy files are frames; a single one is a stacked array (npy).
         return len(self.data_files(directory)) > 1
+
+    def can_write(self, array: np.ndarray) -> bool:
+        return array.dtype != object
+
+    def write_frame(self, path: Path, frame: np.ndarray) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(path, frame)
 
     def facts(
         self, directory: Path, meta: dict, files: list[str] | None = None
@@ -62,6 +70,13 @@ class NpyFormat(Format):
     def detect(self, directory: Path) -> bool:
         return len(self.data_files(directory)) == 1
 
+    def can_write(self, array: np.ndarray) -> bool:
+        return array.ndim >= 1 and array.dtype != object
+
+    def write_channel(self, directory: Path, name: str, array: np.ndarray) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        np.save(directory / f"{name}.npy", array)
+
     def open(self, directory: Path, meta: dict, files: list[str] | None = None):
         return NPYLoader(directory, file=meta.get("array_file"))
 
@@ -85,6 +100,15 @@ class BinFormat(Format):
     loader = BINLoader
     extensions = frozenset({".bin"})
     priority = 20
+    write_suffix = ".bin"
+
+    def can_write(self, array: np.ndarray) -> bool:
+        # The format is float32 points by definition, as KITTI stores them.
+        return array.ndim == 2 and array.shape[1] == 4 and array.dtype == np.float32
+
+    def write_frame(self, path: Path, frame: np.ndarray) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.ascontiguousarray(frame, dtype=np.float32).tofile(path)
 
     def facts(
         self, directory: Path, meta: dict, files: list[str] | None = None
@@ -129,6 +153,18 @@ class ImgFormat(Format):
     loader = IMGLoader
     extensions = frozenset({".png", ".jpg", ".jpeg", ".bmp"})
     priority = 40
+    write_suffix = ".png"  # lossless: what is written reads back unchanged
+
+    def can_write(self, array: np.ndarray) -> bool:
+        if array.dtype == np.uint8:
+            return array.ndim == 2 or (array.ndim == 3 and array.shape[2] in (3, 4))
+        return array.dtype == np.uint16 and array.ndim == 2  # a depth map
+
+    def write_frame(self, path: Path, frame: np.ndarray) -> None:
+        from PIL import Image
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(frame).save(path)
 
 
 class ZarrFormat(Format):
@@ -145,6 +181,15 @@ class ZarrFormat(Format):
 
     def open(self, directory: Path, meta: dict, files: list[str] | None = None):
         return ZarrLoader(directory)
+
+    def can_write(self, array: np.ndarray) -> bool:
+        return array.ndim >= 1 and array.dtype != object
+
+    def write_channel(self, directory: Path, name: str, array: np.ndarray) -> None:
+        # The channel directory is the store, its timestamps.txt beside it.
+        from apairo.writer.zarr_writer import ZarrWriter
+
+        ZarrWriter().write(array, directory)
 
 
 # Header names (after the csv loader drops '#' and '[unit]') that name a clock.
@@ -187,6 +232,15 @@ class CsvFormat(Format):
             key_column=spec.get("column"),
             fields=fields,
         )
+
+    def can_write(self, array: np.ndarray) -> bool:
+        # A table reads back as float64 rows: only that comes back unchanged.
+        return array.ndim == 2 and array.dtype == np.float64
+
+    def write_channel(self, directory: Path, name: str, array: np.ndarray) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        # %.17g round-trips a float64 exactly; the clock goes in timestamps.txt.
+        np.savetxt(directory / f"{name}.csv", array, delimiter=",", fmt="%.17g")
 
     def clock(self, loader, spec: dict, label: str) -> np.ndarray:
         tokens = getattr(loader, "key_tokens", None)
