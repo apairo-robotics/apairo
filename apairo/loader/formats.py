@@ -13,7 +13,7 @@ from apairo.core.formats import Facts, Format, register_format
 from apairo.core.keys import epoch_unit, parse_column_key
 from apairo.core.naming import is_frame_file
 from apairo.loader.bin_loader import BINLoader
-from apairo.loader.csv_loader import CSVLoader, looks_like_table
+from apairo.loader.csv_loader import CSVLoader, looks_like_table, scan_table
 from apairo.loader.img_loader import IMGLoader
 from apairo.loader.npy_loader import NPYLoader
 from apairo.loader.npys_loader import NPYSLoader
@@ -39,9 +39,9 @@ class NpysFormat(Format):
         self, directory: Path, meta: dict, files: list[str] | None = None
     ) -> Facts:
         if files is None:  # the loader's own listing: no suffixed variant
-            files = sorted(
+            files = [
                 f.name for f in self.data_files(directory) if is_frame_file(f.name)
-            )
+            ]
         if not files:
             return Facts(frames=0)
         arr = np.load(directory / files[0], mmap_mode="r")  # header only
@@ -197,20 +197,21 @@ class CsvFormat(Format):
     def facts(
         self, directory: Path, meta: dict, files: list[str] | None = None
     ) -> Facts:
-        table = self.open(directory, meta)
+        # Counted and spanned off the lines, not parsed: a long log (a 1 kHz
+        # F/T sensor) would otherwise be converted cell by cell, every status.
         key = meta.get("key")
         spec: dict = key if isinstance(key, dict) else {}
-        clock = (
-            parse_column_key(table.key_tokens, spec)
-            if table.key_tokens is not None
-            else None
+        table = scan_table(
+            directory,
+            file=meta.get("array_file"),
+            key_column=spec.get("column"),
+            fields=list(meta["fields"]) if meta.get("fields") else None,
         )
-        return Facts(
-            frames=len(table),
-            shape=list(table.shape),
-            dtype=str(table.array.dtype),
-            clock=clock,
-        )
+        span = None
+        if table.first_key is not None and table.last_key is not None:
+            ends = parse_column_key([table.first_key, table.last_key], spec)
+            span = (float(ends[0]), float(ends[-1]))
+        return Facts(frames=table.rows, shape=[table.width], dtype="float64", span=span)
 
     def declare_hints(self, directory: Path, meta: dict) -> list[str]:
         """A ``key: {column: ...}`` line when the table has no clock on disk: the

@@ -264,14 +264,6 @@ class JsonlFormat(Format):
     def clock(self, loader, spec, label):
         return np.array([r[spec["member"]] for r in loader.records], dtype=float)
 
-    def facts(self, directory, meta, files=None):
-        loader = self.open(directory, meta)
-        spec = meta.get("key") if isinstance(meta.get("key"), dict) else {}
-        clock = self.clock(loader, spec, "status") if "member" in spec else None
-        return registry.Facts(
-            frames=len(loader), shape=list(loader.shape), dtype="float64", clock=clock
-        )
-
     def validate(self, key, meta, storage_dir):
         values = meta.get("values")
         if values is not None and not (isinstance(values, str) and values):

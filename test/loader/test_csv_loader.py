@@ -148,3 +148,48 @@ def test_column_key_spec_errors(spec, match):
 def test_non_numeric_key_cell():
     with pytest.raises(ValueError, match="non-numeric key cell"):
         parse_column_key(["2026-09-24"], {"column": 0})
+
+
+# ─────────────── scan_table: status's size and span, no cell parsed ───────────
+
+_SCANNED = [
+    (EUROC, {"key_column": 0}),
+    (TUM, {"key_column": "timestamp", "fields": ["tx", "qw"]}),
+    ("t,x,y\n1,2,3\n\n# a note in the middle\n2,3,4\n   \n  # indented\n3,4,5", {}),
+    ("t,x\r\n1,2\r\n\r\n2,3\r\n", {"key_column": "t"}),
+    ("1\t2\t3\n4\t5\t6\n", {"key_column": 2}),
+    ("# no header\n1 2\n3 4\n5 6\n", {"key_column": 1}),
+]
+
+
+@pytest.mark.parametrize("text, kwargs", _SCANNED)
+def test_scan_agrees_with_the_loader(tmp_path, text, kwargs):
+    from apairo.loader.csv_loader import scan_table
+
+    d = _table(tmp_path, text)
+    loader = CSVLoader(d, **kwargs)
+    scan = scan_table(d, **kwargs)
+    assert scan.rows == len(loader)
+    assert scan.width == loader.shape[0]
+    assert scan.columns == loader.columns
+    if loader.key_tokens is not None:
+        assert (scan.first_key, scan.last_key) == (
+            loader.key_tokens[0],
+            loader.key_tokens[-1],
+        )
+
+
+@pytest.mark.parametrize(
+    "text, kwargs, match",
+    [
+        ("1,2\n3,4\n5\n", {}, "expected 2"),
+        ("a,b\n", {}, "no data rows"),
+        ("t,x\n1,2\n", {"key_column": "time"}, "no column named 'time'"),
+        ("1,2\n", {"fields": ["x"]}, "no header"),
+    ],
+)
+def test_scan_refuses_what_the_loader_refuses(tmp_path, text, kwargs, match):
+    from apairo.loader.csv_loader import scan_table
+
+    with pytest.raises(ValueError, match=match):
+        scan_table(_table(tmp_path, text), **kwargs)

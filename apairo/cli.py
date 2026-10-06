@@ -91,8 +91,12 @@ def _rate_span(ts):
     if ts is None or len(ts) == 0:
         return None, None
     t0, t1 = float(ts[0]), float(ts[-1])
-    rate = (len(ts) - 1) / (t1 - t0) if len(ts) >= 2 and t1 > t0 else None
-    return rate, (t0, t1)
+    return _rate(len(ts), t0, t1), (t0, t1)
+
+
+def _rate(n: int, t0: float, t1: float) -> float | None:
+    """Average rate (Hz) of *n* timestamps from *t0* to *t1*."""
+    return (n - 1) / (t1 - t0) if n >= 2 and t1 > t0 else None
 
 
 def _count_files(channel_dir: Path) -> int:
@@ -104,13 +108,25 @@ def _count_files(channel_dir: Path) -> int:
 
 
 def _frame_facts(
-    cdir: Path, meta: dict, loader: str | None
+    cdir: Path, meta: dict, loader: str | None, cache: dict | None = None
 ) -> tuple[Facts, list[str] | None]:
     """What the channel's format says about it (frames, shape, dtype, and the
-    clock a form of its own gives), read the way loading reads it -- with the
+    span of a clock form of its own), read the way loading reads it -- with the
     frame files the core resolves from a ``key``/``order`` regex or a suffix,
     which are returned too. Unknown facts when the format is unknown or the
-    channel does not open; ``check`` reports why."""
+    channel does not open; ``check`` reports why. *cache* keeps one reading per
+    channel for the length of a ``status``, which asks twice."""
+    if cache is None:
+        return _read_frame_facts(cdir, meta, loader)
+    key = (str(cdir), loader, json.dumps(meta, sort_keys=True, default=str))
+    if key not in cache:
+        cache[key] = _read_frame_facts(cdir, meta, loader)
+    return cache[key]
+
+
+def _read_frame_facts(
+    cdir: Path, meta: dict, loader: str | None
+) -> tuple[Facts, list[str] | None]:
     fmt = find_format(loader)
     if fmt is None or not cdir.is_dir():
         return Facts(), None
@@ -141,7 +157,9 @@ def _keyed_clock(channel_dir: Path, meta: dict, files: list[str] | None):
         return None
 
 
-def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
+def _clock_coverage_issues(
+    seq_dir: Path, cfg: dict, cache: dict | None = None
+) -> list[str]:
     """A channel with no clock at all, or whose clock -- its own
     ``timestamps.txt``, or the one it borrows with ``timestamps_from`` -- does not
     hold one timestamp per frame. Loading refuses both; ``check`` says so before
@@ -173,7 +191,7 @@ def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
             continue
         if clock is None:
             continue
-        n_frames = _frame_facts(cdir, meta, meta.get("loader"))[0].frames
+        n_frames = _frame_facts(cdir, meta, meta.get("loader"), cache)[0].frames
         if n_frames is not None and n_frames != len(clock):
             issues.append(
                 f"channel '{ch}': {n_frames} frame(s) but {len(clock)} timestamp(s) "
@@ -183,35 +201,41 @@ def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
     return issues
 
 
-def _channel_detail(seq_dir: Path, channel: str, meta: dict | None) -> dict:
+def _channel_detail(
+    seq_dir: Path, channel: str, meta: dict | None, cache: dict | None = None
+) -> dict:
     """Per-channel facts for the channel directory ``seq_dir/channel``.
 
     A sub-channel that shares another channel's directory (a suffixed variant, or
     a colocated ``array_file``) is resolved through its ``directory`` field rather
     than the non-existent ``seq_dir/channel``."""
     subdir = meta.get("directory", channel) if meta else channel
-    return _channel_detail_dir(seq_dir / subdir, meta)
+    return _channel_detail_dir(seq_dir / subdir, meta, cache)
 
 
-def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
-    """Per-channel facts for an explicit directory, all cheap: the clock (a
-    timestamps.txt, or a declared ``key`` parsed from the filenames) gives
-    frames/rate/span, the .npy header or the first frame gives shape/dtype.
-    ``meta=None``
-    marks an untracked channel.  Taking the directory explicitly lets a profiled
-    dataset point this at a nested, resolved channel dir (canonical name != dir)."""
+def _channel_detail_dir(
+    cdir: Path, meta: dict | None, cache: dict | None = None
+) -> dict:
+    """Per-channel facts for an explicit directory, all cheap: the format gives
+    frames, shape and dtype (a listing, a header, the first frame); the clock --
+    a timestamps.txt, a declared ``key``, or the span of a clock the format
+    provides -- gives the rate and the span. ``meta=None`` marks an untracked
+    channel. Taking the directory explicitly lets a profiled dataset point this
+    at a nested, resolved channel dir (canonical name != dir)."""
     loader = meta.get("loader") if meta else _detect_loader(cdir)
-    facts, files = _frame_facts(cdir, meta or {}, loader)
+    facts, files = _frame_facts(cdir, meta or {}, loader, cache)
     ts = _read_timestamps(cdir)
     if meta and cdir.is_dir():
         # A declared key is the channel's clock, ahead of any timestamps.txt --
-        # the precedence loading uses: a form the format provides (a table's
-        # column), else the core's filename and sidecar forms.
-        keyed = (
-            facts.clock if facts.clock is not None else _keyed_clock(cdir, meta, files)
-        )
+        # the precedence loading uses.
+        keyed = _keyed_clock(cdir, meta, files)
         ts = keyed if keyed is not None else ts
     rate, span = _rate_span(ts)
+    if facts.span is not None and facts.frames is not None:
+        # A clock form of the format's own (a table's column): its span, read
+        # off the first and last rows, and the frame count give the rate.
+        span = facts.span
+        rate = _rate(facts.frames, *span)
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,
@@ -267,7 +291,10 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
             cfg = merge_declared_channels(cfg, read_declaration(decl))
         except ValueError:
             pass
-    channels = {k: _channel_detail(seq_dir, k, v) for k, v in sorted(cfg.items())}
+    cache: dict = {}
+    channels = {
+        k: _channel_detail(seq_dir, k, v, cache) for k, v in sorted(cfg.items())
+    }
     untracked = {
         u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)
     }
@@ -278,7 +305,7 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
         else ["not initialized -- run `apairo init`"]
     )
     issues += verify_declaration(declaration_path(seq_dir), seq_dir)
-    issues += _clock_coverage_issues(seq_dir, cfg)
+    issues += _clock_coverage_issues(seq_dir, cfg, cache)
     return {
         "channels": channels,
         "untracked": untracked,

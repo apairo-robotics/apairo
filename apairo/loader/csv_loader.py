@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 
@@ -71,6 +72,105 @@ def looks_like_table(path: Path) -> bool:
     return width is not None
 
 
+class _Head(NamedTuple):
+    names: list[str] | None
+    rows: list[list[str]]
+    sep: str | None
+    header_row: bool
+
+
+class TableScan(NamedTuple):
+    """What :func:`scan_table` reads off a table without parsing its cells."""
+
+    rows: int
+    columns: list[str] | None
+    width: int
+    first_key: str | None
+    last_key: str | None
+
+
+def scan_table(
+    directory: str | Path,
+    *,
+    file: str | None = None,
+    key_column: int | str | None = None,
+    fields: list[str] | None = None,
+) -> TableScan:
+    """The size and clock span of the table :class:`CSVLoader` would read, for
+    ``apairo status``: names and the first row from the head, then one pass
+    over the lines -- counting the rows, checking their width, keeping the
+    last -- with no cell converted to a number. The loader's rules apply
+    (comments, header row or header comment, ``key_column``, ``fields``); a
+    non-numeric cell is left to loading to report."""
+    path = CSVLoader._locate(Path(directory), file)
+    head = CSVLoader._read(path, limit=1)
+    width = len(head.rows[0])
+    sep = head.sep.encode() if head.sep is not None else None
+    data_lines = 0
+    last = b""
+    with open(path, "rb") as f:
+        for lineno, raw in enumerate(f, start=1):
+            first = raw[:1]
+            if first == b"#" or raw.isspace():
+                continue
+            if first in b" \t" and raw.lstrip()[:1] == b"#":
+                continue
+            data_lines += 1
+            if data_lines == 1 and head.header_row:
+                continue
+            cells = raw.count(sep) + 1 if sep is not None else len(raw.split())
+            if cells != width:
+                raise ValueError(
+                    f"{path}:{lineno}: {cells} column(s), expected {width}."
+                )
+            last = raw
+    rows = data_lines - head.header_row
+    key_idx = (
+        _column_index(path, key_column, head.names, width, "key column")
+        if key_column is not None
+        else None
+    )
+    if fields is not None:
+        if head.names is None:
+            raise ValueError(
+                f"{path}: 'fields' selects columns by name, but the table has no "
+                f"header row or header comment to name them."
+            )
+        keep = [_column_index(path, f, head.names, width, "field") for f in fields]
+    else:
+        keep = [i for i in range(width) if i != key_idx]
+    last_cells = _split(last.decode("utf-8").strip(), head.sep)
+    return TableScan(
+        rows=rows,
+        columns=[head.names[i] for i in keep] if head.names is not None else None,
+        width=len(keep),
+        first_key=head.rows[0][key_idx] if key_idx is not None else None,
+        last_key=last_cells[key_idx] if key_idx is not None else None,
+    )
+
+
+def _split(line: str, sep: str | None) -> list[str]:
+    cells = line.split(sep) if sep is not None else line.split()
+    return [c.strip() for c in cells]
+
+
+def _column_index(
+    path: Path, column: int | str, names: list[str] | None, width: int, what: str
+) -> int:
+    if isinstance(column, bool) or not isinstance(column, (int, str)):
+        raise ValueError(f"{path}: {what} {column!r} is not an index or a name.")
+    if isinstance(column, int):
+        if not 0 <= column < width:
+            raise ValueError(
+                f"{path}: {what} {column} is out of range for {width} column(s)."
+            )
+        return column
+    if names is None or column not in names:
+        known = f"; columns: {names}" if names is not None else " (no header)"
+        raise ValueError(f"{path}: no column named {column!r}{known}.")
+    return names.index(column)
+
+
 class CSVLoader(AbstractLoader):
     r"""Loader for a delimited text table in a channel directory, one row per frame.
 
@@ -102,13 +202,13 @@ class CSVLoader(AbstractLoader):
         fields: list[str] | None = None,
     ) -> None:
         self.path = self._locate(Path(directory), file)
-        names, rows = self._read(self.path)
+        names, rows, _, _ = self._read(self.path)
         width = len(rows[0])
 
         self.key_tokens: list[str] | None = None
         key_idx: int | None = None
         if key_column is not None:
-            key_idx = self._column_index(key_column, names, width, "key column")
+            key_idx = _column_index(self.path, key_column, names, width, "key column")
             self.key_tokens = [row[key_idx] for row in rows]
 
         if fields is not None:
@@ -117,7 +217,7 @@ class CSVLoader(AbstractLoader):
                     f"{self.path}: 'fields' selects columns by name, but the table "
                     f"has no header row or header comment to name them."
                 )
-            keep = [self._column_index(f, names, width, "field") for f in fields]
+            keep = [_column_index(self.path, f, names, width, "field") for f in fields]
         else:
             keep = [i for i in range(width) if i != key_idx]
         self.columns: list[str] | None = (
@@ -154,15 +254,17 @@ class CSVLoader(AbstractLoader):
         return tables[0]
 
     @staticmethod
-    def _read(path: Path) -> tuple[list[str] | None, list[list[str]]]:
+    def _read(path: Path, limit: int | None = None) -> _Head:
+        """Names, data rows (the first *limit* only, when given), separator, and
+        whether the names came from a header row rather than a comment."""
         last_comment: str | None = None
         header: list[str] | None = None
+        header_row = False
         rows: list[list[str]] = []
         sep: str | None = None
 
         def split(line: str) -> list[str]:
-            cells = line.split(sep) if sep is not None else line.split()
-            return [c.strip() for c in cells]
+            return _split(line, sep)
 
         with open(path, encoding="utf-8") as f:
             for lineno, raw in enumerate(f, start=1):
@@ -178,6 +280,7 @@ class CSVLoader(AbstractLoader):
                 cells = split(line)
                 if not rows and header is None and not all(map(_is_number, cells)):
                     header = [_column_name(c) for c in cells]
+                    header_row = True
                     continue
                 if rows and len(cells) != len(rows[0]):
                     raise ValueError(
@@ -185,6 +288,8 @@ class CSVLoader(AbstractLoader):
                         f"{len(rows[0])}."
                     )
                 rows.append(cells)
+                if limit is not None and len(rows) >= limit:
+                    break
 
         if not rows:
             raise ValueError(f"{path}: no data rows.")
@@ -197,26 +302,7 @@ class CSVLoader(AbstractLoader):
                 f"{path}: header has {len(header)} name(s) for {len(rows[0])} "
                 f"column(s)."
             )
-        return header, rows
-
-    def _column_index(
-        self, column: int | str, names: list[str] | None, width: int, what: str
-    ) -> int:
-        if isinstance(column, bool) or not isinstance(column, (int, str)):
-            raise ValueError(
-                f"{self.path}: {what} {column!r} is not an index or a name."
-            )
-        if isinstance(column, int):
-            if not 0 <= column < width:
-                raise ValueError(
-                    f"{self.path}: {what} {column} is out of range for {width} "
-                    f"column(s)."
-                )
-            return column
-        if names is None or column not in names:
-            known = f"; columns: {names}" if names is not None else " (no header)"
-            raise ValueError(f"{self.path}: no column named {column!r}{known}.")
-        return names.index(column)
+        return _Head(header, rows, sep, header_row)
 
     # ------------------------------------------------------------------ access
 

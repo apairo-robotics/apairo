@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from apairo.core.abstract_loader import AbstractLoader
-from apairo.core.formats import Format
+from apairo.core.formats import Facts, Format
 
 __all__ = ["check_format"]
 
@@ -152,6 +152,7 @@ def _check_on_disk(
                     )
 
     # Describing.
+    facts: Facts | None = None
     try:
         facts = fmt.facts(directory, meta, None)
     except Exception as exc:
@@ -167,10 +168,6 @@ def _check_on_disk(
             problems.append(
                 f"facts() says dtype {facts.dtype}, frame 0 is {first.dtype}"
             )
-        if facts.clock is not None and len(facts.clock) != n:
-            problems.append(
-                f"facts() gives {len(facts.clock)} timestamps for {n} frames"
-            )
     spec = meta.get("key")
     if isinstance(spec, dict) and set(spec) & fmt.key_forms:
         try:
@@ -180,6 +177,12 @@ def _check_on_disk(
         else:
             if clock.shape != (n,):
                 problems.append(f"clock() gives shape {clock.shape} for {n} frames")
+            elif facts is not None and facts.span is not None:
+                ends = (float(clock[0]), float(clock[-1]))
+                if not np.allclose(facts.span, ends, rtol=0, atol=1e-9):
+                    problems.append(
+                        f"facts() says span {facts.span}, clock() runs {ends}"
+                    )
     hints = _safe(lambda: fmt.declare_hints(directory, meta), None, problems)
     if hints is not None:
         if not isinstance(hints, list) or not all(

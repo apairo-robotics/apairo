@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,14 +47,16 @@ ENTRY_POINT_GROUP = "apairo.formats"
 class Facts:
     """What ``apairo status`` shows about a channel, read cheaply from disk.
 
-    Any field left ``None`` prints as unknown. ``clock`` is only set for a clock
-    form the format itself provides (a table's column); filename and sidecar
-    keys, and ``timestamps.txt``, are read by the core."""
+    Any field left ``None`` prints as unknown. ``span`` -- the first and last
+    timestamps -- is only set for a clock form the format itself provides (a
+    table's column), and is all ``status`` needs of that clock: with
+    ``frames``, it gives the rate. Filename and sidecar keys, and
+    ``timestamps.txt``, are read by the core."""
 
     frames: int | None = None
     shape: list[int] | None = None
     dtype: str | None = None
-    clock: np.ndarray | None = None
+    span: tuple[float, float] | None = None
 
 
 class Format:
@@ -100,16 +103,19 @@ class Format:
     # ------------------------------------------------------------ discovery
 
     def data_files(self, directory: Path) -> list[Path]:
-        """The files of *directory* this format reads, sorted -- never a dotfile
-        or ``timestamps.txt``."""
-        return sorted(
-            p
-            for p in directory.iterdir()
-            if p.is_file()
-            and not p.name.startswith(".")
-            and p.name != "timestamps.txt"
-            and self.matches(p)
-        )
+        """The files of *directory* this format reads, sorted by name -- never a
+        dotfile or ``timestamps.txt``."""
+        # Names are listed and sorted as strings: a channel can hold tens of
+        # thousands of frames, and sorting Paths costs several times more.
+        with os.scandir(directory) as entries:
+            names = sorted(
+                e.name
+                for e in entries
+                if not e.name.startswith(".")
+                and e.name != "timestamps.txt"
+                and e.is_file()
+            )
+        return [p for p in (directory / n for n in names) if self.matches(p)]
 
     def matches(self, path: Path) -> bool:
         """Is *path* a data file of this format?"""
@@ -147,16 +153,22 @@ class Format:
     def facts(
         self, directory: Path, meta: dict, files: list[str] | None = None
     ) -> Facts:
-        """Frames, shape and dtype for ``apairo status`` -- by default, opened
-        as loading opens it (*files* as in :meth:`open`) and read off the first
-        frame. Override when that is not cheap. May raise: ``status`` then
-        shows the channel's facts as unknown."""
+        """Frames, shape, dtype -- and the span of a clock form of its own --
+        for ``apairo status``. By default, opened as loading opens it (*files*
+        as in :meth:`open`), read off the first frame, and the span taken from
+        :meth:`clock`. Override when that is not cheap. May raise: ``status``
+        then shows the channel's facts as unknown."""
         loader = self.open(directory, meta, files)
         n = len(loader)
         if n == 0:
             return Facts(frames=0)
         first = np.asarray(loader[0])
-        return Facts(frames=n, shape=list(first.shape), dtype=str(first.dtype))
+        facts = Facts(frames=n, shape=list(first.shape), dtype=str(first.dtype))
+        spec = meta.get("key")
+        if isinstance(spec, dict) and set(spec) & self.key_forms:
+            clock = np.asarray(self.clock(loader, spec, "status"), dtype=float)
+            facts.span = (float(clock[0]), float(clock[-1]))
+        return facts
 
     def declare_hints(self, directory: Path, meta: dict) -> list[str]:
         """Extra lines ``apairo declare`` writes under the channel (indented
