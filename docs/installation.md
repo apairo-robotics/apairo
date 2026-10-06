@@ -27,6 +27,20 @@ pip install apairo[bench]
 pip install apairo[dev]
 ```
 
+## Standard datasets
+
+Every standard dataset ships with apairo: its profile or its declaration is in
+the package. Its extra installs what reading it needs:
+
+```bash
+pip install apairo[tartan]          # TartanDrive v2
+pip install apairo[rellis]          # Rellis-3D
+pip install apairo[goose]           # GOOSE
+pip install apairo[semantic-kitti]  # SemanticKITTI
+pip install apairo[tum]             # TUM RGB-D (declaration: tum_rgbd)
+pip install apairo[euroc]           # EuRoC MAV (euroc_vicon_room, euroc_machine_hall)
+```
+
 ## From source
 
 ```bash

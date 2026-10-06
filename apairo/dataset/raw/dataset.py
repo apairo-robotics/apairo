@@ -60,6 +60,7 @@ from apairo.dataset.async_layout.dataset import (
     _detect_loader,
     _suffix_channel_entries,
 )
+from apairo.dataset.registry import resolve_declaration
 from apairo.utils.files import get_files
 
 _MANIFEST_FILE = "dataset.yaml"
@@ -115,6 +116,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         declare_base: str | Path | None = None,
     ) -> None:
         path = Path(directory)
+        declare = resolve_declaration(declare)  # a file, or a shipped name
         # Consulted by _bootstrap_config (which runs before super().__init__).
         self._declare = declare
         self._declare_base = declare_base
@@ -188,6 +190,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             ``dataset.yaml`` for a root.
         """
         path = Path(directory)
+        declare = resolve_declaration(declare)  # a file, or a shipped name
         if declare is None:
             # The effective declaration drives the scan: a root's own
             # apairo.yaml for its sequences, the parent's for a sequence

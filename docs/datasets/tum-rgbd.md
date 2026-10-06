@@ -49,15 +49,15 @@ channels:
   `key: {column: timestamp}` takes the clock from the column that the header
   comment calls `timestamp`. That column is kept out of the frame data.
 
-The file ships as
-[`examples/declarations/tum_rgbd.yaml`](https://github.com/apairo-robotics/apairo/blob/main/examples/declarations/tum_rgbd.yaml).
-Save it as `<sequence>/apairo.yaml`, or keep it outside the dataset and pass it
-with `declare=`:
+The declaration ships with apairo as
+[`tum_rgbd`](https://github.com/apairo-robotics/apairo/blob/main/apairo/dataset/declarations/tum_rgbd.yaml), and `pip install apairo[tum]` brings what
+reading the images needs. Pass it by name with `declare=` or `--declare`, or
+copy it to `<sequence>/apairo.yaml` to edit it:
 
 ```python
 from apairo import RawDataset
 
-ds = RawDataset("rgbd_dataset_freiburg1_xyz", declare="tum_rgbd.yaml")
+ds = RawDataset("rgbd_dataset_freiburg1_xyz", declare="tum_rgbd")
 ds.shape
 # {'accelerometer': (3,), 'depth': (480, 640), 'groundtruth': (7,), 'rgb': (480, 640, 3)}
 ```
@@ -66,7 +66,7 @@ On first open apairo writes its registry, a `.apairo/` directory, next to the
 data; on a read-only mount it keeps it in memory instead.
 
 ```console
-$ apairo status rgbd_dataset_freiburg1_xyz --declare tum_rgbd.yaml
+$ apairo status rgbd_dataset_freiburg1_xyz --declare tum_rgbd
 RawDataset - rgbd_dataset_freiburg1_xyz   (sequence)
 ----------------------------------------------------
 start       1305031098.38s   (span shown relative to this)

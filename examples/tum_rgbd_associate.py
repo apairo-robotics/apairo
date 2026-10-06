@@ -6,19 +6,18 @@ every colour image with the depth image closest in time, within 20 ms;
 ``synchronize(method="nearest", tolerance=0.02)`` is that association for every
 channel at once, and it reports how far each match is from the colour frame.
 
-The sequence is read as downloaded: the declaration in
-``examples/declarations/tum_rgbd.yaml`` says where each clock lives.
+The sequence is read as downloaded: the ``tum_rgbd`` declaration, which ships
+with apairo, says where each clock lives.
 """
 
 import os
-from pathlib import Path
 
 import numpy as np
 
 from apairo import RawDataset
 
 SEQ_DIR = os.environ.get("APAIRO_TUM_SEQ", "/data/tum/rgbd_dataset_freiburg1_xyz")
-DECLARATION = Path(__file__).parent / "declarations" / "tum_rgbd.yaml"
+DECLARATION = "tum_rgbd"  # a declaration that ships with apairo, by name
 
 ds = RawDataset(SEQ_DIR, declare=DECLARATION)
 for key in ds.keys:

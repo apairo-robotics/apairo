@@ -23,6 +23,7 @@ from apairo.core.config import (
 from apairo.core.formats import Format, detect_format, find_format, formats, get_format
 from apairo.core.naming import channel_frame_files
 from apairo.core.sample import Sample
+from apairo.dataset.registry import resolve_declaration
 from apairo.loader import load_profile, load_timestamps, loads_timestamps
 from apairo.utils.files import get_files
 from apairo.utils.timestamps import get_end_of_time
@@ -179,6 +180,7 @@ class AsyncLayoutDataset(AbstractDataset):
         declare_base: str | Path | None = None,
     ) -> None:
         directory = Path(directory)
+        declare = resolve_declaration(declare)  # a file, or a shipped name
         keys_defaulted = False  # True when keys=None resolved to "everything"
 
         # Channel metadata from .apairo (empty when a dataset_profile is passed
@@ -417,6 +419,7 @@ class AsyncLayoutDataset(AbstractDataset):
                 ``overwrite`` and ``merge`` are ``False``.
             ValueError: If no new recognizable channels are found.
         """
+        declare = resolve_declaration(declare)  # a file, or a shipped name
         if overwrite and merge:
             raise ValueError("overwrite and merge are mutually exclusive.")
 

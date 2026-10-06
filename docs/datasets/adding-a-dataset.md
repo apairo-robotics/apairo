@@ -1,6 +1,31 @@
 # Adding a Dataset
 
-Adding a new synchronous dataset to apairo requires:
+A dataset joins apairo in one of two forms, both added with a pull request
+and installed for everyone with apairo:
+
+- **A declaration**, an `apairo.yaml`, when `RawDataset` can read the dataset
+  as it lies on disk. This is the case for TUM RGB-D and EuRoC MAV. Add it to
+  `apairo/dataset/declarations/<name>.yaml`, where it becomes usable as
+  `declare="<name>"`. Add a miniature of the layout to `test/assets/` with a
+  test that loads it, and write a guide in `docs/datasets/`.
+- **A class**, a YAML profile and a short subclass, for a fixed synchronous
+  layout such as SemanticKITTI, Rellis-3D or GOOSE. The steps are below.
+  Register the class in `apairo/dataset/registry.py` so that
+  `apairo init --as <Class>` knows it.
+
+Either way, add an extra in `pyproject.toml` named after the dataset, listing
+what reading it needs (Pillow for images). Users then install it with
+`pip install apairo[<dataset>]`.
+
+A dataset you would rather keep in a package of your own registers its class
+through an entry point. It is then selectable by name like a standard one:
+
+```toml
+[project.entry-points."apairo.datasets"]
+MyLabDataset = "my_lab_dataset:MyLabDataset"
+```
+
+The rest of this page builds a class. It requires:
 
 1. A YAML profile describing the directory structure
 2. A 2-line Python subclass

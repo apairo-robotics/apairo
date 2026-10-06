@@ -5,8 +5,8 @@ each stamped in nanoseconds: in the image filenames for the cameras, in the
 first column of a ``data.csv`` for the others. ``synchronize()`` aligns
 everything onto the left camera and says how far each match is from the frame.
 
-The sequence is read as downloaded: a declaration in ``examples/declarations/``
-says where each clock lives. There is one per hall, because the Machine Hall
+The sequence is read as downloaded: a declaration that ships with apairo says
+where each clock lives. There is one per hall, because the Machine Hall
 sequences carry a laser tracker (``leica0``) and the Vicon Room ones a motion
 capture system (``vicon0``).
 """
@@ -20,7 +20,7 @@ from apairo import RawDataset
 
 SEQ_DIR = Path(os.environ.get("APAIRO_EUROC_SEQ", "/data/euroc/V1_01_easy/mav0"))
 HALL = "vicon_room" if (SEQ_DIR / "vicon0").is_dir() else "machine_hall"
-DECLARATION = Path(__file__).parent / "declarations" / f"euroc_{HALL}.yaml"
+DECLARATION = f"euroc_{HALL}"  # a declaration that ships with apairo, by name
 
 ds = RawDataset(SEQ_DIR, declare=DECLARATION)
 for key in ds.keys:

@@ -50,17 +50,17 @@ channels:
   An integer nanosecond stamp is converted exactly before it is scaled.
 - `alias: groundtruth` gives the long directory name a short public one.
 
-The external tracker depends on the hall, so there are two files:
-[`euroc_vicon_room.yaml`](https://github.com/apairo-robotics/apairo/blob/main/examples/declarations/euroc_vicon_room.yaml)
-(`vicon0`, shown above) and
-[`euroc_machine_hall.yaml`](https://github.com/apairo-robotics/apairo/blob/main/examples/declarations/euroc_machine_hall.yaml)
-(`leica0`). Save the right one as `<sequence>/mav0/apairo.yaml`, or keep it
-outside the dataset and pass it with `declare=`:
+The external tracker depends on the hall, so two declarations ship with apairo:
+[`euroc_vicon_room`](https://github.com/apairo-robotics/apairo/blob/main/apairo/dataset/declarations/euroc_vicon_room.yaml) (`vicon0`, shown above) and
+[`euroc_machine_hall`](https://github.com/apairo-robotics/apairo/blob/main/apairo/dataset/declarations/euroc_machine_hall.yaml) (`leica0`).
+`pip install apairo[euroc]` brings what reading the images needs. Pass the
+right one by name with `declare=` or `--declare`, or copy it to
+`<sequence>/mav0/apairo.yaml` to edit it:
 
 ```python
 from apairo import RawDataset
 
-ds = RawDataset("V1_01_easy/mav0", declare="euroc_vicon_room.yaml")
+ds = RawDataset("V1_01_easy/mav0", declare="euroc_vicon_room")
 ds.shape
 # {'cam0': (480, 752), 'cam1': (480, 752), 'groundtruth': (16,), 'imu0': (6,), 'vicon0': (7,)}
 ```
@@ -69,7 +69,7 @@ On first open apairo writes its registry, a `.apairo/` directory, next to the
 data; on a read-only mount it keeps it in memory instead.
 
 ```console
-$ apairo status V1_01_easy/mav0 --declare euroc_vicon_room.yaml
+$ apairo status V1_01_easy/mav0 --declare euroc_vicon_room
 RawDataset - mav0   (sequence)
 ----------------------------------------------------
 start       1403715271.71s   (span shown relative to this)
@@ -87,7 +87,7 @@ issues      none
 
 ```python
 vio = RawDataset("V1_01_easy/mav0", keys=["cam0", "cam1", "imu0", "groundtruth"],
-                 declare="euroc_vicon_room.yaml")
+                 declare="euroc_vicon_room")
 frames = vio.synchronize(reference="cam0", method="nearest", tolerance=0.005)
 
 sample = frames[0]

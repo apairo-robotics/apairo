@@ -2,8 +2,9 @@
 
 The fixtures under ``test/assets/mini_tum`` and ``test/assets/mini_euroc`` are
 synthetic (``make_slam_fixtures.py``) but reproduce each dataset's tree, file
-naming, header lines and timestamp units. The declarations are the ones shipped
-in ``examples/declarations/`` and shown in the dataset guides, so a drift between
+naming, header lines and timestamp units. The declarations are the ones that
+ship with apairo (``apairo/dataset/declarations/``, selected by name:
+``declare="tum_rgbd"``) and are shown in the dataset guides, so a drift between
 a guide and the loader fails here.
 """
 
@@ -16,9 +17,10 @@ import pytest
 
 from apairo.cli import main
 from apairo.dataset.raw import RawDataset
+from apairo.dataset.registry import DECLARATIONS_DIR
 
 ASSETS = Path(__file__).parent.parent / "assets"
-DECLARATIONS = Path(__file__).parent.parent.parent / "examples" / "declarations"
+DECLARATIONS = DECLARATIONS_DIR
 
 EUROC = [
     ("V1_01_easy", "euroc_vicon_room.yaml", "vicon0", 7),
@@ -158,3 +160,21 @@ def test_check_is_clean_on_euroc_with_its_declaration(
         ["check", str(seq), "--declare", str(DECLARATIONS / declaration)], capsys
     )
     assert code == 0, out
+
+
+# ─────────────────────── shipped declarations, by name ───────────────────────
+
+
+def test_a_shipped_declaration_is_selected_by_name(tum, capsys):
+    ds = RawDataset(tum, declare="tum_rgbd")
+    assert set(ds.keys) == {"rgb", "depth", "groundtruth", "accelerometer"}
+    code, out = _cli(["check", str(tum), "--declare", "tum_rgbd"], capsys)
+    assert code == 0, out
+
+
+def test_an_unknown_declaration_name_lists_the_shipped_ones(tum, capsys):
+    with pytest.raises(FileNotFoundError, match="tum_rgbd"):
+        RawDataset(tum, declare="tum_rgbdd")
+    code, out = _cli(["check", str(tum), "--declare", "tum_rgbdd"], capsys)
+    assert code == 1
+    assert "nor a declaration that ships with apairo: euroc_machine_hall" in out

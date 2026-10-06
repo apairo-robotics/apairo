@@ -46,6 +46,18 @@ All notable changes to apairo are documented here. The format is based on
 
   Existing preprocessors declare `output_loader` and write exactly as before;
   `apairo_preprocess`'s suite passes unchanged.
+- **Standard datasets ship with apairo and install by name.**
+  - `pip install apairo[tartan]` (also `rellis`, `goose`, `semantic-kitti`,
+    `tum`, `euroc`) brings what reading that dataset needs. The install line
+    stays the same if a dataset later moves to a package of its own.
+  - The TUM RGB-D and EuRoC declarations moved from `examples/` into the
+    package and are selected by name: `declare="tum_rgbd"`,
+    `--declare euroc_vicon_room`.
+  - `apairo init --as` takes its classes from a registry. `TartanKittiDataset`
+    joins the list, and a dataset kept in its own package registers through
+    the `apairo.datasets` entry point group.
+  - Adding a standard dataset is a pull request: a declaration or a profiled
+    class, a miniature fixture, a guide and an extra ("Adding a Dataset").
 - **`csv` loader: a text table is a channel, its clock a column.** IMU logs
   and ground-truth trajectories in most SLAM datasets are one table with one
   row per frame and the timestamp in a column -- EuRoC's `imu0/data.csv`, TUM
@@ -80,8 +92,8 @@ All notable changes to apairo are documented here. The format is based on
   `RawDataset` -- no subclass, no conversion: where each clock lives (image
   filenames in seconds or nanoseconds, a column of a text table), the
   `apairo.yaml` that says so, and a `synchronize()` call with what each
-  match's offset tells you. The declarations ship in `examples/declarations/`
-  (`tum_rgbd.yaml`, `euroc_vicon_room.yaml`, `euroc_machine_hall.yaml`) with
+  match's offset tells you. The declarations ship with apairo, by name
+  (`tum_rgbd`, `euroc_vicon_room`, `euroc_machine_hall`), with
   two runnable examples, `tum_rgbd_associate.py` and `euroc_synchronize.py`.
   All three were checked against real sequences (`freiburg1_xyz`,
   `V1_01_easy`, `MH_05_difficult`); CI runs the examples on synthetic

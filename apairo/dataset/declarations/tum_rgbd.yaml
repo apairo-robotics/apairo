@@ -5,7 +5,7 @@
 #   groundtruth.txt        accelerometer.txt
 #
 # Save it as <sequence>/apairo.yaml, or keep it outside the dataset and pass
-# RawDataset(<sequence>, declare="tum_rgbd.yaml").
+# RawDataset(<sequence>, declare="tum_rgbd") -- it ships with apairo.
 version: 1
 channels:
   # The clock of each image is its filename: <sec>.<usec>.

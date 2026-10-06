@@ -133,6 +133,20 @@ plugin -- see [Write a Format Plugin](../datasets/format-plugins.md).
 
 ---
 
+### Standard datasets
+
+The dataset classes apairo selects by name (`apairo init --as`), built-in or
+installed through the `apairo.datasets` entry point group, and the
+declarations that ship with it.
+
+::: apairo.dataset.registry.register_dataset
+
+::: apairo.dataset.registry.dataset_names
+
+::: apairo.dataset.registry.declaration
+
+---
+
 ### WRITERS
 
 File writers used by dataset layouts (`DatasetLayout` export: Zarr stores, tar

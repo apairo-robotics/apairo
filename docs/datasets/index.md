@@ -11,12 +11,26 @@
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel | Fixed channel profile; auto-discovers channels via `.apairo` |
 
 `RawDataset` also reads datasets it has no class for, from a declaration alone.
-Two worked guides, each checked against real sequences:
+The declarations of two of them ship with apairo, by name, each with a guide
+checked against real sequences:
 
-| Dataset | Domain | What the declaration says |
-|---|---|---|
-| [TUM RGB-D](tum-rgbd.md) | indoor RGB-D SLAM | image clocks in `<sec>.<usec>` filenames, trajectory and accelerometer tables at the sequence root |
-| [EuRoC MAV](euroc.md) | drone visual-inertial odometry | image clocks in nanosecond filenames, one `data.csv` per sensor |
+| Dataset | Declaration | Domain | What the declaration says |
+|---|---|---|---|
+| [TUM RGB-D](tum-rgbd.md) | `tum_rgbd` | indoor RGB-D SLAM | image clocks in `<sec>.<usec>` filenames, trajectory and accelerometer tables at the sequence root |
+| [EuRoC MAV](euroc.md) | `euroc_vicon_room`, `euroc_machine_hall` | drone visual-inertial odometry | image clocks in nanosecond filenames, one `data.csv` per sensor |
+
+### Installing a standard dataset
+
+Every standard dataset ships with apairo. Its extra installs what reading it
+needs, and keeps that install line stable if the dataset later moves to a
+package of its own:
+
+```bash
+pip install apairo[tartan]          # also: rellis, goose, semantic-kitti, tum, euroc
+```
+
+A dataset that is not listed can be added with a pull request; see
+[Adding a Dataset](adding-a-dataset.md).
 
 ---
 

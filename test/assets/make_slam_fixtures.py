@@ -3,7 +3,7 @@
 Unlike ``mini_rellis`` and ``mini_tartan``, these hold **no real data**: every
 value is generated here. What they reproduce is each dataset's *layout* -- the
 directory tree, the file naming, the header lines and the timestamp units -- so
-the declarations in ``examples/declarations/`` and the guide examples are
+the declarations in ``apairo/dataset/declarations/`` and the guide examples are
 exercised in CI against the shape of the real thing.
 
 - ``mini_tum/rgbd_dataset_freiburg1_xyz``  -- images named ``<sec>.<usec>.png``,

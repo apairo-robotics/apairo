@@ -56,20 +56,18 @@ from apairo.core.keys import epoch_unit
 from apairo.core.naming import channel_frame_files
 from apairo.core.profiled_dataset import ProfiledDataset
 from apairo.dataset.async_layout.dataset import _bare_channel_entries, _detect_loader
-from apairo.dataset.goose import Goose3DDataset
 from apairo.dataset.raw import RawDataset
-from apairo.dataset.rellis import Rellis3DDataset
-from apairo.dataset.semantic_kitti import SemanticKittiDataset
+from apairo.dataset.registry import (
+    dataset_names,
+    declaration_names,
+    find_dataset,
+    get_dataset,
+    resolve_declaration,
+)
 
-# Datasets selectable with ``--as``: the profile-free generic loader plus the
-# profiled datasets, whose ``init`` maps canonical channel names from a profile.
-# (TartanKittiDataset, multi-sequence, will register here later.)
-DATASETS: dict[str, type[Any]] = {
-    "RawDataset": RawDataset,
-    "SemanticKittiDataset": SemanticKittiDataset,
-    "Rellis3DDataset": Rellis3DDataset,
-    "Goose3DDataset": Goose3DDataset,
-}
+# Datasets selectable with ``--as`` come from the registry: the profile-free
+# RawDataset, the standard datasets that ship with apairo, and any installed
+# through the ``apairo.datasets`` entry point group.
 _BAR = "-" * 52
 
 
@@ -341,7 +339,7 @@ def _profiled_status_class(path: Path):
     ``init --as <Class>``.  Returns ``None`` for a generic (profile-free)
     directory, so status falls through to the generic reading."""
     name = read_manifest(path).get("class")
-    cls = DATASETS.get(name) if isinstance(name, str) else None
+    cls = find_dataset(name)
     if cls is not None and issubclass(cls, ProfiledDataset):
         return cls
     return None
@@ -748,7 +746,10 @@ def _external_declare_issues(path: Path, declare: str) -> list[str]:
     sequence when *path* is a root (the file applies to every sequence)."""
     f = Path(declare).expanduser()
     if not f.is_file():
-        return [f"declaration file not found: {f}"]
+        return [
+            f"declaration file not found: {f} (nor a declaration that ships with "
+            f"apairo: {', '.join(declaration_names())})"
+        ]
     if _is_sequence(path):
         return verify_declaration(f, path)
     seq_dirs = _sequence_dirs(path)
@@ -974,7 +975,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     if not path.is_dir():
         print(f"Not a directory: {path}", file=sys.stderr)
         return 2
-    cls = DATASETS[args.as_]
+    cls = get_dataset(args.as_)
     extra = {}
     if args.declare:
         if issubclass(cls, ProfiledDataset):
@@ -1224,7 +1225,7 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
         "--as",
         dest="as_",
         metavar="CLASS",
-        choices=list(DATASETS),
+        choices=dataset_names(),
         default="RawDataset",
         help="initialize with this dataset class (default: RawDataset)",
     )
@@ -1236,9 +1237,10 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     )
     p_init.add_argument(
         "--declare",
-        metavar="FILE",
-        help="external declaration file the scan should respect "
-        "(the in-tree apairo.yaml is always read)",
+        metavar="FILE|NAME",
+        help="external declaration the scan should respect -- a file, or the "
+        "name of one that ships with apairo (the in-tree apairo.yaml is always "
+        "read)",
     )
 
     p_declare = sub.add_parser(
@@ -1288,8 +1290,9 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_status.add_argument("--json", action="store_true", help="machine-readable output")
     p_status.add_argument(
         "--declare",
-        metavar="FILE",
-        help="also validate this external declaration file against the dataset",
+        metavar="FILE|NAME",
+        help="read the dataset through this external declaration -- a file, or "
+        "the name of one that ships with apairo -- and validate it",
     )
     p_status.add_argument(
         "--sequence",
@@ -1322,8 +1325,9 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
     p_check.add_argument("--json", action="store_true", help="machine-readable output")
     p_check.add_argument(
         "--declare",
-        metavar="FILE",
-        help="also validate this external declaration file against the dataset",
+        metavar="FILE|NAME",
+        help="read the dataset through this external declaration -- a file, or "
+        "the name of one that ships with apairo -- and validate it",
     )
 
     p_alias = sub.add_parser(
@@ -1416,6 +1420,13 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(result if isinstance(result, int) else 0)
 
     args = _build_parser(set(plugins)).parse_args(argv)
+    if getattr(args, "declare", None):
+        # The name of a declaration that ships with apairo stands for its file;
+        # a missing file is left for the command to report.
+        try:
+            args.declare = str(resolve_declaration(args.declare))
+        except FileNotFoundError:
+            pass
     handler = {
         "init": cmd_init,
         "declare": cmd_declare,

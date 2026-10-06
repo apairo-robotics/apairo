@@ -314,3 +314,15 @@ The public API and the `.apairo` format are declared stable at 1.0
   lines. Compared with `main` on seven real datasets, the only difference is
   a fix: `status` now reads a cloud export's shape off the frame loading
   calls frame 0. Merge to `main` pending.
+- **2026-10-06**: R5 widened before the merge, after review with the user:
+  - **Writing joined the contract.** A preprocess writes in the run's
+    `output_format`, else the preprocessor's `output_loader`, else its
+    input's format when it can hold the output, else `npys` / `npy`. A
+    conversion is a preprocess (`Convert`). Profiled datasets read their
+    derived channels through the contract.
+  - **A table is counted, not parsed.** `status` on a 600,000-row log went
+    from 2.95 s to 0.63 s.
+  - **Standard datasets install by name.** `pip install apairo[tartan]` and
+    the others, the TUM and EuRoC declarations by name, `--as` from a registry
+    open to packages.
+  - `apairo_preprocess`'s suite passes against the branch.
