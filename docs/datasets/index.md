@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `SemanticKittiDataset` | synchronous | `lidar`, `labels` | Labels masked to lower 16 bits (strips instance IDs) |
 | `Rellis3DDataset` | synchronous | `lidar`, `labels` | Fixed `Rellis-3D/` prefix in directory tree |
-| `Goose3DDataset` | synchronous | `lidar`, `labels` | Split directory appears at two levels |
+| `Goose3DDataset` | synchronous | `lidar`, `labels` | Labels are the class (lower 16 bits); the clock is read from the scan file names |
 | `RawDataset` | asynchronous | any channel | Profile-free; channels & loaders from `.apairo/channels.yaml`. Loads `apairo-extractor` output |
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel | Fixed channel profile; auto-discovers channels via `.apairo` |
 
@@ -76,17 +76,19 @@ ds = apairo.Rellis3DDataset("/data/rellis", keys=["lidar"])
 
 === "GOOSE"
 
+    The tree of `goose_3d_train.zip` and `goose_3d_val.zip`, unpacked in one
+    root:
+
     ```
     <root>/
       lidar/
         train/
-          seq_001/   000000.bin  000001.bin  ...
-          seq_002/   ...
+          <scene>/   <scene>__<frame>_<ns>_vls128.bin  ...
         val/
           ...
       labels/
         train/
-          seq_001/   000000.label  ...
+          <scene>/   <scene>__<frame>_<ns>_goose.label  ...
         val/
           ...
     ```

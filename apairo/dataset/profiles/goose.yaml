@@ -11,4 +11,14 @@ modalities:
   labels:
     ext: .label
     dtype: int32
+    # The semantic class is the lower 16 bits; the upper 16 are the instance
+    # (goose-dataset.de, "Dataset Structure"), as in SemanticKITTI.
+    mask: 65535
     cast_dtype: int64
+# Each scan's capture time is in its file name,
+# <scene>__<frame>_<nanoseconds>_vls128.bin -- the shared frame clock.
+clock:
+  dir: lidar
+  ext: .bin
+  name: '_(\d+)_vls128$'
+  units: [ns]

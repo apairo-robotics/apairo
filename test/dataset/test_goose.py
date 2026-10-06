@@ -17,8 +17,9 @@ def _make_label(path: Path, n: int = N_POINTS):
     np.random.randint(0, 64, n, dtype=np.int32).tofile(path)
 
 
-# Real GOOSE layout: <root>/split/lidar/split/seq/file.bin
-#                    <root>/split/labels/split/seq/file.label
+# The GOOSE archives hold lidar/<split>/<scene>/<scene>__<frame>_<ns>_vls128.bin
+# and labels/<split>/<scene>/..._goose.label; test/assets/mini_goose is a real
+# excerpt of them (test_samples.py). These synthetic trees use short names.
 @pytest.fixture
 def goose_root(tmp_path):
     n_frames = 5
@@ -192,3 +193,20 @@ def test_derived_key_missing_files_raises(tmp_path):
     _write_apairo(tmp_path, "elevation_map", "npys")
     with pytest.raises(FileNotFoundError):
         Goose3DDataset(tmp_path, keys=["lidar", "elevation_map"])
+
+
+def test_labels_drop_the_instance_id_in_their_upper_bits(tmp_path):
+    """A GOOSE label is the class in the lower 16 bits and the instance in the
+    upper 16 (goose-dataset.de): the class alone is returned."""
+    d_lidar = tmp_path / "lidar" / "val" / "scene"
+    d_labels = tmp_path / "labels" / "val" / "scene"
+    d_lidar.mkdir(parents=True)
+    d_labels.mkdir(parents=True)
+    _make_bin(d_lidar / "scene__0001_1684157849628053530_vls128.bin", 3)
+    classes = np.array([7, 23, 59], np.uint32)
+    (classes | (np.array([0, 4, 260], np.uint32) << 16)).tofile(
+        d_labels / "scene__0001_1684157849628053530_goose.label"
+    )
+    ds = Goose3DDataset(tmp_path, keys=["lidar", "labels"])
+    np.testing.assert_array_equal(ds[0].data["labels"], classes)
+    assert ds.timestamps[0] == pytest.approx(1684157849.628053530)

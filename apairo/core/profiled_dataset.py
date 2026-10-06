@@ -862,6 +862,14 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 k: spec[k] for k in ("name", "file", "scale", "units") if k in spec
             }
             label = "clock"
+            if "name" in key_spec:
+                # Files named otherwise do not carry the clock: a tree in the
+                # dataset's format but renamed stays clockless, as one without
+                # the clock source does. (A sample's card, checked with
+                # check_dataset, is what catches a wrong regex.)
+                regex = re.compile(str(key_spec["name"]))
+                if not any(regex.search(p.stem) for p in files_full):
+                    return None
 
         if not files_full:  # declared but absent -> clockless (not an error)
             return None
