@@ -421,7 +421,7 @@ READ_PATH = [
 
 @pytest.mark.parametrize("module", READ_PATH)
 def test_the_read_path_never_names_a_builtin_format(module):
-    tree = ast.parse((REPO / module).read_text())
+    tree = ast.parse((REPO / module).read_text(encoding="utf-8"))
     named = sorted(
         {
             f"line {node.lineno}: {node.value!r}"
