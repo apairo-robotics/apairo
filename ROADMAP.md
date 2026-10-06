@@ -27,7 +27,7 @@ about a day, **M** a few days, **L** a week or more.
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
-| R5 | Container datasets: HDF5 and Zarr (branch `feature/containers`) | L | W43–W44 (19 Oct) | planned |
+| R5 | The format contract: a new format is a plugin (branch `feature/format-plugins`) | L | W42–W44 | in progress |
 | R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
@@ -123,37 +123,37 @@ them with the clock checks that make those alignments trustworthy.
   channels; tests cover each change.
 - **Placement.** Core.
 
-### R5. Container datasets: HDF5 and Zarr
+### R5. The format contract: a new format is a plugin
 
-*Redefined on 2026-10-06 from an `hdf5` loader. Design: `IDEAS.md`,
-"Containers: HDF5, Zarr and the episode patterns inside them".*
+*Redefined on 2026-10-06 after a critical review: R5 was going to add a
+container family to the core. Design: `IDEAS.md`, "The format contract".*
 
-- **Goal.** Read datasets stored in containers -- one file or store holding a
-  tree of named arrays -- in place, as a family of their own beside the
-  directory layout.
-- **Why.** HDF5 and Zarr are where robot-learning data lives: ALOHA / ACT,
-  robomimic, LIBERO, MimicGen, DROID raw, REASSEMBLE in HDF5; Diffusion Policy
-  and UMI replay buffers in Zarr. Reading them is what takes apairo from
-  navigation logs to manipulation. As a sibling family, the change stays out
-  of `RawDataset`, which keeps its directory convention untouched.
-- **Scope.** A container dataset class with a small backend interface and two
-  backends, HDF5 (`h5py`, new extra `apairo[hdf5]`) and Zarr (existing extra).
-  Episode patterns `files`, `groups` and `ends`. Channels named by `array:`
-  paths. Both clock regimes: synchronous episodes (the row is the clock, with
-  the equal-count refusal) and asynchronous recordings (`key: {array: ...}` or
-  `key: {column: ...}`). Lazy row reads, one file handle per process. `status`
-  and `check` describe a container. Read-only: a preprocess on a container is
-  refused with an explanation. **Out:** the `flags` pattern (D4RL), derived
-  channels in a sidecar tree, encoded media inside a container, tables
-  (Parquet / LeRobot) -- see "After 0.9".
-- **Done when.** Synthetic fixtures for each pattern and both regimes pass in
-  CI, for both backends; three real checks pass and are named in the docs:
-  one REASSEMBLE demonstration (HDF5, files, async), the Diffusion Policy Push-T
-  replay buffer (Zarr, ends), one ALOHA / ACT episode (HDF5, files, sync); a
-  docs page explains the declaration; the extra is in `installation.md`.
-- **Placement.** Core, `apairo/dataset/container/`, developed on the
-  `feature/containers` branch and merged into `main` only when whole.
-  **Size.** L. **Depends on.** Nothing.
+- **Goal.** Anyone can add a data format to apairo with a `pip install`, without
+  touching the core: a format is one entry point, like a CLI command already is.
+- **Why.** Today a format is a core change. Loader names are hard-coded 24
+  times across three core modules (the CLI, the configuration, the
+  asynchronous dataset), and adding `csv` touched six core files. That
+  contradicts the design the paper states -- a closed core, everything
+  open-ended outside it through small contracts -- and formats are the most
+  open-ended thing there is. It is also what makes apairo extendable by others,
+  which a tool meant to become a standard needs more than any single format.
+- **Scope.** A public `Format` contract gathering what the core now hard-codes
+  per loader: detection, the files a frame is read from, the loader that
+  decodes one, the clock forms the format provides (a table column), the facts
+  `status` prints, the hints `declare` writes, the fields it accepts. An
+  `apairo.formats` entry point group, plus `register_format()` in process.
+  Every built-in loader (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`)
+  moves onto it, so the core no longer names a format. A conformance kit a
+  plugin runs in its own tests, and a docs page with a complete example plugin.
+  Developed on the `feature/format-plugins` branch. **Out:** the write side
+  (`WRITERS`, preprocess outputs) and the profiled family's readers, which have
+  their own registries.
+- **Done when.** No format name is hard-coded outside `apairo/loader/` (checked
+  by a test); the full suite passes unchanged; an example plugin installed
+  through its entry point loads, shows in `status`, is checked by `check` and
+  hinted by `declare`, and passes the conformance kit.
+- **Placement.** Core (`apairo/core/formats.py`), loaders. **Size.** L.
+  **Depends on.** Nothing.
 
 ### R6. Manipulation examples: KUKA F/T, then REASSEMBLE
 
@@ -164,14 +164,14 @@ them with the clock checks that make those alignments trustworthy.
 - **Scope.** KUKA LBR Med F/T and IMU (Zenodo 10.5281/zenodo.11096791, CC BY
   4.0, 1.5 MB). Three clocks read in place; the IMU's documented 8.4 ms lag
   shown through `time_offsets()`. Then REASSEMBLE, one demo (TU Wien, CC BY
-  4.0), read through the container family: F/T and joint states aligned onto
+  4.0), read through the container plugin: F/T and joint states aligned onto
   a camera clock with a tolerance.
 - **Done when.** The KUKA example runs in CI against its data, downloaded and
   cached, or against a committed extract if the licence allows it (CC BY
   does, with attribution). The REASSEMBLE example is documented with the
   exact demo file it was run on.
 - **Placement.** Core docs and examples. **Depends on.** R3 (KUKA layout)
-  and R5 (REASSEMBLE).
+  and the container plugin (REASSEMBLE).
 
 ### R7. Persist a `synchronize()` result
 
@@ -229,8 +229,12 @@ scheduled.
 - **Aggregating `synchronize`.** Return every event between two reference
   ticks, for example all F/T samples between two camera frames, with a
   reducer in `apairo_transform`.
-- **Container datasets, part two.** The `flags` episode pattern (D4RL),
-  derived channels in a sidecar tree beside the container, an NPZ backend.
+- **Container datasets, as the first format plugin** (`apairo_containers`,
+  with `h5py` and `zarr`). Design: `IDEAS.md`, "Containers". Asynchronous
+  recordings first (REASSEMBLE, DROID raw), where apairo adds what other
+  loaders do not; synchronous robot-learning containers (ALOHA, robomimic,
+  Diffusion Policy) only on demand -- they are aligned already, and LeRobot
+  and their own loaders read them.
 - **Video frame loader** (`mp4`), for RH20T, REASSEMBLE's encoded cameras and
   LeRobot's videos.
 - **Reading LeRobot datasets** (Parquet rows with an `episode_index`, MP4
@@ -297,3 +301,7 @@ The public API and the `.apairo` format are declared stable at 1.0
   looking at where robot-learning data is stored. It lives on the
   `feature/containers` branch until whole. Part two and a LeRobot reader join
   "After 0.9".
+- **2026-10-06**: after a critical review, R5 changes again: before any new
+  format, the format contract that lets anyone add one without touching the
+  core. Containers become the first plugin on it, after 0.9, asynchronous
+  recordings first.

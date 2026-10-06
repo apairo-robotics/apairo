@@ -260,8 +260,9 @@ Remaining, outside this repo:
 
 ## Containers: HDF5, Zarr and the episode patterns inside them
 
-*Design note for ROADMAP R5 -- validated in principle on 2026-10-06; the
-implementation lives on the `feature/containers` branch until it is whole.*
+*Design note for the first format plugin (`apairo_containers`), after 0.9. It
+builds on "The format contract" (R5): the container family is a plugin, not a
+core family, and starts with asynchronous recordings.*
 
 ### Why a family, and not a loader
 
@@ -359,3 +360,38 @@ container dataset is refused with that explanation.
   (async, file pattern, per-sensor timestamps).
 - Diffusion Policy Push-T replay buffer (Zarr, ends pattern).
 - An ALOHA / ACT simulated episode (HDF5, file pattern, synchronous).
+
+## The format contract
+
+*Design note for ROADMAP R5.*
+
+A format is everything the core needs to know about one way of storing a
+channel. Today that knowledge is spread across the core, written per loader
+name; the contract gathers it in one object a plugin can provide.
+
+| What the core needs | Where it is hard-coded today | Contract |
+|---|---|---|
+| Is this directory one of mine? | `_detect_loader` (an if-chain over extensions) | `detect(directory)`, with a `priority` |
+| Which files are frames? | `_HINT_EXTS`, `_enumerate`'s extension map | `extensions` |
+| One file per frame, or one object per channel? | sets of names in `_init_loaders` and `_verify_key_order` | `per_frame` |
+| Is each matching file its own channel? (tables) | `frames != "csv"` in `_bare_channel_entries` | `one_channel_per_file` |
+| Build the loader from the channel's metadata | branches on `pcd` / `csv` / `npy` in `_init_loaders` | `open(directory, meta, files)` |
+| Clock forms the data provides | `column` keys special-cased in config, keys and dataset | `key_forms`, `clock(loader, spec)` |
+| Channel fields it accepts | `array_file` for `npy`/`csv`, `fields` for `pcd`/`csv` | `fields` |
+| What `status` prints | per-loader branches in `_channel_shape` and friends | `facts(directory, meta)` |
+| What `declare` suggests | `_declare_fields_hint`, `_declare_column_key_hint` | `declare_hints(directory, meta)` |
+
+The generic parts stay in the core and apply to every format: the filename
+and sidecar key forms for per-frame formats, `timestamps.txt`, the clock
+checks, `synchronize()`, the views. A format only answers questions about its
+own bytes.
+
+Registration: built-ins register when `apairo.loader` is imported; plugins
+through the `apairo.formats` entry point group, loaded on first use; a name
+that collides with a built-in is refused. `str_to_loader` and `KNOWN_LOADERS`
+stay as views of the registry, for code that reads them.
+
+A conformance kit (`apairo.testing.check_format`) runs a plugin's format
+against a sample directory it writes: detection, frame count, shape agreeing
+with `facts`, a load through `RawDataset` with a `timestamps.txt`, and
+validation of its own metadata.
