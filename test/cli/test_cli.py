@@ -750,6 +750,7 @@ def test_declare_key_hint_keeps_literal_tail(tmp_path, capsys):
     seq = tmp_path / "seq" / "gt"
     seq.mkdir(parents=True)
     np.save(seq / "tree_1785248347168248576_toaster.npy", np.zeros(3))
+    np.save(seq / "tree_1785248348168248576_toaster.npy", np.zeros(3))
     assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
     assert "key: {name: '(\\d+)_toaster$', units: [ns]}" in capsys.readouterr().out
 
@@ -761,9 +762,22 @@ def test_declare_key_hint_ignores_foreign_extensions(tmp_path, capsys):
     seq.mkdir(parents=True)
     (seq / "aaa_archive.tar.xz").write_bytes(b"x")
     np.save(seq / "scene_1785248347168248576.npy", np.zeros(3))
+    np.save(seq / "scene_1785248348168248576.npy", np.zeros(3))
     assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
     out = capsys.readouterr().out
     assert "units: [ns]" in out and "19-digit epoch" in out
+
+
+def test_declare_gives_a_stacked_array_a_sidecar_hint(tmp_path, capsys):
+    # One .npy is a stacked array: it has no per-frame filenames, so the hint
+    # is a sidecar key, never a filename regex that check would refuse.
+    seq = tmp_path / "seq" / "poses"
+    seq.mkdir(parents=True)
+    np.save(seq / "poses_1785248347168248576.npy", np.zeros((4, 7)))
+    assert _run(["declare", str(tmp_path / "seq"), "-o", "-"]) == 0
+    out = capsys.readouterr().out
+    assert "loader: npy" in out
+    assert "# key: {file:" in out and "key: {name:" not in out
 
 
 def test_status_merges_declaration_and_counts_by_key_regex(tmp_path, capsys):

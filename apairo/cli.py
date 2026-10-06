@@ -51,6 +51,9 @@ from apairo.core.config import (
     verify_declaration,
     verify_manifest,
 )
+from apairo.core.formats import Facts, Format, find_format, get_format
+from apairo.core.keys import epoch_unit
+from apairo.core.naming import channel_frame_files
 from apairo.core.profiled_dataset import ProfiledDataset
 from apairo.dataset.async_layout.dataset import _bare_channel_entries, _detect_loader
 from apairo.dataset.goose import Goose3DDataset
@@ -92,96 +95,6 @@ def _rate_span(ts):
     return rate, (t0, t1)
 
 
-def _first_frame_file(
-    channel_dir: Path, meta: dict | None, exts: set[str]
-) -> Path | None:
-    """The first per-frame data file of a channel: the loader-extension files,
-    narrowed to the stems its ``key``/``order`` regex matches when it has one."""
-    spec = (meta.get("order") or meta.get("key") or {}) if meta else {}
-    pattern = spec.get("name") if isinstance(spec, dict) else None
-    try:
-        regex = re.compile(pattern) if pattern else None
-    except re.error:
-        regex = None
-    names = sorted(
-        p.name
-        for p in channel_dir.iterdir()
-        if p.is_file()
-        and not p.name.startswith(".")
-        and p.suffix.lower() in exts
-        and (regex is None or regex.search(p.stem))
-    )
-    return channel_dir / names[0] if names else None
-
-
-def _frame_file_shape(channel_dir: Path, loader: str, meta: dict | None):
-    """Shape + dtype of a per-frame ``img`` / ``bin`` / ``pcd`` channel, read off
-    its first frame the way the loader would return it. One small read: an image
-    is decoded, a ``.bin`` is sized, a ``.pcd`` is parsed."""
-    first = _first_frame_file(channel_dir, meta, _HINT_EXTS[loader])
-    if first is None:
-        return None, None
-    try:
-        if loader == "img":
-            from PIL import Image
-
-            with Image.open(first) as img:
-                arr = np.array(img)
-            return list(arr.shape), str(arr.dtype)
-        if loader == "bin":  # headerless float32 (x, y, z, intensity)
-            return [first.stat().st_size // 16, 4], "float32"
-        from apairo.loader.pcd_loader import read_pcd
-
-        fields = meta.get("fields") if meta else None
-        cloud = (
-            read_pcd(str(first), fields=list(fields))
-            if fields
-            else read_pcd(str(first))
-        )
-        return list(cloud.shape), str(cloud.dtype)
-    except Exception:
-        return None, None
-
-
-def _channel_shape(
-    channel_dir: Path,
-    loader: str | None,
-    array_file: str | None = None,
-    meta: dict | None = None,
-):
-    """Per-frame shape + dtype: from a ``.npy`` header (mmap -- no data read), or
-    from the first frame of an ``img`` / ``bin`` / ``pcd`` channel.
-
-    When *array_file* is given (a channel colocated with others in one directory),
-    read that exact stacked file rather than the directory's first ``.npy``.
-    """
-    if loader in {"img", "bin", "pcd"} and channel_dir.is_dir():
-        return _frame_file_shape(channel_dir, loader, meta)
-    from apairo.core.naming import is_frame_file, suffixed_frame_files
-
-    suffix = meta.get("suffix") if meta else None
-    if array_file is not None:
-        target = channel_dir / array_file
-        npys = [target] if target.is_file() else []
-    elif suffix and channel_dir.is_dir():
-        # A suffixed variant shares its base channel's directory: read its own
-        # files (000000_intensity.npy), not the base frames beside them.
-        npys = [channel_dir / f for f in suffixed_frame_files(channel_dir, str(suffix))]
-    elif loader == "npys" and channel_dir.is_dir():
-        npys = sorted(p for p in channel_dir.glob("*.npy") if is_frame_file(p.name))
-    else:
-        npys = sorted(channel_dir.glob("*.npy"))
-    if not npys:
-        return None, None
-    try:
-        arr = np.load(npys[0], mmap_mode="r")
-    except Exception:
-        return None, None
-    # A stacked ``npy`` file is (N, *frame); a per-frame ``npys`` file is one frame.
-    shape = arr.shape[1:] if loader == "npy" else arr.shape
-    return list(shape), str(arr.dtype)
-
-
 def _count_files(channel_dir: Path) -> int:
     if not channel_dir.is_dir():
         return 0
@@ -190,31 +103,29 @@ def _count_files(channel_dir: Path) -> int:
     )
 
 
-def _keyed_frame_count(channel_dir: Path, meta: dict) -> int | None:
-    """Frame count for a channel enumerated by its key/order regex -- the
-    loader-extension files whose stem matches, exactly like ``_enumerate``.
-    ``None`` when the channel declares no usable regex."""
-    spec = meta.get("order") or meta.get("key") or {}
-    pattern = spec.get("name") if isinstance(spec, dict) else None
-    if not pattern:
-        return None
+def _frame_facts(
+    cdir: Path, meta: dict, loader: str | None
+) -> tuple[Facts, list[str] | None]:
+    """What the channel's format says about it (frames, shape, dtype, and the
+    clock a form of its own gives), read the way loading reads it -- with the
+    frame files the core resolves from a ``key``/``order`` regex or a suffix,
+    which are returned too. Unknown facts when the format is unknown or the
+    channel does not open; ``check`` reports why."""
+    fmt = find_format(loader)
+    if fmt is None or not cdir.is_dir():
+        return Facts(), None
     try:
-        regex = re.compile(pattern)
-    except re.error:
-        return None
-    exts = _HINT_EXTS.get(meta.get("loader", ""))
-    return sum(
-        1
-        for p in channel_dir.iterdir()
-        if p.is_file()
-        and not p.name.startswith(".")
-        and (exts is None or p.suffix.lower() in exts)
-        and regex.search(p.stem)
-    )
+        files = channel_frame_files(fmt, cdir, meta)
+    except Exception:
+        return Facts(), None
+    try:
+        return fmt.facts(cdir, meta, files), files
+    except Exception:
+        return Facts(), files
 
 
-def _keyed_clock(channel_dir: Path, meta: dict):
-    """The clock a declarative ``key`` gives a channel -- parsed from its
+def _keyed_clock(channel_dir: Path, meta: dict, files: list[str] | None):
+    """The clock a declarative ``key`` gives a channel -- parsed from its frame
     filenames (``{name: <regex>}``) or read from a named sidecar (``{file}``),
     as loading does -- sorted, for the rate and the span. ``None`` when the
     channel declares no such key or it does not parse; ``check`` says why."""
@@ -224,75 +135,10 @@ def _keyed_clock(channel_dir: Path, meta: dict):
     if not isinstance(spec, dict) or not ("name" in spec or "file" in spec):
         return None
     try:
-        names: list[str] = []
-        if "name" in spec:
-            regex = re.compile(spec["name"])
-            exts = _HINT_EXTS.get(meta.get("loader", ""))
-            names = [
-                p.name
-                for p in channel_dir.iterdir()
-                if p.is_file()
-                and not p.name.startswith(".")
-                and (exts is None or p.suffix.lower() in exts)
-                and regex.search(p.stem)
-            ]
+        names = (files or []) if "name" in spec else []
         return np.sort(parse_filename_key(names, spec, directory=channel_dir))
     except Exception:
         return None
-
-
-def _table_facts(cdir: Path, meta: dict):
-    """Clock, row count, row shape and dtype of a ``csv`` channel. Its frames are
-    rows, not files, and its clock is a column -- so read the table (text, and
-    small next to the sensor data it indexes). ``None`` when it does not parse;
-    ``check`` reports why."""
-    from apairo.core.keys import parse_column_key
-    from apairo.loader import CSVLoader
-
-    key = meta.get("key")
-    spec: dict = key if isinstance(key, dict) else {}
-    try:
-        table = CSVLoader(
-            cdir,
-            file=meta.get("array_file"),
-            key_column=spec.get("column"),
-            fields=meta.get("fields"),
-        )
-        ts = (
-            parse_column_key(table.key_tokens, spec)
-            if table.key_tokens is not None
-            else _read_timestamps(cdir)
-        )
-    except Exception:
-        return None
-    return ts, len(table), list(table.shape), str(table.array.dtype)
-
-
-def _data_frame_count(cdir: Path, meta: dict) -> int | None:
-    """Frames a channel's loader enumerates, counted without reading the data:
-    the default per-frame listing, a suffixed variant's files, a stacked array's
-    rows (mmap) or a table's rows. ``None`` when it is not cheaply known."""
-    from apairo.core.naming import suffixed_frame_files
-    from apairo.loader import str_to_loader
-
-    loader = meta.get("loader")
-    try:
-        if loader == "npy":
-            if meta.get("array_file"):
-                target: Path | None = cdir / str(meta["array_file"])
-            else:
-                target = next(iter(sorted(cdir.glob("*.npy"))), None)
-            return None if target is None else len(np.load(target, mmap_mode="r"))
-        if loader == "csv":
-            table = _table_facts(cdir, meta)
-            return table[1] if table is not None else None
-        if meta.get("suffix"):
-            return len(suffixed_frame_files(cdir, str(meta["suffix"])))
-        if loader in {"npys", "bin", "img", "pcd"}:
-            return len(str_to_loader[loader](str(cdir)))
-    except Exception:
-        return None
-    return None
 
 
 def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
@@ -327,7 +173,7 @@ def _clock_coverage_issues(seq_dir: Path, cfg: dict) -> list[str]:
             continue
         if clock is None:
             continue
-        n_frames = _data_frame_count(cdir, meta)
+        n_frames = _frame_facts(cdir, meta, meta.get("loader"))[0].frames
         if n_frames is not None and n_frames != len(clock):
             issues.append(
                 f"channel '{ch}': {n_frames} frame(s) but {len(clock)} timestamp(s) "
@@ -354,40 +200,33 @@ def _channel_detail_dir(cdir: Path, meta: dict | None) -> dict:
     ``meta=None``
     marks an untracked channel.  Taking the directory explicitly lets a profiled
     dataset point this at a nested, resolved channel dir (canonical name != dir)."""
+    loader = meta.get("loader") if meta else _detect_loader(cdir)
+    facts, files = _frame_facts(cdir, meta or {}, loader)
     ts = _read_timestamps(cdir)
     if meta and cdir.is_dir():
         # A declared key is the channel's clock, ahead of any timestamps.txt --
-        # the precedence loading uses.
-        keyed_ts = _keyed_clock(cdir, meta)
-        ts = keyed_ts if keyed_ts is not None else ts
+        # the precedence loading uses: a form the format provides (a table's
+        # column), else the core's filename and sidecar forms.
+        keyed = (
+            facts.clock if facts.clock is not None else _keyed_clock(cdir, meta, files)
+        )
+        ts = keyed if keyed is not None else ts
     rate, span = _rate_span(ts)
-    loader = meta.get("loader") if meta else _detect_loader(cdir)
-    shape, dtype = _channel_shape(
-        cdir, loader, meta.get("array_file") if meta else None, meta
-    )
-    keyed = _keyed_frame_count(cdir, meta) if meta and cdir.is_dir() else None
-    if loader == "csv" and meta and cdir.is_dir():
-        table = _table_facts(cdir, meta)
-        if table is not None:
-            ts, keyed, shape, dtype = table
-            rate, span = _rate_span(ts)
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",
         "frame": meta.get("frame") if meta else None,
         "transform": meta.get("transform") if meta else None,
         "alias": meta.get("alias") if meta else None,
         "loader": loader,
-        "frames": keyed
-        if loader == "csv" and keyed is not None
+        "frames": facts.frames
+        if facts.frames is not None
         else len(ts)
         if ts is not None
-        else keyed
-        if keyed is not None
         else _count_files(cdir),
         "rate_hz": rate,
         "span": list(span) if span else None,
-        "shape": shape,
-        "dtype": dtype,
+        "shape": facts.shape,
+        "dtype": facts.dtype,
     }
     if meta and meta.get("timestamps_from"):
         detail["timestamps_from"] = meta["timestamps_from"]
@@ -957,100 +796,24 @@ def _yaml_channel_key(name: str) -> str:
     return name if re.fullmatch(r"[A-Za-z0-9_-]+", name) else f'"{name}"'
 
 
-# Data-file extensions per loader, for scaffold hints (mirrors _enumerate's map).
-_HINT_EXTS: dict[str, set[str]] = {
-    "npys": {".npy"},
-    "npy": {".npy"},
-    "bin": {".bin"},
-    "pcd": {".pcd"},
-    "img": {".png", ".jpg", ".jpeg", ".bmp"},
-}
-
-
-# Header names (after the csv loader drops '#' and '[unit]') that name a clock.
-_CLOCK_COLUMNS = frozenset(
-    {"t", "time", "times", "timestamp", "timestamps", "stamp", "stamps", "ts"}
-)
-
-
-def _epoch_unit(value: float) -> tuple[int, str | None]:
-    """Digits in the integer part of *value*, and the epoch unit that many
-    digits implies (``None`` below a seconds epoch)."""
-    n = len(str(int(abs(value))))
-    unit = (
-        "ns"
-        if n >= 18
-        else "us"
-        if n >= 15
-        else "ms"
-        if n >= 12
-        else "s"
-        if n >= 9
-        else None
-    )
-    return n, unit
-
-
-def _declare_column_key_hint(table: Path) -> str | None:
-    """A ``key: {column: ...}`` line for a ``csv`` table with no clock on disk.
-
-    A column whose header names a clock (``timestamp``, ``time``, ``t``, ...)
-    and whose values never decrease is the key; its unit is guessed from the
-    width of an epoch. Emitted **uncommented** when both hold, so the scaffold
-    loads as generated; a commented hint otherwise."""
-    from apairo.loader import CSVLoader
-
-    homework = (
-        "    # key: {column: <index or name>, units: [s]}"
-        "   # no timestamps.txt -- name the clock column"
-    )
-    try:
-        table_data = CSVLoader(table.parent, file=table.name)
-    except Exception:
-        return homework
-    names = table_data.columns or []
-    candidates = [i for i, n in enumerate(names) if n.lower() in _CLOCK_COLUMNS]
-    if not candidates:
-        return homework
-    i = candidates[0]
-    values = table_data.array[:1000, i]
-    if values.size == 0 or (values.size > 1 and np.any(np.diff(values) < 0)):
-        return homework
-    n, unit = _epoch_unit(float(values[0]))
-    column = (
-        names[i]
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", names[i])
-        else f"'{names[i]}'"
-    )
-    if unit is None:
-        return (
-            f"    key: {{column: {column}}}"
-            f"   # clock column '{names[i]}', seconds assumed -- verify"
-        )
-    return (
-        f"    key: {{column: {column}, units: [{unit}]}}"
-        f"   # {n}-digit epoch in column '{names[i]}' -- verify"
-    )
-
-
-def _declare_key_hint(channel_dir: Path, loader: str) -> str | None:
+def _declare_key_hint(channel_dir: Path, fmt: Format) -> str | None:
     """A ``key:`` line for a channel with no clock on disk.
 
     Without a ``timestamps.txt`` the channel cannot load at all until a key is
-    declared, so when the stems carry a confident epoch (a trailing digit run
-    wide enough to name its unit, possibly followed by a literal tail like
-    ``_toaster``) the line is emitted **uncommented** -- the scaffold should
-    load as generated. Otherwise a commented hint marks the homework."""
-    if (channel_dir / "timestamps.txt").exists():
+    declared, so when the stems of a per-frame format carry a confident epoch
+    (a trailing digit run wide enough to name its unit, possibly followed by a
+    literal tail like ``_toaster``) the line is emitted **uncommented** -- the
+    scaffold should load as generated. Otherwise a commented hint marks the
+    homework: a filename regex, or a sidecar for a stacked format. A clock form
+    of the format's own is its :meth:`~apairo.core.formats.Format.declare_hints`."""
+    if (channel_dir / "timestamps.txt").exists() or fmt.key_forms:
         return None
-    exts = _HINT_EXTS.get(loader)
-    stems = sorted(
-        f.stem
-        for f in channel_dir.iterdir()
-        if f.is_file()
-        and not f.name.startswith(".")
-        and (exts is None or f.suffix.lower() in exts)
-    )
+    if not fmt.per_frame:
+        return (
+            "    # key: {file: <one timestamp per row>}"
+            "   # no timestamps.txt -- declare the clock"
+        )
+    stems = [f.stem for f in fmt.data_files(channel_dir)]
     if not stems:
         return None
     m = re.search(r"(\d+)(\D*)$", stems[0])
@@ -1059,43 +822,14 @@ def _declare_key_hint(channel_dir: Path, loader: str) -> str | None:
             "    # key: {name: '<regex, one capture group>'}"
             "   # no timestamps.txt -- declare the clock"
         )
-    n, tail = len(m.group(1)), m.group(2)
-    unit = (
-        "ns"
-        if n >= 18
-        else "us"
-        if n >= 15
-        else "ms"
-        if n >= 12
-        else "s"
-        if n >= 9
-        else None
-    )
-    pattern = "(\\d+)" + re.escape(tail) + "$"
+    n, unit = epoch_unit(m.group(1))
+    pattern = "(\\d+)" + re.escape(m.group(2)) + "$"
     if unit is None:
         return f"    # key: {{name: '{pattern}'}}   # index parsed from the stems"
     return (
         f"    key: {{name: '{pattern}', units: [{unit}]}}"
         f"   # {n}-digit epoch guessed from the stems -- verify"
     )
-
-
-def _declare_fields_hint(channel_dir: Path, loader: str) -> str | None:
-    """The first frame's actual PCD fields, as a commented ``fields:`` line."""
-    if loader != "pcd":
-        return None
-    first = next(
-        (f for f in sorted(channel_dir.iterdir()) if f.suffix.lower() == ".pcd"), None
-    )
-    if first is None:
-        return None
-    from apairo.loader.pcd_loader import _parse_header
-
-    try:
-        names = ", ".join(_parse_header(str(first)).names)
-    except (OSError, ValueError):
-        return None
-    return f"    # fields: [{names}]   # keep the columns you need, in this order"
 
 
 def cmd_declare(args: argparse.Namespace) -> int:
@@ -1153,23 +887,14 @@ def cmd_declare(args: argparse.Namespace) -> int:
         if "array_file" in location:
             lines.append(f"    array_file: {location['array_file']}")
         lines.append("    # alias: <public name at load time>")
-        if loader == "csv":
-            table = (
-                d / location["array_file"]
-                if "array_file" in location
-                else next(iter(sorted(d.glob("*.csv"))), None)
-            )
-            has_clock = "array_file" not in location and (d / "timestamps.txt").exists()
-            key_hint = (
-                _declare_column_key_hint(table)
-                if table is not None and not has_clock
-                else None
-            )
-        else:
-            key_hint = _declare_key_hint(d, loader)
-        for hint in (_declare_fields_hint(d, loader), key_hint):
-            if hint:
-                lines.append(hint)
+        fmt = get_format(loader)
+        try:
+            lines += fmt.declare_hints(d, location)
+        except Exception:
+            pass  # a hint is a convenience; a channel that does not parse gets none
+        key_hint = _declare_key_hint(d, fmt)
+        if key_hint:
+            lines.append(key_hint)
     text = "\n".join(lines) + "\n"
 
     if out is None:

@@ -7,6 +7,8 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 import numpy as np
 import yaml
 
+from apairo.core.formats import find_format, format_names, formats
+
 CONFIG_DIR = ".apairo"
 CHANNELS_FILE = "channels.yaml"
 CALIBRATION_FILE = "calibration.yaml"
@@ -16,10 +18,6 @@ DATASET_FILE = "dataset.yaml"
 DECLARATION_FILE = "apairo.yaml"
 CONFIG_FILENAME = CONFIG_DIR  # alias kept for external code that checks (path / CONFIG_FILENAME).exists()
 
-# Keep in sync with str_to_loader (apairo/loader/__init__.py) and WRITERS (apairo/writer/__init__.py).
-KNOWN_LOADERS: frozenset[str] = frozenset(
-    {"npy", "npys", "bin", "img", "zarr", "pcd", "csv"}
-)
 
 # Time units for a filename-parsed key's `units:` sugar (each maps to a factor in
 # seconds; `units` compiles to `scale`). See docs/datasets/bring-your-own-dataset.md.
@@ -67,6 +65,12 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
         "recipe",
     }
 )
+# What a channel field read by a format is for, in the message given when the
+# channel's format does not read it. A plugin's own fields need no entry.
+_FORMAT_FIELD_PURPOSE: dict[str, str] = {
+    "array_file": "selects a stacked array",
+    "fields": "declares a field contract",
+}
 _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
 # Machine provenance a declaration may not claim: these fields are written by
 # run_preprocess into .apairo/channels.yaml and record what apairo *did*, not
@@ -125,77 +129,99 @@ def _regex_groups(pattern) -> int | None:
         return None
 
 
+def _quoted(names: list[str]) -> str:
+    """``'a'``, ``'a' and 'b'``, ``'a', 'b' and 'c'``."""
+    quoted = [f"'{n}'" for n in names]
+    return (
+        quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
+    )
+
+
+def _channel_fields() -> frozenset[str]:
+    """The channel fields of the schema, plus those a registered format reads
+    (a plugin's own fields are known, not reported as typos)."""
+    return _CHANNEL_FIELDS.union(*(f.fields for f in formats()))
+
+
+def _reads(loader, name: str) -> bool:
+    """Does the format of *loader* read the channel field *name*? An absent or
+    unknown loader is given the benefit of the doubt (reported elsewhere)."""
+    fmt = find_format(loader)
+    return fmt is None or name in fmt.fields
+
+
+def _verify_format_fields(key: str, meta: dict, storage_dir: Path) -> list[str]:
+    """A field some format reads, set on a channel whose format does not."""
+    fmt = find_format(meta.get("loader"))
+    if fmt is None:
+        return []
+    out: list[str] = []
+    for name in sorted(set(meta) - fmt.fields):
+        readers = [f.name for f in formats() if name in f.fields]
+        if not readers:
+            continue
+        purpose = _FORMAT_FIELD_PURPOSE.get(name, "is a format field")
+        out.append(
+            f"Channel '{key}': '{name}' {purpose} and is only meaningful for the "
+            f"{_quoted(readers)} loader{'s' if len(readers) > 1 else ''} "
+            f"(got '{fmt.name}')"
+        )
+    return out
+
+
 def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
-    """Validate a channel's ``key`` / ``order`` alignment specs (the filename-key
-    contract). Returns issue strings; never raises."""
+    """Issues with a channel's ``key`` / ``order`` specs (the filename-parsed
+    contract), and with the fields its format reads. Returns issue strings;
+    never raises."""
     out: list[str] = []
     loader = meta.get("loader")
+    fmt = find_format(loader)
     spec = meta.get("key")
-    # A table's clock is one of its columns: `key: {column}` (or a sidecar
-    # `file`) is its form, while a filename regex or an `order` has no files to
-    # read -- the same rule as for the other stacked loaders.
-    column_key = isinstance(spec, dict) and "column" in spec
-    if loader == "csv":
-        if (isinstance(spec, dict) and "name" in spec) or meta.get("order") is not None:
+    # Clock forms the data itself provides (a table's column), each with the
+    # formats that provide it -- beside the core's filename and sidecar forms.
+    providers: dict[str, list[str]] = {}
+    for f in formats():
+        for form in f.key_forms:
+            providers.setdefault(form, []).append(f.name)
+    data_forms = sorted(set(spec) & set(providers)) if isinstance(spec, dict) else []
+    has_order = meta.get("order") is not None
+    if fmt is not None and not fmt.per_frame:
+        # A stacked format has no per-frame filenames: no filename regex, no
+        # 'order'. Its clock is a form its data provides, or a sidecar file.
+        if fmt.key_forms:
+            if (isinstance(spec, dict) and "name" in spec) or has_order:
+                forms = " or ".join(
+                    f"'key: {{{form}: ...}}'" for form in sorted(fmt.key_forms)
+                )
+                out.append(
+                    f"channel '{key}': a '{loader}' channel has no per-frame filenames "
+                    f"-- give its clock as {forms} (or 'key: {{file: ...}}'), not a "
+                    f"filename regex or an 'order'"
+                )
+        elif spec is not None or has_order:
+            per_frame = ", ".join(f.name for f in formats() if f.per_frame)
             out.append(
-                f"channel '{key}': a 'csv' table has no per-frame filenames -- give "
-                f"its clock as 'key: {{column: ...}}' (or 'key: {{file: ...}}'), "
-                f"not a filename regex or an 'order'"
+                f"channel '{key}': 'key'/'order' needs a per-frame loader "
+                f"({per_frame}), not the stacked '{loader}' loader"
             )
-    elif (spec is not None or meta.get("order") is not None) and loader in {
-        "npy",
-        "zarr",
-        "txt_rows",
-    }:
-        out.append(
-            f"channel '{key}': 'key'/'order' needs a per-frame loader (npys, img, "
-            f"bin), not the stacked '{loader}' loader"
-        )
-    if column_key and loader is not None and loader != "csv":
-        out.append(
-            f"channel '{key}': 'key.column' reads the clock from a table column and "
-            f"needs the 'csv' loader (got '{loader}')"
-        )
+    for form in data_forms:
+        if fmt is not None and form not in fmt.key_forms:
+            names = " or ".join(f"'{n}'" for n in providers[form])
+            out.append(
+                f"channel '{key}': 'key.{form}' reads the clock from the data and "
+                f"needs the {names} loader (got '{loader}')"
+            )
     if spec is not None:
         if not isinstance(spec, dict):
             out.append(f"channel '{key}': 'key' is not a mapping")
         else:
             has_name, has_file = "name" in spec, "file" in spec
-            if has_name + has_file + column_key != 1:
+            if has_name + has_file + len(data_forms) != 1:
+                known = ["'name'", "'file'", *(f"'{f}'" for f in sorted(providers))]
                 out.append(
-                    f"channel '{key}': 'key' must specify exactly one of 'name', "
-                    f"'file' or 'column'"
+                    f"channel '{key}': 'key' must specify exactly one of "
+                    f"{', '.join(known[:-1])} or {known[-1]}"
                 )
-            if column_key:
-                column = spec["column"]
-                if isinstance(column, bool) or not (
-                    (isinstance(column, int) and column >= 0)
-                    or (isinstance(column, str) and column)
-                ):
-                    out.append(
-                        f"channel '{key}': 'key.column' must be a column index "
-                        f"(>= 0) or a column name, got {column!r}"
-                    )
-                n_unit = spec.get("units", spec.get("scale"))
-                if spec.get("units") is not None and spec.get("scale") is not None:
-                    out.append(
-                        f"channel '{key}': 'key' has both 'units' and 'scale' -- "
-                        f"'units' is sugar for 'scale', give one"
-                    )
-                elif n_unit is not None and not (
-                    isinstance(n_unit, list) and len(n_unit) == 1
-                ):
-                    out.append(
-                        f"channel '{key}': a column key takes a one-entry "
-                        f"'units'/'scale' list, got {n_unit!r}"
-                    )
-                elif (
-                    spec.get("units") is not None and spec["units"][0] not in KEY_UNITS
-                ):
-                    out.append(
-                        f"channel '{key}': 'key.units' has unknown unit(s) "
-                        f"{spec['units']}; known: {sorted(KEY_UNITS)}"
-                    )
             if has_name:
                 groups = _regex_groups(spec["name"])
                 scale = spec.get("scale")
@@ -275,6 +301,8 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
         out.append(
             f"channel '{key}': 'order' must be a mapping with a valid 'name' regex"
         )
+    if fmt is not None:
+        out += fmt.validate(key, meta, storage_dir)
     return out
 
 
@@ -1074,7 +1102,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
 
         issues += _unknown(
             {k: v for k, v in meta.items() if k not in _DEPRECATED_CHANNEL_FIELDS},
-            _CHANNEL_FIELDS,
+            _channel_fields(),
             f"channel '{key}'",
         )
 
@@ -1086,30 +1114,24 @@ def verify_config(root_dir: str | Path) -> list[str]:
             )
 
         loader = meta.get("loader")
-        if loader and loader not in KNOWN_LOADERS:
-            issues.append(f"Channel '{key}': unknown loader '{loader}'")
+        if loader and find_format(loader) is None:
+            issues.append(
+                f"Channel '{key}': unknown loader '{loader}' (known: "
+                f"{', '.join(sorted(format_names()))})"
+            )
+        issues += _verify_format_fields(key, meta, storage_dir)
 
         array_file = meta.get("array_file")
-        if array_file is not None:
-            if loader is not None and loader not in {"npy", "csv"}:
-                issues.append(
-                    f"Channel '{key}': 'array_file' selects a stacked array and is "
-                    f"only meaningful for the 'npy' and 'csv' loaders (got '{loader}')"
-                )
-            elif not (storage_dir / str(array_file)).is_file():
+        if array_file is not None and _reads(loader, "array_file"):
+            if not (storage_dir / str(array_file)).is_file():
                 issues.append(
                     f"Channel '{key}': array_file '{array_file}' not found in "
                     f"{storage_dir}"
                 )
 
         fields = meta.get("fields")
-        if fields is not None:
-            if loader is not None and loader not in {"pcd", "csv"}:
-                issues.append(
-                    f"Channel '{key}': 'fields' declares a field contract and is "
-                    f"only meaningful for the 'pcd' and 'csv' loaders (got '{loader}')"
-                )
-            elif not (
+        if fields is not None and _reads(loader, "fields"):
+            if not (
                 isinstance(fields, list)
                 and fields
                 and all(isinstance(f, str) for f in fields)
@@ -1216,10 +1238,13 @@ def verify_declaration(
                 f"{path.name}: channel '{key}': '{refused}' is machine provenance "
                 f"(written by apairo into .apairo, not declared)"
             )
-        issues += _unknown(meta, _CHANNEL_FIELDS, f"{path.name}: channel '{key}'")
+        issues += _unknown(meta, _channel_fields(), f"{path.name}: channel '{key}'")
         loader = meta.get("loader")
-        if loader and loader not in KNOWN_LOADERS:
-            issues.append(f"{path.name}: channel '{key}': unknown loader '{loader}'")
+        if loader and find_format(loader) is None:
+            issues.append(
+                f"{path.name}: channel '{key}': unknown loader '{loader}' (known: "
+                f"{', '.join(sorted(format_names()))})"
+            )
         storage_dir = (
             Path(root_dir) / str(meta.get("directory", key)) if root_dir else Path(".")
         )
