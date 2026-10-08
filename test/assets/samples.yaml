@@ -132,3 +132,26 @@ samples:
       imu0: {shape: [6], dtype: float64}
       groundtruth: {shape: [16], dtype: float64}
       leica0: {shape: [3], dtype: float64}
+
+  mini_kuka_ft_imu:
+    dataset: RawDataset
+    declare: kuka_ft_imu
+    root: mini_kuka_ft_imu
+    source: >-
+      real excerpt: the 1-baseline tables whole and the first second of the
+      two other runs, from Zenodo 10.5281/zenodo.11096791 (Skrede);
+      test/assets/fetch_public_samples.py
+    license: CC BY 4.0
+    real_env: APAIRO_REAL_KUKA_FT_IMU
+    keys: [1-baseline_orientations, 1-baseline_wrench, 1-baseline_accel, 2-vibrations_orientations, 2-vibrations_wrench, 2-vibrations_accel, 3-vibrations-contact_orientations, 3-vibrations-contact_wrench, 3-vibrations-contact_accel]
+    clock: true
+    expect:
+      1-baseline_orientations: {shape: [9], dtype: float64}
+      1-baseline_wrench: {shape: [6], dtype: float64}
+      1-baseline_accel: {shape: [3], dtype: float64}
+      2-vibrations_orientations: {shape: [9], dtype: float64}
+      2-vibrations_wrench: {shape: [6], dtype: float64}
+      2-vibrations_accel: {shape: [3], dtype: float64}
+      3-vibrations-contact_orientations: {shape: [9], dtype: float64}
+      3-vibrations-contact_wrench: {shape: [6], dtype: float64}
+      3-vibrations-contact_accel: {shape: [3], dtype: float64}

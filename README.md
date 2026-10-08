@@ -31,7 +31,7 @@ Optional extras:
 
 ```bash
 pip install apairo[vision]   # Image loading (Pillow)
-pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-kitti, tum, euroc
+pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-kitti, tum, euroc, kuka
 ```
 
 Requires Python ≥ 3.11.

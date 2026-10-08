@@ -19,6 +19,7 @@ the box against a bundled test asset, no dataset needed.
 |---|---|---|
 | `tum_rgbd_associate.py` | Read a TUM RGB-D sequence as downloaded, from a declaration only, and associate depth, pose and accelerometer to each colour frame within 20 ms — see the [guide](../docs/datasets/tum-rgbd.md) | TUM RGB-D — `APAIRO_TUM_SEQ` |
 | `euroc_synchronize.py` | Read a EuRoC MAV sequence (ASL format) from a declaration only and put the IMU and the ground-truth state on the camera clock — see the [guide](../docs/datasets/euroc.md) | EuRoC MAV — `APAIRO_EUROC_SEQ` (the `mav0/` directory) |
+| `kuka_ft_imu.py` | Read a robot arm's F/T, IMU and orientation logs (three clocks) in place, find the IMU's documented latency in the data, and align both sensors onto the robot's clock — see the [guide](../docs/datasets/kuka-ft-imu.md) | KUKA LBR Med F/T + IMU — `APAIRO_KUKA_DIR` |
 | `tartan_kitti_basic.py` | Load a TartanDrive v2 sequence and iterate its async event timeline | TartanDrive — `APAIRO_TARTAN_SEQ` |
 | `tartan_synchronize.py` | `synchronize()` an async sequence onto a reference clock; inspect per-channel staleness with `time_offsets` | TartanDrive — `APAIRO_TARTAN_SEQ` |
 | `tartan_kitti_preprocess.py` | Register and run frame- and sequence-level preprocessors, persisted to `.apairo` | TartanDrive — `APAIRO_TARTAN_SEQ` |

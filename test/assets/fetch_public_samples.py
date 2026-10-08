@@ -12,6 +12,10 @@ the same indices for both, so every label stays on its point.
   CC BY-NC-SA 3.0). Three label files of sequences 00 and 08 are real. The
   clouds and ``times.txt`` come from the KITTI odometry archives, which need a
   registration, so they are synthetic here, with the real point counts.
+- ``mini_kuka_ft_imu``: the KUKA LBR Med F/T and IMU logs (Skrede, Zenodo
+  10.5281/zenodo.11096791, CC BY 4.0). The ``1-baseline`` tables whole, and
+  the first second of the two other test runs; the static calibration tables,
+  which carry no clock, are left out.
 
 Usage::
 
@@ -42,6 +46,8 @@ GOOSE = {
 }
 SEMANTIC_KITTI_LABELS = "http://www.semantic-kitti.org/assets/data_odometry_labels.zip"
 SEMANTIC_KITTI = [("00", 3), ("08", 3)]
+KUKA = "https://zenodo.org/records/11096791/files/{name}?download=1"
+KUKA_RUNS = {"1-baseline": None, "2-vibrations": 1.0, "3-vibrations-contact": 1.0}
 
 
 class _RangeFile(io.RawIOBase):
@@ -137,6 +143,29 @@ def fetch_semantic_kitti(dst: Path = ASSETS / "mini_semantic_kitti") -> Path:
     return dst
 
 
+def fetch_kuka(dst: Path = ASSETS / "mini_kuka_ft_imu") -> Path:
+    """Each run's three tables, whole or cut after *seconds* of rows: a cut
+    keeps the sampling rates, which a stride would not."""
+    if dst.exists():
+        shutil.rmtree(dst)
+    dst.mkdir()
+    for run, seconds in KUKA_RUNS.items():
+        for table in ("accel", "wrench", "orientations"):
+            name = f"{run}_{table}.csv"
+            with urllib.request.urlopen(KUKA.format(name=name), timeout=120) as r:
+                data = r.read()
+            if seconds is None:  # whole, byte for byte
+                (dst / name).write_bytes(data)
+                continue
+            lines = data.decode().splitlines()
+            t0 = int(lines[1].split(",")[0])
+            kept = [
+                row for row in lines[1:] if int(row.split(",")[0]) - t0 <= seconds * 1e6
+            ]
+            (dst / name).write_text("\n".join([lines[0], *kept]) + "\n")
+    return dst
+
+
 if __name__ == "__main__":
-    for path in (fetch_goose(), fetch_semantic_kitti()):
+    for path in (fetch_goose(), fetch_semantic_kitti(), fetch_kuka()):
         print("wrote", path.relative_to(ASSETS))

@@ -39,6 +39,7 @@ pip install apairo[goose]           # GOOSE
 pip install apairo[semantic-kitti]  # SemanticKITTI
 pip install apairo[tum]             # TUM RGB-D (declaration: tum_rgbd)
 pip install apairo[euroc]           # EuRoC MAV (euroc_vicon_room, euroc_machine_hall)
+pip install apairo[kuka]            # KUKA LBR Med F/T and IMU logs (kuka_ft_imu)
 ```
 
 ## From source

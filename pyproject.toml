@@ -52,6 +52,7 @@ goose = []                  # GOOSE: clouds and labels
 semantic-kitti = []         # SemanticKITTI: clouds and labels
 tum = ["Pillow"]            # TUM RGB-D: colour and depth images
 euroc = ["Pillow"]          # EuRoC MAV: camera images
+kuka = []                   # KUKA LBR Med F/T and IMU logs: CSV tables
 # Bounded deliberately, so the lint/type/zarr verdict never turns on an
 # install date.  zarr stays a range because it drops old Pythons faster than
 # we do -- 3.11 tops out at 3.1.x while 3.12+ gets 3.3.x; the suite is

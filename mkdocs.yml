@@ -83,6 +83,7 @@ nav:
     - Async Datasets: async-datasets.md
     - "Guide: TUM RGB-D": datasets/tum-rgbd.md
     - "Guide: EuRoC MAV": datasets/euroc.md
+    - "Guide: KUKA F/T and IMU": datasets/kuka-ft-imu.md
   - The dataset API:
     - Frames & Calibration: frames.md
     - Transforms: transform.md

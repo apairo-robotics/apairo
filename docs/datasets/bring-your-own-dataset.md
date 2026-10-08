@@ -187,6 +187,25 @@ association TUM's `associate.py` computes, for every channel at once and with
 each match's offset reported. The [TUM RGB-D guide](tum-rgbd.md) walks through a
 real sequence, and the [EuRoC guide](euroc.md) through the `data.csv` layout.
 
+### `latency` — a sensor that stamps its readings late
+
+A clock tells when a reading reached the computer, not when it was captured.
+A sensor read over a bus and forwarded by a microcontroller arrives late by a
+fixed delay, and its timestamps cannot show it -- they are all late together.
+When the delay is known, declare it on the channel, in seconds:
+
+```yaml
+channels:
+  imu:
+    key: {column: t, units: [us]}
+    latency: 0.008416        # documented: the IMU's readings arrive 8416 us late
+```
+
+The channel's clock is moved back by that much -- whether it comes from a
+`key`, a `timestamps.txt` or `timestamps_from` -- before `synchronize()`
+aligns it. The [KUKA F/T and IMU guide](kuka-ft-imu.md) measures such a delay
+in the data and checks the declared one against it.
+
 ---
 
 ## A directory on its own

@@ -1,0 +1,71 @@
+# apairo declaration for the KUKA LBR Med force/torque and IMU logs
+# (Skrede, "Accelerometer and Force/Torque Sensor Measurements for Parameter
+# and State Estimation of an Unknown Robot End Effector", Zenodo,
+# 10.5281/zenodo.11096791, CC BY 4.0), as downloaded -- one folder of CSV files:
+#
+#   <run>_orientations.csv   the sensor's orientation from the robot, ~100 Hz
+#   <run>_wrench.csv         the F/T sensor (ATI Gamma),              ~700 Hz
+#   <run>_accel.csv          the IMU (MPU6886) on the end effector,   ~254 Hz
+#
+# for the three runs 1-baseline, 2-vibrations and 3-vibrations-contact. Every
+# table has its own clock in column `t`, a microsecond epoch. The 0-*.csv
+# tables (calibration poses, sensors at rest) carry no clock: apairo reports
+# them, and a dataset is opened on the channels of one run (keys=[...]).
+#
+# Pass it by name -- RawDataset(<folder>, declare="kuka_ft_imu") -- it ships
+# with apairo; or save it as <folder>/apairo.yaml to edit it.
+version: 1
+channels:
+  1-baseline_orientations:
+    loader: csv
+    directory: "."
+    array_file: 1-baseline_orientations.csv
+    key: {column: t, units: [us]}
+  1-baseline_wrench:
+    loader: csv
+    directory: "."
+    array_file: 1-baseline_wrench.csv
+    key: {column: t, units: [us]}
+  # The IMU was read over I2C by an Arduino and forwarded over Ethernet, "which
+  # resulted in a phase of the IMU signal by 8416 us" (the dataset's
+  # description): each reading was captured that long before its stamp.
+  1-baseline_accel:
+    loader: csv
+    directory: "."
+    array_file: 1-baseline_accel.csv
+    key: {column: t, units: [us]}
+    latency: 0.008416
+
+  2-vibrations_orientations:
+    loader: csv
+    directory: "."
+    array_file: 2-vibrations_orientations.csv
+    key: {column: t, units: [us]}
+  2-vibrations_wrench:
+    loader: csv
+    directory: "."
+    array_file: 2-vibrations_wrench.csv
+    key: {column: t, units: [us]}
+  2-vibrations_accel:
+    loader: csv
+    directory: "."
+    array_file: 2-vibrations_accel.csv
+    key: {column: t, units: [us]}
+    latency: 0.008416
+
+  3-vibrations-contact_orientations:
+    loader: csv
+    directory: "."
+    array_file: 3-vibrations-contact_orientations.csv
+    key: {column: t, units: [us]}
+  3-vibrations-contact_wrench:
+    loader: csv
+    directory: "."
+    array_file: 3-vibrations-contact_wrench.csv
+    key: {column: t, units: [us]}
+  3-vibrations-contact_accel:
+    loader: csv
+    directory: "."
+    array_file: 3-vibrations-contact_accel.csv
+    key: {column: t, units: [us]}
+    latency: 0.008416

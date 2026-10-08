@@ -3,7 +3,8 @@
 A1-class bugs (an example referencing a channel that does not exist, a consumed
 channel that is never created, ...) are only caught by *running* the file, not by
 importing it. So every example is compile-checked, and the ones with a mini
-fixture (Rellis-3D, TartanDrive, and the synthetic TUM RGB-D / EuRoC layouts) are
+fixture (Rellis-3D, TartanDrive, the KUKA F/T logs, and the synthetic TUM RGB-D /
+EuRoC layouts) are
 executed end-to-end as subprocesses with the dataset root injected via an
 environment variable.
 
@@ -36,6 +37,7 @@ GUIDE_EXAMPLES = [
     ("tum_rgbd_associate.py", "APAIRO_TUM_SEQ", "mini_tum/rgbd_dataset_freiburg1_xyz"),
     ("euroc_synchronize.py", "APAIRO_EUROC_SEQ", "mini_euroc/V1_01_easy/mav0"),
     ("euroc_synchronize.py", "APAIRO_EUROC_SEQ", "mini_euroc/MH_05_difficult/mav0"),
+    ("kuka_ft_imu.py", "APAIRO_KUKA_DIR", "mini_kuka_ft_imu"),
 ]
 TARTAN_EXAMPLES = [
     "tartan_frame_transform.py",

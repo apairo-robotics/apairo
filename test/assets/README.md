@@ -21,10 +21,11 @@ exercise the full loading path on data the synthetic tests cannot fake.
 | `mini_tartan` | TartanDrive v2, `2023-11-14-15-02-21_figure_8` | CC BY 4.0 | 8 velodyne frames (512 pts), cmd @ ~10 Hz, imu @ ~400 Hz, real timestamps |
 | `mini_goose` | GOOSE 3D, `goose_3d_train.zip` and `goose_3d_val.zip` | CC BY-SA 4.0 | 9 scans of 3 scenes (train, val), clouds and labels strided to 1024 pts, official names |
 | `mini_semantic_kitti` | SemanticKITTI labels, sequences 00 and 08 | CC BY-NC-SA 3.0 | 6 real label files strided to 1024 pts; clouds and `times.txt` synthetic (KITTI needs a registration) |
+| `mini_kuka_ft_imu` | KUKA LBR Med F/T and IMU logs (Skrede, Zenodo 10.5281/zenodo.11096791) | CC BY 4.0 | the `1-baseline` tables whole, the first second of the two other runs |
 
 `mini_rellis` and `mini_tartan` come from `python test/assets/extract_mini_datasets.py`
 (requires the full datasets on lab storage — see paths in the script).
-`mini_goose` and `mini_semantic_kitti` come from
+`mini_goose`, `mini_semantic_kitti` and `mini_kuka_ft_imu` come from
 `python test/assets/fetch_public_samples.py`, which reads a few members of
 the official archives with HTTP range requests (about 60 MB downloaded).
 

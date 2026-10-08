@@ -18,6 +18,7 @@ checked against real sequences:
 |---|---|---|---|
 | [TUM RGB-D](tum-rgbd.md) | `tum_rgbd` | indoor RGB-D SLAM | image clocks in `<sec>.<usec>` filenames, trajectory and accelerometer tables at the sequence root |
 | [EuRoC MAV](euroc.md) | `euroc_vicon_room`, `euroc_machine_hall` | drone visual-inertial odometry | image clocks in nanosecond filenames, one `data.csv` per sensor |
+| [KUKA F/T and IMU](kuka-ft-imu.md) | `kuka_ft_imu` | robot arm, contact estimation | one CSV per sensor, each with its microsecond clock; the IMU's documented latency |
 
 ### Installing a standard dataset
 
@@ -26,7 +27,7 @@ needs, and keeps that install line stable if the dataset later moves to a
 package of its own:
 
 ```bash
-pip install apairo[tartan]          # also: rellis, goose, semantic-kitti, tum, euroc
+pip install apairo[tartan]          # also: rellis, goose, semantic-kitti, tum, euroc, kuka
 ```
 
 A dataset that is not listed can be added with a pull request; see
