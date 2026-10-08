@@ -27,8 +27,8 @@ about a day, **M** a few days, **L** a week or more.
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
-| R5 | The format contract: a new format is a plugin (branch `feature/format-plugins`) | L | W42–W44 | landed on the branch |
-| R6 | Manipulation examples: KUKA F/T, then REASSEMBLE | M | W44–W45 (26 Oct) | planned |
+| R5 | The format contract: a new format is a plugin | L | W42–W44 | ✅ landed, unreleased |
+| R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed on `feature/kuka-latency` |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
@@ -155,23 +155,31 @@ container family to the core. Design: `IDEAS.md`, "The format contract".*
 - **Placement.** Core (`apairo/core/formats.py`), loaders. **Size.** L.
   **Depends on.** Nothing.
 
-### R6. Manipulation examples: KUKA F/T, then REASSEMBLE
+### R6. Manipulation example: the KUKA F/T and IMU logs, and `latency`
 
-- **Goal.** Two worked examples outside navigation.
+*Redefined on 2026-10-08. The first scope said the IMU's documented 8.4 ms
+lag would show "through `time_offsets()`". It cannot: `time_offsets()`
+compares timestamps, and a transport delay makes them all late together. A
+delay shows only in the data, and is corrected only by a declaration.
+REASSEMBLE needs the container plugin, so it moves to "After 0.9".*
+
+- **Goal.** A worked example outside navigation, on a robot arm, and a
+  declarative correction for a sensor that stamps its readings late.
 - **Why.** Robot-arm data is where multi-rate alignment matters most: F/T at
   about 700 Hz, joints at 100 Hz and cameras at 15–30 Hz. It is also the
-  clearest demonstration that apairo is not an off-road tool.
-- **Scope.** KUKA LBR Med F/T and IMU (Zenodo 10.5281/zenodo.11096791, CC BY
-  4.0, 1.5 MB). Three clocks read in place; the IMU's documented 8.4 ms lag
-  shown through `time_offsets()`. Then REASSEMBLE, one demo (TU Wien, CC BY
-  4.0), read through the container plugin: F/T and joint states aligned onto
-  a camera clock with a tolerance.
-- **Done when.** The KUKA example runs in CI against its data, downloaded and
-  cached, or against a committed extract if the licence allows it (CC BY
-  does, with attribution). The REASSEMBLE example is documented with the
-  exact demo file it was run on.
-- **Placement.** Core docs and examples. **Depends on.** R3 (KUKA layout)
-  and the container plugin (REASSEMBLE).
+  clearest demonstration that apairo is not an off-road tool. A known sensor
+  latency is common, and must not be corrected by hand in every script.
+- **Scope.** A `latency` channel field, in seconds, that moves the channel's
+  clock back before any alignment, whatever the clock's source. The KUKA LBR
+  Med F/T and IMU logs (Zenodo 10.5281/zenodo.11096791, CC BY 4.0): a
+  shipped declaration (`kuka_ft_imu`) with the documented 8416 µs on the IMU,
+  a real excerpt as its sample, a guide, and an example. The example measures
+  the delay in the data (IMU acceleration against F/T force, while the arm
+  rotates) and checks the declared one against it.
+- **Done when.** The example runs in CI on the excerpt. The guide's figures
+  come from the full record. The sample passes `check_dataset`.
+- **Placement.** Core (`latency`), docs, examples. **Depends on.** R3 (the
+  logs are a folder of tables).
 
 ### R7. Persist a `synchronize()` result
 
@@ -233,7 +241,8 @@ scheduled.
   reducer in `apairo_transform`.
 - **Container datasets, as the first format plugin** (`apairo_containers`,
   with `h5py` and `zarr`). Design: `IDEAS.md`, "Containers". Asynchronous
-  recordings first (REASSEMBLE, DROID raw), where apairo adds what other
+  recordings first -- REASSEMBLE (one demo: F/T and joint states aligned onto
+  a camera clock, moved here from R6), DROID raw -- where apairo adds what other
   loaders do not; synchronous robot-learning containers (ALOHA, robomimic,
   Diffusion Policy) only on demand -- they are aligned already, and LeRobot
   and their own loaders read them.
@@ -339,3 +348,18 @@ The public API and the `.apairo` format are declared stable at 1.0
     because the local copy has no camera directory.
   - SemanticKITTI's clouds still wait for a KITTI registration (the user's
     call).
+- **2026-10-08**: R6 redefined and landed on `feature/kuka-latency`.
+  - **A redefinition.** The plan to show the KUKA IMU's 8416 µs delay
+    through `time_offsets()` was wrong: timestamps cannot show a delay they
+    all share. It is measured in the data instead. On the full record, the
+    IMU's acceleration and the F/T force line up best with the IMU +7.6 ms
+    and +7.2 ms late on the first two runs. On the contact run the hand's
+    force swamps gravity, and no delay can be measured.
+  - **`latency` channel field.** Applied to every clock source. The KUKA
+    declaration declares the documented delay with it. After the correction,
+    the residual is −0.8 and −1.2 ms, within the method's precision.
+  - **`check_dataset` validates the external declaration too**, as
+    `apairo check --declare` does. It had missed that a first draft of the
+    KUKA declaration did not stand on its own.
+  - **A gap.** A folder's tables without a clock (the KUKA calibration
+    poses) block opening the folder without `keys=`; see `IDEAS.md`.

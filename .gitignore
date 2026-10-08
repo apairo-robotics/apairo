@@ -31,6 +31,7 @@ Makefile
 # ...but never the bootstrap-generated sidecars: the fixtures stay bare so the
 # smoke tests keep exercising the bootstrap path
 test/assets/**/.apairo/
+test/assets/**/__pycache__/
 
 # Benchmark plots are generated on demand (`bench.py --plot`), not committed
 benchmarks/*.png

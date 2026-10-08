@@ -58,6 +58,22 @@ All notable changes to apairo are documented here. The format is based on
     the `apairo.datasets` entry point group.
   - Adding a standard dataset is a pull request: a declaration or a profiled
     class, a miniature fixture, a guide and an extra ("Adding a Dataset").
+- **`latency`: a sensor that stamps its readings late, corrected by
+  declaration.** A channel field in seconds -- how long before its timestamp
+  each frame was captured -- that moves the channel's clock back, whatever its
+  source (a `key`, a `timestamps.txt`, a borrowed clock), before
+  `synchronize()` aligns it. `status` shows the corrected span, and `check`
+  wants a number.
+- **Guide: the KUKA F/T and IMU logs, a robot arm read in place.** Three
+  sensors, each with its own CSV file and microsecond clock: orientation at
+  100 Hz, force/torque at 700 Hz, IMU at 254 Hz. The `kuka_ft_imu`
+  declaration ships with apairo and declares the IMU's documented 8416 µs
+  delay. The example (`examples/kuka_ft_imu.py`) finds that delay in the
+  data, by fitting the IMU's acceleration to the force while the arm rotates.
+  The IMU shows up 7.6 ms late on the logged clocks, and −0.8 ms after the
+  correction. It then aligns both sensors onto the robot's clock. CI runs it
+  on a real excerpt of the record (`mini_kuka_ft_imu`, CC BY 4.0); the guide's
+  figures come from the full record.
 - **Every standard dataset is checked on a sample of it, against one
   contract.**
   - `apairo.testing.check_dataset` opens a sample as a user would, with
@@ -81,6 +97,8 @@ All notable changes to apairo are documented here. The format is based on
     `fetch_public_samples.py` from the official archives with HTTP range
     requests.
   - A dataset package runs the same check in its own tests.
+  - The check validates a shipped declaration against the sample, as
+    `apairo check --declare` does.
 - **`csv` loader: a text table is a channel, its clock a column.** IMU logs
   and ground-truth trajectories in most SLAM datasets are one table with one
   row per frame and the timestamp in a column -- EuRoC's `imu0/data.csv`, TUM

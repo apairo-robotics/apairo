@@ -416,3 +416,27 @@ preprocess output goes in the run's `output_format`, else the preprocessor's
 (`Convert`). The profiled family reads its *derived* channels through the
 contract; its raw modalities stay described by their YAML profiles. `pcd` is
 read-only until a field-naming rule for written clouds is decided.
+
+## Tables without a clock: calibration and rest data beside the logs
+
+*Seen on the KUKA F/T and IMU logs (R6), 2026-10-08.*
+
+A folder of logs often holds tables that are not time series: calibration
+poses (`0-calibration_fts-accel.csv`, 24 static orientations), a sensor at
+rest kept to estimate its noise (`0-steady-state_*.csv`, no `t` column). R3
+makes every table of a bare folder a channel, and a channel needs a clock, so
+`apairo check` reports them -- rightly -- and `RawDataset(folder)` refuses to
+open without `keys=` naming the time series.
+
+Two ways out, to weigh before 1.0:
+
+- **A declared role.** `static: true` on a channel: readable as an array
+  through the dataset (`ds.static["0-calibration_fts-accel"]`), never on the
+  timeline, never a clock issue. Calibration data then travels with the
+  dataset instead of beside it.
+- **Leave them out of the default keys.** Open on the channels that have a
+  clock, and report the others once. That needs no schema change, but it
+  hides data that a user may want.
+
+The first is closer to what the data is. Calibration poses also overlap with
+`calibration.yaml`, which describes transforms and intrinsics, not tables.
