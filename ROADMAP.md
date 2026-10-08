@@ -195,7 +195,9 @@ container family to the core. Design: `IDEAS.md`, "The format contract".*
 - **Scope.** CHANGELOG `[0.9.0]` section, version bump, tag, GitHub release,
   then the Zenodo archive and the PyPI upload. Also `CITATION.cff` (version,
   date), the docs deployment, and the organisation site where it mentions the
-  loaders.
+  loaders. Then, in `apairo_preprocess`, merge `feature/output-format-from-input`:
+  it drops the `output_loader = "npys"` declarations and needs `apairo>=0.9`,
+  because 0.8 reads that field unconditionally.
 - **Done when.** `pip install apairo==0.9.0` works; the Zenodo concept DOI
   resolves to 0.9.0; CI is green on the tag.
 - **Depends on.** Whatever of R1–R7 has landed. An item not done by W46 moves
