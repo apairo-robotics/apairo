@@ -689,24 +689,24 @@ class AsyncLayoutDataset(AbstractDataset):
         fallback: list[str] = []
 
         def own_clock(key: str) -> np.ndarray | None:
-            """A channel's own clock (provider > key spec > timestamps.txt), memoized
-            in ``timestamps``; ``None`` if it has none of the three."""
+            """A channel's own clock (provider > key spec > timestamps.txt), moved
+            back by its declared ``latency`` and memoized in ``timestamps``;
+            ``None`` if it has none of the three."""
             if key in timestamps:
                 return timestamps[key]
             provider = getattr(self, "_key_providers", {}).get(key)
             if provider is not None:  # subclass callable: filenames -> key array
-                timestamps[key] = self._as_key_array(
+                clock = self._as_key_array(
                     key, provider(getattr(self.loaders[key], "files", None))
                 )
-                return timestamps[key]
-            if key in self._key_spec:  # declarative key, parsed in memory
-                timestamps[key] = self._as_key_array(key, self._parse_key(key))
-                return timestamps[key]
-            ts_path = Path(self._files[key]) / "timestamps.txt"
-            if ts_path.exists():
-                timestamps[key] = load_timestamps(ts_path)
-                return timestamps[key]
-            return None
+            elif key in self._key_spec:  # declarative key, parsed in memory
+                clock = self._as_key_array(key, self._parse_key(key))
+            elif (Path(self._files[key]) / "timestamps.txt").exists():
+                clock = load_timestamps(Path(self._files[key]) / "timestamps.txt")
+            else:
+                return None
+            timestamps[key] = clock - self._latency(key)
+            return timestamps[key]
 
         for key in self._keys:
             if own_clock(key) is not None:
@@ -720,12 +720,19 @@ class AsyncLayoutDataset(AbstractDataset):
                         f"but '{src}' has no resolvable clock (no key spec, provider, "
                         f"or timestamps.txt)."
                     )
-                timestamps[key] = src_clock
+                # The source's corrected clock, then this channel's own latency.
+                timestamps[key] = src_clock - self._latency(key)
             else:
                 fallback.append(key)
         if fallback:
-            timestamps.update(loads_timestamps(fallback, self._files))
+            for key, clock in loads_timestamps(fallback, self._files).items():
+                timestamps[key] = clock - self._latency(key)
         return timestamps
+
+    def _latency(self, key: str) -> float:
+        """How long before its timestamp channel *key* captured each frame -- a
+        sensor's transport delay, declared as ``latency`` (seconds); 0 if none."""
+        return float(self._meta_of.get(key, {}).get("latency") or 0.0)
 
     def _parse_key(self, key: str) -> np.ndarray:
         r"""A channel's alignment key from its ``key`` spec, computed in memory --

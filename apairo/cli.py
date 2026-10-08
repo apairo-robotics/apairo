@@ -228,11 +228,15 @@ def _channel_detail_dir(
         # the precedence loading uses.
         keyed = _keyed_clock(cdir, meta, files)
         ts = keyed if keyed is not None else ts
+    # A declared latency moves the clock back, as loading does.
+    latency = float(meta.get("latency") or 0.0) if meta else 0.0
+    if ts is not None:
+        ts = ts - latency
     rate, span = _rate_span(ts)
     if facts.span is not None and facts.frames is not None:
         # A clock form of the format's own (a table's column): its span, read
         # off the first and last rows, and the frame count give the rate.
-        span = facts.span
+        span = (facts.span[0] - latency, facts.span[1] - latency)
         rate = _rate(facts.frames, *span)
     detail = {
         "kind": meta.get("kind", "raw") if meta else "untracked",

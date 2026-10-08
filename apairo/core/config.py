@@ -62,6 +62,7 @@ _CHANNEL_FIELDS: frozenset[str] = frozenset(
         "fields",
         "key",
         "order",
+        "latency",
         "recipe",
     }
 )
@@ -292,6 +293,16 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
                 f"channel '{key}': 'key' cannot be combined with timestamps_from/suffix "
                 f"(they would be ignored)"
             )
+    latency = meta.get("latency")
+    if latency is not None and (
+        isinstance(latency, bool)
+        or not isinstance(latency, (int, float))
+        or not np.isfinite(latency)
+    ):
+        out.append(
+            f"channel '{key}': 'latency' is a number of seconds -- how long before "
+            f"its timestamp each frame was captured -- got {latency!r}"
+        )
     order = meta.get("order")
     if order is not None and (
         not isinstance(order, dict)
