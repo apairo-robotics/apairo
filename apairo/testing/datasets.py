@@ -232,13 +232,17 @@ def _check_clock(ds, clock: bool | None, problems: list[str]) -> None:
 
 
 def _check_apairo_check(work: Path, declared: Path | None, problems: list[str]) -> None:
-    from apairo.cli import _check_issues
+    """What ``apairo check [--declare ...]`` reports: the dataset, and the
+    external declaration validated against it."""
+    from apairo.cli import _check_issues, _external_declare_issues
 
     issues = _check_issues(work, declared)
     if issues is None:
         problems.append("apairo check does not recognize it as a dataset")
-    else:
-        problems.extend(f"apairo check: {issue}" for issue in issues)
+        return
+    if declared is not None:
+        issues += _external_declare_issues(work, str(declared))
+    problems.extend(f"apairo check: {issue}" for issue in issues)
 
 
 def _check_splits(cls, work, keys, extra, splits, problems: list[str]) -> None:
