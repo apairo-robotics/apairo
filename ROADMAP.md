@@ -28,8 +28,8 @@ about a day, **M** a few days, **L** a week or more.
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
 | R5 | The format contract: a new format is a plugin | L | W42–W44 | ✅ landed, unreleased |
-| R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed on `feature/kuka-latency` |
-| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | planned |
+| R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed, unreleased |
+| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed on `feature/persist-views` |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
 
@@ -363,3 +363,11 @@ The public API and the `.apairo` format are declared stable at 1.0
     KUKA declaration did not stand on its own.
   - **A gap.** A folder's tables without a clock (the KUKA calibration
     poses) block opening the folder without `keys=`; see `IDEAS.md`.
+- **2026-10-08**: R7 landed on `feature/persist-views`.
+  - `persist(name)` and `load_view(name)` work per sequence, and roots keep
+    one view per sequence. A view is refused as stale on any change to a
+    source's frame count or clock hash, a declared `latency` included.
+  - Interpolators are passed again at load; custom matchers are not needed.
+  - On a real TartanDrive sequence the frames reload identical, from a 162 KB
+    index file. The matching takes about 1 ms and reloading about 11 ms: the
+    gain is reproducibility, not speed.

@@ -118,6 +118,21 @@ Open design questions, by priority:
 Placement: apairo core — view + persistence mechanism in `.apairo`, in the
 direct lineage of `filter`/`synchronize`. No satellite covers view persistence.
 
+*Landed (R7, 2026-10-08).* The open questions, as answered:
+
+- **Staleness** is a per-channel fingerprint: the frame count, and a hash of
+  the clock as loading computes it. A declared `latency`, a changed key or
+  another declaration therefore make a view stale too. The data's *content* is
+  not hashed: a view freezes which frames, not what they hold.
+- **Addressing** is `views.yaml` beside `channels.yaml`, with the indices in
+  `views/<name>.npz`. A view belongs to a sequence; a root persists and
+  reloads one per sequence, as `synchronize` computes them.
+- **Reload** gives a `SynchronizedView` like the original, with
+  `reference_timestamps` and `time_offsets` intact. An interpolator is code,
+  not state, so it is passed again; a custom matcher is not needed.
+- **Not about speed.** On a real TartanDrive sequence the matching takes about
+  1 ms and reloading about 11 ms. The gain is a named, checkable set of frames.
+
 ## Aggregating synchronize: N events per tick, not one
 
 Today the matcher is one event per reference tick (`idx.shape == ref_ts.shape`),

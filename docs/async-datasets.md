@@ -428,6 +428,46 @@ loader = DataLoader(ds_train, batch_size=8, shuffle=True, num_workers=4,
     registered on the *async* parent are not applied. Register transforms on
     the synchronized view instead, as above.
 
+### Persisting a synchronization
+
+`synchronize()` recomputes its matching every session. To reuse exactly the
+same frames later, or to hand them to someone else, persist the view under a
+name:
+
+```python
+ds_sync = ds.synchronize(reference="velodyne_0", method="nearest", tolerance=0.05)
+ds_sync.persist("lidar_sync")       # into <sequence>/.apairo, no data copied
+
+# later, or on another machine with the same data
+ds_sync = RawDataset(seq).load_view("lidar_sync")
+```
+
+`persist` writes what the view *is*:
+
+- the reference ticks it kept;
+- one index array per channel;
+- the method and the tolerance;
+- a fingerprint of every source channel: its frame count and a hash of its
+  clock.
+
+`load_view` rebuilds the same synchronous dataset from those indices without
+matching again. It refuses a view whose sources have changed since, and names
+the channel. For example, a frame was added, a timestamp moved, a `latency`
+was declared, or the sequence was opened through another declaration.
+Recompute it with `persist(name, overwrite=True)`. On a root, each sequence
+keeps its own view.
+
+The matching itself is fast, a few milliseconds even for thousands of frames.
+What a persisted view adds is reproducibility: the frames of a training set,
+fixed by name, that can be checked against the data.
+
+An interpolated channel is persisted with its bracketing pairs. The
+interpolator is code, not state, so it is passed again when the view is
+loaded: `load_view(name, interpolators={"gicp_poses": Se3Interp()})`.
+A custom matching callable is not needed again, since its indices are kept.
+`apairo status` lists a sequence's views, and `apairo check` validates their
+registry. The format is in [the `.apairo` schema](datasets/apairo-schema.md#viewsyaml-persisted-synchronizations).
+
 ---
 
 ## AsyncLayoutDataset (the base class)

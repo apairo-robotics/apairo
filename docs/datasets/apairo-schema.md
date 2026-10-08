@@ -144,6 +144,39 @@ automatically (a one-level upward look, like a tool finding its manifest in
 the directory above), so `RawDataset(root / "seq")`, `apairo status root/seq`
 and `apairo studio root/seq` read the same contract as entering by the root.
 
+## `views.yaml` (persisted synchronizations)
+
+Written by `SynchronizedView.persist(name)`, read by `load_view(name)`
+([Persisting a synchronization](../async-datasets.md#persisting-a-synchronization)).
+One entry per view; the indices live beside it in `views/<name>.npz`
+(`reference_timestamps`, and `index_<i>` for the *i*-th channel of `method`).
+
+```yaml
+version: 1
+views:
+  lidar_sync:
+    file: views/lidar_sync.npz
+    reference: velodyne_0          # null for an external clock
+    method: {velodyne_0: nearest, multisense_imu: nearest,
+             gicp_poses: "interpolate:apairo_transform.interp.Se3Interp"}
+    tolerance: 0.05                # null for none
+    frames: 5041
+    sources:                       # the fingerprint load_view checks
+      velodyne_0: {frames: 5041, clock: 3fa2b0c94e17d8a1}
+      ...
+    created: '2026-10-08T15:02:11+00:00'
+```
+
+| Field | Meaning |
+|---|---|
+| `file` | The index file, relative to `.apairo/`. |
+| `reference` | The channel whose clock the view resamples onto; `null` for an external clock. |
+| `method` | Per channel: `previous`, `next`, `nearest`, `custom:<name>` (a callable, not needed to reload), or `interpolate:<class>` (passed again to `load_view`). |
+| `tolerance` | The tolerance, in seconds, or `null`. |
+| `frames` | The number of frames the view kept. |
+| `sources` | Per channel, its frame count and a hash of its clock when the view was persisted. A difference makes `load_view` refuse the view as stale. |
+| `created` | When the view was persisted (UTC). |
+
 ## `dataset.yaml` (root manifest, optional)
 
 Identity for a dataset **root** (the parent of several sequence directories).

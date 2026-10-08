@@ -58,6 +58,20 @@ All notable changes to apairo are documented here. The format is based on
     the `apairo.datasets` entry point group.
   - Adding a standard dataset is a pull request: a declaration or a profiled
     class, a miniature fixture, a guide and an extra ("Adding a Dataset").
+- **A synchronization can be persisted, and reloaded as the same frames.**
+  `synchronize(...).persist(name)` writes what the view is into the
+  sequence's `.apairo`, with no data copied: the kept reference ticks, one
+  index array per channel, the method, the tolerance, and a fingerprint of
+  every source channel (its frame count and a hash of its clock).
+  `RawDataset(seq).load_view(name)` rebuilds the same synchronous dataset from
+  those indices without matching again. It refuses a view whose sources
+  changed since -- a frame added, a timestamp moved, a `latency` declared, or
+  another declaration -- and names the channel. On a root, each sequence keeps
+  its own view. An interpolated channel takes its interpolator again at load
+  (it is code, not state); a custom matcher is not needed. `apairo status`
+  lists a sequence's views, `apairo check` validates `views.yaml`, and the
+  schema documents it. On a real TartanDrive sequence, the view of 5041 frames
+  over three channels is a 162 KB index file. Its frames reload identical.
 - **`latency`: a sensor that stamps its readings late, corrected by
   declaration.** A channel field in seconds -- how long before its timestamp
   each frame was captured -- that moves the channel's clock back, whatever its
