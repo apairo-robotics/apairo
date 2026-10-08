@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -27,6 +28,9 @@ from apairo.dataset.registry import resolve_declaration
 from apairo.loader import load_profile, load_timestamps, loads_timestamps
 from apairo.utils.files import get_files
 from apairo.utils.timestamps import get_end_of_time
+
+if TYPE_CHECKING:
+    from apairo.core.synchronized_view import SynchronizedView
 
 
 def _detect_loader(channel_dir: Path) -> str | None:
@@ -547,6 +551,37 @@ class AsyncLayoutDataset(AbstractDataset):
             return
         self._init_loaders()
         self._init_timeline()
+
+    def load_view(
+        self, name: str, *, interpolators: dict | None = None
+    ) -> SynchronizedView:
+        """Reload view *name*, persisted with ``synchronize(...).persist(name)``:
+        the same frames, as a synchronous dataset, without recomputing the
+        matching or copying any data. Open the sequence as the view was made
+        (the same declaration); channels it needs are loaded if missing.
+
+        Args:
+            name: The view's name.
+            interpolators: The interpolator of each interpolated channel, by
+                channel -- they are code, not state, so they are passed again.
+
+        Raises:
+            KeyError: No view of that name in this sequence.
+            ValueError: The view is stale -- a source channel's frames or clock
+                changed since it was persisted -- or an interpolator is missing.
+        """
+        from apairo.core.views import load_view
+
+        return load_view(self, name, interpolators=interpolators)
+
+    def _reopened(self, keys: list[str]) -> AsyncLayoutDataset:
+        """This sequence opened again on *keys*, through the same declarations."""
+        return type(self)(
+            getattr(self, "root_dir"),  # noqa: B009 -- set by the concrete family
+            keys=keys,
+            declare=getattr(self, "_declare", None),
+            declare_base=getattr(self, "_declare_base", None),
+        )
 
     def channel_format(self, key: str) -> str | None:
         """The name of the format channel *key* is stored in (its ``loader``),

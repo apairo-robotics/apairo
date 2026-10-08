@@ -138,6 +138,53 @@ class SynchronizedView(AbstractDataset):
         self._channel_ts = channel_ts
         self._keys = keys
 
+    @classmethod
+    def _from_state(
+        cls,
+        parent: AbstractDataset,
+        *,
+        reference: str | None,
+        strategies: dict[str, Any],
+        tolerance: float | None,
+        reference_timestamps: np.ndarray,
+        index_map: dict[str, np.ndarray],
+    ) -> SynchronizedView:
+        """A view rebuilt from its persisted state -- the matching is not
+        recomputed (see :func:`apairo.core.views.load_view`)."""
+        view = cls.__new__(cls)
+        view._parent = parent
+        view._reference = reference
+        view._method = dict(strategies)
+        view._strategies = dict(strategies)
+        view._tolerance = tolerance
+        view._ref_timestamps = np.asarray(reference_timestamps, dtype=float)
+        view._index_map = {
+            k: np.asarray(v, dtype=np.intp) for k, v in index_map.items()
+        }
+        view._channel_ts = {
+            k: np.asarray(parent.timestamps[k], dtype=float)  # type: ignore[index]
+            for k in index_map
+        }
+        view._keys = list(index_map)
+        return view
+
+    def persist(self, name: str, *, overwrite: bool = False) -> Path:
+        """Freeze this view in its sequence's ``.apairo`` under *name*: the
+        reference clock, one index array per channel, the method, the
+        tolerance, and a fingerprint of every source channel. No data is
+        copied. Reload it -- the same frames, without recomputing the matching
+        -- with ``RawDataset(seq).load_view(name)``; a source changed since is
+        refused, by name.
+
+        Raises:
+            FileExistsError: A view of that name exists and *overwrite* is
+                not set.
+            TypeError: The view was not synchronized directly on a sequence.
+        """
+        from apairo.core.views import persist_view
+
+        return persist_view(self, name, overwrite=overwrite)
+
     # ------------------------------------------------------------- resolution
 
     @staticmethod

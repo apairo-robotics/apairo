@@ -201,11 +201,28 @@ class RootSequenceMixin(_MixinBase):
                 "sequence has its own time base. Synchronize sequences individually "
                 "(ds.sequences[i].synchronize(...)) and concat the results."
             )
-        from apairo.dataset.concat import ConcatDataset
+        from apairo.dataset.concat import SynchronizedSequences
 
-        return ConcatDataset(
+        return SynchronizedSequences(
             [
                 seq.synchronize(reference=reference, method=method, tolerance=tolerance)
+                for seq in self._sequences
+            ]
+        )
+
+    def load_view(self, name: str, *, interpolators: dict | None = None):
+        """Reload view *name* of every sequence -- see
+        :meth:`~apairo.dataset.async_layout.dataset.AsyncLayoutDataset.load_view`
+        -- concatenated in sequence order, as ``synchronize`` returned them."""
+        if not self._is_root:
+            return super().load_view(  # type: ignore[misc]  # the sequence class's
+                name, interpolators=interpolators
+            )
+        from apairo.dataset.concat import SynchronizedSequences
+
+        return SynchronizedSequences(
+            [
+                seq.load_view(name, interpolators=interpolators)
                 for seq in self._sequences
             ]
         )

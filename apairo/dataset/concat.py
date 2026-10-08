@@ -131,3 +131,16 @@ class ConcatDataset(AbstractDataset):
             data={k: sample.data[k] for k in self._keys if k in sample.data},
             timestamp=sample.timestamp,
         )
+
+
+class SynchronizedSequences(ConcatDataset):
+    """The synchronized views of a root's sequences, one after the other --
+    what ``synchronize`` returns on a root. Each sequence keeps its own clock;
+    :meth:`persist` freezes each view in its own sequence."""
+
+    def persist(self, name: str, *, overwrite: bool = False) -> list:
+        """Persist every sequence's view under *name*; the index files written."""
+        from apairo.core.synchronized_view import SynchronizedView
+
+        views = [view for view in self.datasets if isinstance(view, SynchronizedView)]
+        return [view.persist(name, overwrite=overwrite) for view in views]

@@ -55,6 +55,7 @@ from apairo.core.formats import Facts, Format, find_format, get_format
 from apairo.core.keys import epoch_unit
 from apairo.core.naming import channel_frame_files
 from apairo.core.profiled_dataset import ProfiledDataset
+from apairo.core.views import read_views, verify_views
 from apairo.dataset.async_layout.dataset import _bare_channel_entries, _detect_loader
 from apairo.dataset.raw import RawDataset
 from apairo.dataset.registry import (
@@ -308,9 +309,19 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
     )
     issues += verify_declaration(declaration_path(seq_dir), seq_dir)
     issues += _clock_coverage_issues(seq_dir, cfg, cache)
+    issues += verify_views(seq_dir)
     return {
         "channels": channels,
         "untracked": untracked,
+        "views": {
+            name: {
+                "frames": entry.get("frames"),
+                "reference": entry.get("reference"),
+                "channels": sorted(entry.get("method") or {}),
+            }
+            for name, entry in read_views(seq_dir).items()
+            if isinstance(entry, dict)
+        },
         "start": min(starts) if starts else None,
         "events": sum(c["frames"] for c in channels.values()),
         "issues": issues,
@@ -692,6 +703,12 @@ def _print_status(s: dict, show_tf: bool = False, show_missing: bool = False) ->
         if n_cal:
             bits.append(f"{n_cal} static")
         print(f"tf          hidden ({', '.join(bits)}) -- pass --show-tf to show")
+    for i, (name, view) in enumerate(sorted((s.get("views") or {}).items())):
+        clock = view["reference"] or "an external clock"
+        print(
+            f"{'views' if i == 0 else '':<12}{name}  ({view['frames']} frames on "
+            f"{clock}; {', '.join(view['channels'])})"
+        )
     print(f"events      {s['events']}")
     print(f"issues      {'none' if not s['issues'] else ''}")
     for issue in s["issues"]:
