@@ -31,7 +31,9 @@ TUM = (
 def _table(tmp_path, text, name="data.csv"):
     d = tmp_path / "chan"
     d.mkdir()
-    (d / name).write_text(text)
+    # UTF-8 whatever the platform's default: Excel's "CSV UTF-8" (the BOM
+    # cases) is UTF-8, and Windows would write cp1252.
+    (d / name).write_text(text, encoding="utf-8")
     return d
 
 
