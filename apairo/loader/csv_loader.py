@@ -34,6 +34,10 @@ def _is_number(token: str) -> bool:
     return True
 
 
+# "utf-8-sig" reads UTF-8 and drops the byte-order mark Excel's "CSV UTF-8"
+# writes, which would otherwise glue itself to the first column's name.
+_ENCODING = "utf-8-sig"
+
 # A .txt file is only taken for a table when its first rows read as one: many are
 # notes, index files (TUM's rgb.txt pairs a stamp with a filename) or sidecars.
 _TABLE_SNIFF_ROWS = 20
@@ -47,7 +51,7 @@ def looks_like_table(path: Path) -> bool:
     header_seen = False
     rows = 0
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding=_ENCODING) as f:
             for raw in f:
                 line = raw.strip()
                 if not line or line.startswith("#"):
@@ -105,25 +109,25 @@ def scan_table(
     path = CSVLoader._locate(Path(directory), file)
     head = CSVLoader._read(path, limit=1)
     width = len(head.rows[0])
-    sep = head.sep.encode() if head.sep is not None else None
+    sep = head.sep
     data_lines = 0
-    last = b""
-    with open(path, "rb") as f:
+    last = ""
+    # Lines are read and stripped exactly as the loader reads them, so both
+    # agree on what is a comment, a blank line, and a row's width.
+    with open(path, encoding=_ENCODING) as f:
         for lineno, raw in enumerate(f, start=1):
-            first = raw[:1]
-            if first == b"#" or raw.isspace():
-                continue
-            if first in b" \t" and raw.lstrip()[:1] == b"#":
+            line = raw.strip()
+            if not line or line.startswith("#"):
                 continue
             data_lines += 1
             if data_lines == 1 and head.header_row:
                 continue
-            cells = raw.count(sep) + 1 if sep is not None else len(raw.split())
+            cells = line.count(sep) + 1 if sep is not None else len(line.split())
             if cells != width:
                 raise ValueError(
                     f"{path}:{lineno}: {cells} column(s), expected {width}."
                 )
-            last = raw
+            last = line
     rows = data_lines - head.header_row
     key_idx = (
         _column_index(path, key_column, head.names, width, "key column")
@@ -139,7 +143,7 @@ def scan_table(
         keep = [_column_index(path, f, head.names, width, "field") for f in fields]
     else:
         keep = [i for i in range(width) if i != key_idx]
-    last_cells = _split(last.decode("utf-8").strip(), head.sep)
+    last_cells = _split(last, head.sep)
     return TableScan(
         rows=rows,
         columns=[head.names[i] for i in keep] if head.names is not None else None,
@@ -266,7 +270,7 @@ class CSVLoader(AbstractLoader):
         def split(line: str) -> list[str]:
             return _split(line, sep)
 
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding=_ENCODING) as f:
             for lineno, raw in enumerate(f, start=1):
                 line = raw.strip()
                 if not line:

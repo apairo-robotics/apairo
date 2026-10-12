@@ -252,3 +252,22 @@ def test_declare_leaves_the_clock_column_as_homework_when_unsure(tmp_path, capsy
         in blocks["b"]
     )
     assert "# key: {column: <index or name>" in blocks["c"]
+
+
+def test_a_root_of_logger_folders(tmp_path):
+    """logs/<run>/{accel,wrench}.csv: each run a folder of tables, the folder of
+    runs a root -- not one channel per run made of several tables."""
+    logs = tmp_path / "logs"
+    for run in ("run1", "run2"):
+        (logs / run).mkdir(parents=True)
+        _table(logs / run / "accel.csv", 3937, 6, 3)
+        _table(logs / run / "wrench.csv", 1437, 12, 6)
+    (logs / "apairo.yaml").write_text(  # one declaration for every run
+        "version: 1\nchannels:\n"
+        "  accel: {key: {column: t, units: [us]}}\n"
+        "  wrench: {key: {column: t, units: [us]}}\n"
+    )
+    ds = RawDataset(logs)
+    assert ds._is_root
+    assert ds.sequence_ids == ["run1", "run2"]
+    assert set(ds.sequences[0].keys) == {"accel", "wrench"}

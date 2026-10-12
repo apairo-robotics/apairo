@@ -159,6 +159,11 @@ _SCANNED = [
     ("t,x\r\n1,2\r\n\r\n2,3\r\n", {"key_column": "t"}),
     ("1\t2\t3\n4\t5\t6\n", {"key_column": 2}),
     ("# no header\n1 2\n3 4\n5 6\n", {"key_column": 1}),
+    ("t\tax\tay\t\n0.00\t0\t0\t\n0.01\t1\t1\t\n", {"key_column": "t"}),
+    ("\tt\tax\n\t0.00\t0\n\t0.01\t1\n", {"key_column": "t"}),
+    ("t,a\n\x0c# a form feed, then a comment\n0.0,1\n0.1,2\n", {"key_column": "t"}),
+    ("\ufefft,a\n0.0,1\n0.1,2\n", {"key_column": "t"}),
+    ("\ufeff0.0,1\n0.1,2\n0.2,3\n", {"key_column": 0}),
 ]
 
 
@@ -193,3 +198,18 @@ def test_scan_refuses_what_the_loader_refuses(tmp_path, text, kwargs, match):
 
     with pytest.raises(ValueError, match=match):
         scan_table(_table(tmp_path, text), **kwargs)
+
+
+def test_a_byte_order_mark_is_not_part_of_the_table(tmp_path):
+    """Excel's "CSV UTF-8" starts with a BOM: neither a header nor a first row
+    may swallow it."""
+    for sub in ("a", "b"):
+        (tmp_path / sub).mkdir()
+    named = CSVLoader(
+        _table(tmp_path / "a", "\ufefft,a\n0.0,1\n0.1,2\n"), key_column="t"
+    )
+    assert named.columns == ["a"] and len(named) == 2
+    bare = CSVLoader(
+        _table(tmp_path / "b", "\ufeff0.0,1\n0.1,2\n0.2,3\n"), key_column=0
+    )
+    assert len(bare) == 3

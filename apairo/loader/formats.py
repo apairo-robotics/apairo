@@ -219,8 +219,10 @@ class CsvFormat(Format):
 
     def detect(self, directory: Path) -> bool:
         # A channel directory is a table only through a .csv: a stray .txt beside
-        # other files is more often a note than the channel's data.
-        return any(p.suffix.lower() == ".csv" for p in self.data_files(directory))
+        # other files is more often a note than the channel's data. Several
+        # tables are a folder of channels, each its own (one_channel_per_file),
+        # not one channel.
+        return sum(p.suffix.lower() == ".csv" for p in self.data_files(directory)) == 1
 
     def open(self, directory: Path, meta: dict, files: list[str] | None = None):
         key = meta.get("key")
