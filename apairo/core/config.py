@@ -130,6 +130,22 @@ def _regex_groups(pattern) -> int | None:
         return None
 
 
+def latency_seconds(value) -> float:
+    """A channel's declared ``latency``, in seconds: a finite number. A numeric
+    string is read as one -- YAML takes ``8e-3`` for a string."""
+    if not isinstance(value, bool):
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            seconds = float("nan")
+        if np.isfinite(seconds):
+            return seconds
+    raise ValueError(
+        f"'latency' is a number of seconds -- how long before its timestamp each "
+        f"frame was captured -- got {value!r}"
+    )
+
+
 def _quoted(names: list[str]) -> str:
     """``'a'``, ``'a' and 'b'``, ``'a', 'b' and 'c'``."""
     quoted = [f"'{n}'" for n in names]
@@ -293,16 +309,11 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
                 f"channel '{key}': 'key' cannot be combined with timestamps_from/suffix "
                 f"(they would be ignored)"
             )
-    latency = meta.get("latency")
-    if latency is not None and (
-        isinstance(latency, bool)
-        or not isinstance(latency, (int, float))
-        or not np.isfinite(latency)
-    ):
-        out.append(
-            f"channel '{key}': 'latency' is a number of seconds -- how long before "
-            f"its timestamp each frame was captured -- got {latency!r}"
-        )
+    if meta.get("latency") is not None:
+        try:
+            latency_seconds(meta["latency"])
+        except ValueError as exc:
+            out.append(f"channel '{key}': {exc}")
     order = meta.get("order")
     if order is not None and (
         not isinstance(order, dict)

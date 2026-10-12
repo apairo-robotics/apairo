@@ -111,3 +111,100 @@ def test_status_shows_the_corrected_span(tmp_path, capsys):
         pass
     span = json.loads(capsys.readouterr().out)["channels"]["imu"]["span"]
     assert span == pytest.approx([T0 - 0.5, T0 - 0.5 + 0.04])
+
+
+@pytest.mark.parametrize("command", ["status", "check"])
+def test_a_latency_that_is_not_a_number_is_reported_not_a_crash(
+    tmp_path, capsys, command
+):
+    seq = _seq(tmp_path, imu=(T0 + np.arange(3) * 0.01, "8 ms"))
+    try:
+        code = main([command, str(seq)])
+    except SystemExit as exc:
+        code = exc.code
+    out = capsys.readouterr().out
+    assert code == 1 if command == "check" else code in (0, None)
+    assert "'latency' is a number of seconds" in out
+    with pytest.raises(
+        ValueError, match="Channel 'imu': 'latency' is a number of seconds"
+    ):
+        RawDataset(seq)
+
+
+def test_yaml_s_8e_3_is_a_number(tmp_path):
+    """YAML 1.1 reads `8e-3` as a string; it is the number it looks like."""
+    seq = _seq(tmp_path, imu=(T0 + np.arange(3) * 0.01,))
+    (seq / "apairo.yaml").write_text("version: 1\nchannels:\n  imu: {latency: 8e-3}\n")
+    assert verify_config(seq) == []
+    np.testing.assert_allclose(RawDataset(seq).timestamps["imu"][0], T0 - 0.008)
+
+
+def test_a_suffixed_sub_channel_shares_its_directory_s_latency(tmp_path):
+    seq = tmp_path / "seq"
+    d = seq / "velodyne_0"
+    d.mkdir(parents=True)
+    for i in range(4):
+        np.save(d / f"{i:06d}.npy", np.zeros((5, 3), np.float32))
+        np.save(d / f"{i:06d}_intensity.npy", np.zeros(5, np.uint8))
+    np.savetxt(d / "timestamps.txt", T0 + np.arange(4) * 0.1)
+    write_config(
+        seq,
+        {
+            "version": 1,
+            "channels": {
+                "velodyne_0": {"kind": "raw", "loader": "npys", "latency": 0.05},
+                "velodyne_0_intensity": {
+                    "kind": "raw",
+                    "loader": "npys",
+                    "directory": "velodyne_0",
+                    "suffix": "intensity",
+                },
+            },
+        },
+    )
+    ds = RawDataset(seq)
+    np.testing.assert_allclose(
+        ds.timestamps["velodyne_0_intensity"], ds.timestamps["velodyne_0"]
+    )
+    view = ds.synchronize(reference="velodyne_0", method="nearest")
+    np.testing.assert_array_equal(
+        view.frame_indices["velodyne_0_intensity"], view.frame_indices["velodyne_0"]
+    )
+
+
+def test_a_timestamp_that_is_not_a_number_is_refused(tmp_path, capsys):
+    seq = _seq(tmp_path, imu=(np.array([T0, np.nan, T0 + 0.02]),))
+    with pytest.raises(
+        ValueError, match="Channel 'imu': timestamp 1 is not a finite number"
+    ):
+        RawDataset(seq)
+    try:
+        code = main(["check", str(seq)])
+    except SystemExit as exc:
+        code = exc.code
+    assert code == 1 and "not a finite number" in capsys.readouterr().out
+
+
+def test_a_table_clock_that_is_not_a_number_is_refused(tmp_path):
+    seq = tmp_path / "seq"
+    seq.mkdir()
+    (seq / "imu.csv").write_text("t,a\n0.00,1\nnan,2\n0.20,3\n")
+    write_config(
+        seq,
+        {
+            "version": 1,
+            "channels": {
+                "imu": {
+                    "kind": "raw",
+                    "loader": "csv",
+                    "directory": ".",
+                    "array_file": "imu.csv",
+                    "key": {"column": "t"},
+                }
+            },
+        },
+    )
+    with pytest.raises(
+        ValueError, match="Channel .imu.: timestamp 1 is not a finite number"
+    ):
+        RawDataset(seq)

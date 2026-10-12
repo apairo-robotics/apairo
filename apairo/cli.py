@@ -39,6 +39,7 @@ from apairo.core.config import (
     declaration_exists,
     declaration_path,
     inherited_declaration,
+    latency_seconds,
     merge_declared_channels,
     read_calibration,
     read_config,
@@ -172,6 +173,12 @@ def _clock_coverage_issues(
         if not cdir.is_dir():
             continue
         own = _read_timestamps(cdir)
+        if own is not None and not np.all(np.isfinite(own)):
+            issues.append(
+                f"channel '{ch}': {cdir.name}/timestamps.txt holds a timestamp that "
+                f"is not a finite number; loading refuses it"
+            )
+            continue
         src = meta.get("timestamps_from")
         if own is not None:
             clock, where = own, f"{cdir.name}/timestamps.txt"
@@ -229,8 +236,13 @@ def _channel_detail_dir(
         # the precedence loading uses.
         keyed = _keyed_clock(cdir, meta, files)
         ts = keyed if keyed is not None else ts
-    # A declared latency moves the clock back, as loading does.
-    latency = float(meta.get("latency") or 0.0) if meta else 0.0
+    # A declared latency moves the clock back, as loading does (`check`
+    # reports one that is not a number).
+    try:
+        own = meta.get("latency") if meta else None
+        latency = latency_seconds(own) if own is not None else 0.0
+    except ValueError:
+        latency = 0.0
     if ts is not None:
         ts = ts - latency
     rate, span = _rate_span(ts)
@@ -296,7 +308,8 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
             pass
     cache: dict = {}
     channels = {
-        k: _channel_detail(seq_dir, k, v, cache) for k, v in sorted(cfg.items())
+        k: _channel_detail(seq_dir, k, _with_owner_latency(k, v, cfg), cache)
+        for k, v in sorted(cfg.items())
     }
     untracked = {
         u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)
@@ -326,6 +339,26 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
         "events": sum(c["frames"] for c in channels.values()),
         "issues": issues,
     }
+
+
+def _with_owner_latency(key: str, meta, cfg: dict):
+    """*meta*, with the latency of the channel owning its directory when it is
+    a suffixed or colocated sub-channel declaring none -- as loading reads it."""
+    if not isinstance(meta, dict) or meta.get("latency") is not None:
+        return meta
+    if not (meta.get("suffix") or meta.get("array_file")):
+        return meta
+    directory = meta.get("directory", key)
+    for other, entry in cfg.items():
+        if (
+            isinstance(entry, dict)
+            and entry.get("directory", other) == directory
+            and not entry.get("suffix")
+            and not entry.get("array_file")
+            and entry.get("latency") is not None
+        ):
+            return {**meta, "latency": entry["latency"]}
+    return meta
 
 
 def _is_sequence(path: Path) -> bool:

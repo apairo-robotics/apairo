@@ -762,12 +762,40 @@ class AsyncLayoutDataset(AbstractDataset):
         if fallback:
             for key, clock in loads_timestamps(fallback, self._files).items():
                 timestamps[key] = clock - self._latency(key)
+        for key in self._keys:
+            clock = timestamps.get(key)
+            if clock is not None and not np.all(np.isfinite(clock)):
+                row = int(np.flatnonzero(~np.isfinite(clock))[0])
+                raise ValueError(
+                    f"Channel '{key}': timestamp {row} is not a finite number "
+                    f"({clock[row]}). Every frame needs a time."
+                )
         return timestamps
 
     def _latency(self, key: str) -> float:
         """How long before its timestamp channel *key* captured each frame -- a
-        sensor's transport delay, declared as ``latency`` (seconds); 0 if none."""
-        return float(self._meta_of.get(key, {}).get("latency") or 0.0)
+        sensor's transport delay, declared as ``latency`` (seconds); 0 if none.
+        A suffixed or colocated sub-channel reads its directory's clock, so it
+        takes the latency of the channel that owns that directory unless it
+        declares its own."""
+        from apairo.core.config import latency_seconds
+
+        value = self._meta_of.get(key, {}).get("latency")
+        if value is None and (key in self._suffix_of or key in self._array_file_of):
+            for other, directory in self._files.items():
+                if (
+                    directory == self._files[key]
+                    and other not in self._suffix_of
+                    and other not in self._array_file_of
+                ):
+                    value = self._meta_of.get(other, {}).get("latency")
+                    break
+        if value is None:
+            return 0.0
+        try:
+            return latency_seconds(value)
+        except ValueError as exc:
+            raise ValueError(f"Channel '{key}': {exc}") from None
 
     def _parse_key(self, key: str) -> np.ndarray:
         r"""A channel's alignment key from its ``key`` spec, computed in memory --
