@@ -295,3 +295,15 @@ def test_derived_only_without_source(rellis_root_derived):
     assert "elevation_map" in s.data
     assert "lidar" not in s.data
     assert isinstance(s.data["elevation_map"], np.ndarray)
+
+
+def test_a_filtered_dataset_keeps_its_channels(rellis_root):
+    """filter() keeps frames, not channels: its keys are the parent's, so it
+    concatenates and joins like any dataset (the README pipeline)."""
+    from apairo.dataset import ConcatDataset
+
+    root, _ = rellis_root
+    ds = Rellis3DDataset(root, keys=["lidar", "labels"])
+    kept = ds.filter(lambda s: True)
+    assert kept.keys == ["lidar", "labels"]
+    assert sorted(ConcatDataset([kept, kept]).keys) == ["labels", "lidar"]

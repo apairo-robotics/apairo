@@ -185,3 +185,10 @@ def test_derived_key_missing_files_raises(tmp_path):
     _write_apairo(tmp_path, "elevation_map", "npys")
     with pytest.raises(FileNotFoundError):
         SemanticKittiDataset(tmp_path, keys=["lidar", "elevation_map"])
+
+
+def test_a_split_it_does_not_declare_is_refused(tmp_path):
+    """SemanticKITTI's profile declares no split: split= used to be ignored."""
+    (tmp_path / "sequences" / "00" / "velodyne").mkdir(parents=True)
+    with pytest.raises(ValueError, match="declares no splits.*sequences="):
+        SemanticKittiDataset(tmp_path, keys=["lidar"], split="train")

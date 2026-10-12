@@ -210,3 +210,30 @@ def test_labels_drop_the_instance_id_in_their_upper_bits(tmp_path):
     ds = Goose3DDataset(tmp_path, keys=["lidar", "labels"])
     np.testing.assert_array_equal(ds[0].data["labels"], classes)
     assert ds.timestamps[0] == pytest.approx(1684157849.628053530)
+
+
+def test_the_clock_follows_the_split(tmp_path):
+    """A scene name present under both train/ and val/ takes its stamps from
+    the selected split."""
+    for split, t0 in (
+        ("train", 1_000_000_000_000_000_000),
+        ("val", 2_000_000_000_000_000_000),
+    ):
+        for mod, ext in (("lidar", "vls128.bin"), ("labels", "goose.label")):
+            d = tmp_path / mod / split / "scene"
+            d.mkdir(parents=True)
+            for i in range(2):
+                name = d / f"scene__{i:04d}_{t0 + i * 10**9}_{ext}"
+                (_make_bin if mod == "lidar" else _make_label)(name, 3)
+    val = Goose3DDataset(tmp_path, keys=["lidar", "labels"], split="val")
+    np.testing.assert_allclose(val.timestamps, [2e9, 2e9 + 1])
+    train = Goose3DDataset(tmp_path, keys=["lidar", "labels"], split="train")
+    np.testing.assert_allclose(train.timestamps, [1e9, 1e9 + 1])
+
+
+def test_an_unknown_split_names_the_declared_ones(tmp_path):
+    (tmp_path / "lidar" / "train" / "s").mkdir(parents=True)
+    with pytest.raises(
+        ValueError, match=r"Split 'bogus' not declared.*\['train', 'val', 'test'\]"
+    ):
+        Goose3DDataset(tmp_path, keys=["lidar"], split="bogus")

@@ -579,6 +579,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         # _splits_spec is set by _load_profile (structural, profile-derived).
         self._frame_filter: set[tuple[str, str]] | None = None
+        if split is not None:
+            self._check_split(split)
         if (
             split is not None
             and self._splits_spec is not None
@@ -858,6 +860,16 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             files_full = sorted(
                 (p for p in self._root.glob(pattern) if p.is_file()), key=_natural_key
             )
+            # A directory split selects whole scenes, which may share a name
+            # across splits: the clock is read in the selected split only.
+            if self._split_filter and any(
+                layer.type == "split" for layer in self._layers
+            ):
+                files_full = [
+                    f
+                    for f in files_full
+                    if self._split_filter in f.relative_to(self._root).parts
+                ]
             key_spec = {
                 k: spec[k] for k in ("name", "file", "scale", "units") if k in spec
             }
@@ -1063,6 +1075,28 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         if self._sequence_ids_filter is not None:
             paths = [p for p in paths if p.parent.name in self._sequence_ids_filter]
         return paths
+
+    def _check_split(self, split: str) -> None:
+        """A split must be one the profile declares -- a split file, or a
+        directory level of the layout -- or nothing would select it: refused,
+        naming the ones it has."""
+        declared: list[str] = []
+        if self._splits_spec is not None and self._splits_spec.type == "lst":
+            declared += list(self._splits_spec.files)
+        for layer in self._layers:
+            if layer.type == "split" and isinstance(layer.value, (list, tuple)):
+                declared += [v for v in layer.value if v not in declared]
+        if split in declared:
+            return
+        if declared:
+            raise ValueError(
+                f"Split '{split}' not declared in profile ({type(self).__name__}). "
+                f"Available: {declared}"
+            )
+        raise ValueError(
+            f"{type(self).__name__} declares no splits, so split='{split}' would "
+            f"select nothing. Select sequences with sequences=[...] instead."
+        )
 
     def _discover_derived(
         self, key: str, fmt: Format, apply_frame_filter: bool = True

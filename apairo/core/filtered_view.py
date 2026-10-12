@@ -36,6 +36,18 @@ class FilteredView(AbstractDataset):
         self._indices = np.asarray(indices, dtype=np.int64)
 
     @property
+    def keys(self) -> list:
+        """The parent's channels: a filter keeps frames, not channels."""
+        return self._parent.keys
+
+    @keys.setter
+    def keys(self, keys: list) -> None:
+        raise AttributeError(
+            "A filtered view keeps its parent's channels; project them with "
+            "select([...])."
+        )
+
+    @property
     def indices(self) -> np.ndarray:
         """Global indices in the parent dataset that this view covers."""
         return self._indices
