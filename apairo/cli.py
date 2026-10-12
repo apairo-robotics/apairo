@@ -455,14 +455,37 @@ def _build_profiled_sequence_status(path: Path, cls, seq_id: str) -> dict | None
     seq_base = path / prefix / seq_id
 
     channels: dict = {}
-    for key, c in inv["raw"]["channels"].items():
-        # Sequence-level files (e.g. poses.txt) are not per-frame dirs -- skip the
-        # per-frame table for them.
-        if not c["present"] or c["sequence_file"]:
+    present = [k for k, c in inv["raw"]["channels"].items() if c["present"]]
+    # A profile describes its raw modalities (extension, dtype, reshape, mask)
+    # itself: read the sequence the way loading does, rather than through a
+    # format named like the profile's loader.
+    try:
+        ds = cls(path, keys=present, sequences=[seq_id])
+    except Exception:
+        ds = None
+    rate, span = _rate_span(getattr(ds, "timestamps", None) if ds is not None else None)
+    for key in present:
+        c = inv["raw"]["channels"][key]
+        loader = ds.loaders.get(key) if ds is not None else None
+        if loader is None:
+            if not c["sequence_file"]:
+                channels[key] = _channel_detail_dir(
+                    seq_base / c["dir"], {"loader": c["loader"], "kind": "raw"}
+                )
             continue
-        channels[key] = _channel_detail_dir(
-            seq_base / c["dir"], {"loader": c["loader"], "kind": "raw"}
-        )
+        first = np.asarray(loader[0]) if len(loader) else None
+        channels[key] = {
+            "kind": "raw",
+            "frame": None,
+            "transform": None,
+            "alias": None,
+            "loader": c["loader"],
+            "frames": len(loader),
+            "rate_hz": rate,
+            "span": list(span) if span else None,
+            "shape": list(first.shape) if first is not None else None,
+            "dtype": str(first.dtype) if first is not None else None,
+        }
     for key, meta in inv["preprocess"].items():
         channels[key] = _channel_detail_dir(
             seq_base / key, {**meta, "kind": "preprocess"}

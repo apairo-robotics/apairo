@@ -1036,6 +1036,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
         declared = set(config.get("channels", {}))
         raw_dirs = {self._mapped_name(k) for k in self.available_keys}
+        clock = getattr(self, "_clock_spec", None) or {}
+        if isinstance(clock, dict) and clock.get("dir"):
+            raw_dirs.add(str(clock["dir"]))  # the frame clock's source, not a channel
         prefix = [
             layer.value if layer.type == "fixed" and layer.value is not None else "*"
             for layer in self._layers[: self._modality_layer_idx]

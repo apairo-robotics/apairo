@@ -321,3 +321,33 @@ def test_tartan_synchronize_chain_shuffled_access(tartan_seq):
         sample = view[int(i)]
         assert set(sample.data) == set(TARTAN_KEYS)
         assert (sample.data["velodyne_0"][:, 2] > -1.0).all()
+
+
+def test_status_of_a_profiled_sequence_reads_it_as_loading_does(rellis_root, capsys):
+    """`status -s` reads a Rellis sequence through its profile (`.label`
+    files under a `bin` loader, the camera clock), not through formats."""
+    import json
+
+    from apairo.cli import main
+
+    def run(args):
+        try:
+            main(args)
+        except SystemExit:
+            pass
+        return capsys.readouterr().out
+
+    out = run(["init", str(rellis_root), "--as", "Rellis3DDataset"])
+    assert "pylon_camera_node" not in out  # the clock's source, not a channel
+    channels = json.loads(run(["status", str(rellis_root), "-s", "00000", "--json"]))[
+        "channels"
+    ]
+    assert {k: channels[k]["frames"] for k in channels} == {
+        "labels": 5,
+        "lidar": 5,
+        "poses": 5,
+    }
+    assert (
+        channels["labels"]["shape"] == [1024] and channels["labels"]["dtype"] == "int64"
+    )
+    assert channels["lidar"]["rate_hz"] is not None
