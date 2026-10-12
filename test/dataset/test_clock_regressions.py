@@ -386,3 +386,27 @@ def test_frame_provenance_is_cached(rellis):  # L7
     # cached_property -> the same object on repeated access (no rebuild)
     assert ds.frame_sequence_ids is ds.frame_sequence_ids
     assert ds.frame_stems is ds.frame_stems
+
+
+def test_a_stacked_channel_takes_a_sidecar_clock(tmp_path):
+    """`key: {file: ...}` is a stacked channel's clock: check accepts what
+    loading reads, as `declare` suggests it."""
+    import numpy as np
+
+    from apairo.core.config import verify_config, write_config
+    from apairo.dataset.raw import RawDataset
+
+    (tmp_path / "imu").mkdir()
+    np.save(tmp_path / "imu" / "imu.npy", np.zeros((4, 3)))
+    np.savetxt(tmp_path / "imu" / "stamps.txt", [1.0, 2.0, 3.0, 4.0])
+    write_config(
+        tmp_path,
+        {
+            "version": 1,
+            "channels": {
+                "imu": {"kind": "raw", "loader": "npy", "key": {"file": "stamps.txt"}}
+            },
+        },
+    )
+    assert verify_config(tmp_path) == []
+    np.testing.assert_allclose(RawDataset(tmp_path).timestamps["imu"], [1, 2, 3, 4])

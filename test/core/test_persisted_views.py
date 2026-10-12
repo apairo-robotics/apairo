@@ -253,3 +253,71 @@ def test_reloading_does_not_match_again(tmp_path, monkeypatch):
 
     monkeypatch.setattr(SynchronizedView, "_match", staticmethod(no_matching))
     _same(view, RawDataset(seq).load_view("v"))
+
+
+def test_an_alias_added_since_does_not_strand_a_view(tmp_path):
+    """A view stores the directories' real names: an alias is presentation."""
+    seq = _seq(tmp_path / "seq")
+    view = RawDataset(seq).synchronize(
+        reference="cam", method="nearest", tolerance=0.005
+    )
+    view.persist("v")
+    (seq / "apairo.yaml").write_text(
+        "version: 1\nchannels:\n  imu: {alias: inertial}\n"
+    )
+    again = RawDataset(seq).load_view("v")
+    assert again.keys == ["cam", "inertial"]
+    assert again.keys == RawDataset(seq).synchronize(reference="cam").keys
+    np.testing.assert_array_equal(
+        again.frame_indices["inertial"], view.frame_indices["imu"]
+    )
+
+
+def test_a_view_persisted_under_an_alias_survives_its_removal(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    (seq / "apairo.yaml").write_text(
+        "version: 1\nchannels:\n  imu: {alias: inertial}\n"
+    )
+    RawDataset(seq).synchronize(reference="cam", method="nearest").persist("v")
+    entry = yaml.safe_load((seq / ".apairo" / "views.yaml").read_text())["views"]["v"]
+    assert set(entry["method"]) == {"cam", "imu"}  # real names on disk
+    (seq / "apairo.yaml").unlink()
+    assert RawDataset(seq).load_view("v").keys == ["cam", "imu"]
+
+
+def test_a_root_persists_all_or_nothing(tmp_path):
+    root = tmp_path / "root"
+    _seq(root / "a")
+    _seq(root / "b")
+    RawDataset(root / "b").synchronize(reference="cam").persist("v")
+    with pytest.raises(FileExistsError, match="no sequence was written"):
+        RawDataset(root).synchronize(reference="cam", method="nearest").persist("v")
+    assert not (root / "a" / ".apairo" / "views.yaml").exists()
+
+
+def test_a_broken_view_registry_is_reported_not_a_crash(tmp_path, capsys):
+    seq = _seq(tmp_path / "seq")
+    RawDataset(seq).synchronize(reference="cam").persist("v")
+    registry = seq / ".apairo" / "views.yaml"
+    entry = yaml.safe_load(registry.read_text())
+    del entry["views"]["v"]["sources"]
+    entry["version"] = 7
+    registry.write_text(yaml.safe_dump(entry))
+    with pytest.raises(
+        ValueError, match="View 'v' cannot be loaded: view 'v': no 'sources'"
+    ):
+        RawDataset(seq).load_view("v")
+    try:
+        main(["check", str(seq), "--json"])
+    except SystemExit:
+        pass
+    issues = json.loads(capsys.readouterr().out)["issues"]
+    assert any("unknown version 7" in i for i in issues)
+    assert any("view 'v': no 'sources'" in i for i in issues)
+
+    registry.write_text("views: [unclosed\n")
+    try:
+        main(["status", str(seq)])
+    except SystemExit:
+        pass
+    assert "cannot parse" in capsys.readouterr().out

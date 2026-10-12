@@ -215,11 +215,14 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
                     f"-- give its clock as {forms} (or 'key: {{file: ...}}'), not a "
                     f"filename regex or an 'order'"
                 )
-        elif spec is not None or has_order:
+        elif (isinstance(spec, dict) and "name" in spec) or has_order:
+            # A sidecar (`key: {file: ...}`) is a stacked channel's clock; a
+            # filename regex or an `order` needs files to read it from.
             per_frame = ", ".join(f.name for f in formats() if f.per_frame)
             out.append(
-                f"channel '{key}': 'key'/'order' needs a per-frame loader "
-                f"({per_frame}), not the stacked '{loader}' loader"
+                f"channel '{key}': a filename 'key' or an 'order' needs a per-frame "
+                f"loader ({per_frame}), not the stacked '{loader}' loader -- give "
+                f"its clock as 'key: {{file: ...}}'"
             )
     for form in data_forms:
         if fmt is not None and form not in fmt.key_forms:
@@ -1268,6 +1271,10 @@ def verify_declaration(
                 f"(written by apairo into .apairo, not declared)"
             )
         issues += _unknown(meta, _channel_fields(), f"{path.name}: channel '{key}'")
+        issues += [
+            f"{path.name}: {issue}"
+            for issue in _verify_format_fields(key, meta, Path(root_dir or "."))
+        ]
         loader = meta.get("loader")
         if loader and find_format(loader) is None:
             issues.append(

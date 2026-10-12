@@ -141,6 +141,16 @@ class SynchronizedSequences(ConcatDataset):
     def persist(self, name: str, *, overwrite: bool = False) -> list:
         """Persist every sequence's view under *name*; the index files written."""
         from apairo.core.synchronized_view import SynchronizedView
+        from apairo.core.views import read_views
 
         views = [view for view in self.datasets if isinstance(view, SynchronizedView)]
+        if not overwrite:  # all or nothing: check every sequence before writing
+            for view in views:
+                seq_dir = view.root_dir
+                if seq_dir is not None and name in read_views(seq_dir):
+                    raise FileExistsError(
+                        f"A view named '{name}' is already persisted in {seq_dir}: "
+                        f"no sequence was written. Pass overwrite=True to replace "
+                        f"it in every sequence."
+                    )
         return [view.persist(name, overwrite=overwrite) for view in views]

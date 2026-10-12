@@ -38,6 +38,7 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 _VIEW_FIELDS = frozenset(
     {"file", "reference", "method", "tolerance", "frames", "sources", "created"}
 )
+_REQUIRED_FIELDS = ("file", "reference", "method", "tolerance", "frames", "sources")
 
 
 def _registry_path(seq_dir: Path) -> Path:
@@ -49,9 +50,45 @@ def read_views(seq_dir: str | Path) -> dict[str, dict]:
     path = _registry_path(Path(seq_dir))
     if not path.is_file():
         return {}
-    data = yaml.safe_load(path.read_text()) or {}
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError:
+        return {}  # `check` reports it (verify_views)
     views = data.get("views") if isinstance(data, dict) else None
     return views if isinstance(views, dict) else {}
+
+
+def _real_names(dataset: Any) -> dict[str, str]:
+    """Public channel name -> the directory's real name (aliases undone)."""
+    alias_of = getattr(dataset, "_alias_of", None) or {}
+    return {alias: real for real, alias in alias_of.items()}
+
+
+def _public_names(dataset: Any) -> dict[str, str]:
+    """A channel directory's real name -> the name it is exposed under."""
+    return dict(getattr(dataset, "_alias_of", None) or {})
+
+
+def _entry_issues(name: str, entry: Any, seq_dir: Path) -> list[str]:
+    """What is wrong with one view's registry entry, for check and load."""
+    if not isinstance(entry, dict):
+        return [f"view '{name}' is not a mapping"]
+    issues = [
+        f"view '{name}': unknown field '{f}'" for f in sorted(set(entry) - _VIEW_FIELDS)
+    ]
+    issues += [f"view '{name}': no '{f}'" for f in _REQUIRED_FIELDS if f not in entry]
+    file = entry.get("file")
+    if "file" in entry and (
+        not isinstance(file, str) or not (seq_dir / CONFIG_DIR / file).is_file()
+    ):
+        issues.append(f"view '{name}': index file {file!r} not found")
+    if "method" in entry and (
+        not isinstance(entry["method"], dict) or not entry["method"]
+    ):
+        issues.append(f"view '{name}': 'method' names no channel")
+    if "sources" in entry and not isinstance(entry["sources"], dict):
+        issues.append(f"view '{name}': 'sources' is not a mapping")
+    return issues
 
 
 def _sequence_dir(dataset: Any) -> Path:
@@ -107,6 +144,10 @@ def persist_view(view: SynchronizedView, name: str, *, overwrite: bool = False) 
         )
 
     keys = list(view._keys)
+    # Stored under the directories' real names: an alias is how a channel is
+    # shown, and may change without changing the data.
+    to_real = _real_names(parent)
+    real = {key: to_real.get(key, key) for key in keys}
     arrays = {"reference_timestamps": np.asarray(view._ref_timestamps, dtype=float)}
     for i, key in enumerate(keys):
         arrays[f"index_{i}"] = np.asarray(view._index_map[key], dtype=np.int64)
@@ -117,12 +158,14 @@ def persist_view(view: SynchronizedView, name: str, *, overwrite: bool = False) 
 
     views[name] = {
         "file": rel.as_posix(),
-        "reference": view._reference,
-        "method": {key: _strategy_spec(view._strategies[key]) for key in keys},
+        "reference": None
+        if view._reference is None
+        else to_real.get(view._reference, view._reference),
+        "method": {real[key]: _strategy_spec(view._strategies[key]) for key in keys},
         "tolerance": None if view._tolerance is None else float(view._tolerance),
         "frames": len(view),
         "sources": {
-            key: {
+            real[key]: {
                 "frames": len(parent.loaders[key]),
                 "clock": clock_fingerprint(view._channel_ts[key]),
             }
@@ -151,13 +194,20 @@ def load_view(
         known = ", ".join(sorted(views)) or "none"
         raise KeyError(f"No view named '{name}' in {seq_dir} (persisted: {known}).")
     entry = views[name]
-    keys = list(entry["method"])
+    issues = _entry_issues(name, entry, seq_dir)
+    if issues:
+        raise ValueError(f"View '{name}' cannot be loaded: {'; '.join(issues)}.")
+    real_keys = list(entry["method"])
+    to_public = _public_names(dataset)
+    public = {real: to_public.get(real, real) for real in real_keys}
+    keys = [public[real] for real in real_keys]
     missing = [k for k in keys if k not in dataset.keys]
     if missing:
         dataset = dataset._reopened(keys)
 
     # Stale: a source channel changed since the view was frozen.
-    for key, was in entry["sources"].items():
+    for real, was in entry["sources"].items():
+        key = public.get(real, real)
         if key not in dataset.keys:
             raise ValueError(f"View '{name}' is stale: channel '{key}' is gone.")
         frames, clock = len(dataset.loaders[key]), dataset.timestamps[key]
@@ -176,9 +226,10 @@ def load_view(
             )
 
     strategies: dict[str, Any] = {}
-    for key, spec in entry["method"].items():
+    for real, spec in entry["method"].items():
+        key = public[real]
         if spec.startswith("interpolate:"):
-            given = (interpolators or {}).get(key)
+            given = (interpolators or {}).get(key) or (interpolators or {}).get(real)
             wanted = spec.split(":", 1)[1]
             if given is None:
                 raise ValueError(
@@ -199,9 +250,10 @@ def load_view(
     with np.load(seq_dir / CONFIG_DIR / entry["file"]) as data:
         ref_ts = np.asarray(data["reference_timestamps"], dtype=float)
         index_map = {key: np.asarray(data[f"index_{i}"]) for i, key in enumerate(keys)}
+    reference = entry["reference"]
     return SynchronizedView._from_state(
         dataset,
-        reference=entry["reference"],
+        reference=None if reference is None else public.get(reference, reference),
         strategies=strategies,
         tolerance=entry["tolerance"],
         reference_timestamps=ref_ts,
@@ -225,15 +277,13 @@ def verify_views(seq_dir: str | Path) -> list[str]:
     if not isinstance(views, dict):
         return [f"{VIEWS_FILE}: 'views' is missing or not a mapping"]
     issues: list[str] = []
+    if data.get("version") != SCHEMA_VERSION:
+        issues.append(
+            f"{VIEWS_FILE}: unknown version {data.get('version')!r} (expected "
+            f"{SCHEMA_VERSION})"
+        )
     for name, entry in views.items():
-        if not isinstance(entry, dict):
-            issues.append(f"{VIEWS_FILE}: view '{name}' is not a mapping")
-            continue
-        for field in sorted(set(entry) - _VIEW_FIELDS):
-            issues.append(f"{VIEWS_FILE}: view '{name}': unknown field '{field}'")
-        file = entry.get("file")
-        if not isinstance(file, str) or not (seq_dir / CONFIG_DIR / file).is_file():
-            issues.append(f"{VIEWS_FILE}: view '{name}': index file {file!r} not found")
-        if not isinstance(entry.get("method"), dict) or not entry["method"]:
-            issues.append(f"{VIEWS_FILE}: view '{name}': 'method' names no channel")
+        issues += [
+            f"{VIEWS_FILE}: {issue}" for issue in _entry_issues(name, entry, seq_dir)
+        ]
     return issues

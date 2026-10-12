@@ -380,3 +380,14 @@ def test_unknown_field_tolerated_at_load(tmp_path):
     root = _make_seq(tmp_path / "seq")
     _declare(root / "apairo.yaml", {"lidar": {"alias": "cloud", "notafield": 1}})
     assert RawDataset(root).keys == ["cloud"]
+
+
+def test_a_declaration_s_format_fields_are_checked_too(tmp_path):
+    from apairo.core.config import verify_declaration
+
+    (tmp_path / "scan").mkdir()
+    (tmp_path / "apairo.yaml").write_text(
+        "version: 1\nchannels:\n  scan: {loader: pcd, array_file: x.npy}\n"
+    )
+    issues = verify_declaration(tmp_path / "apairo.yaml", tmp_path)
+    assert any("'array_file' selects a stacked array" in i for i in issues)
