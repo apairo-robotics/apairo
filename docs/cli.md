@@ -13,15 +13,18 @@ apairo --help
 ```
 
 ```
-usage: apairo [-h] {init,status,alias,channel,check} ...
+usage: apairo [-h] {init,declare,status,check,alias,channel,export} ...
 
 Inspect and initialize apairo datasets.
 
   init     write .apairo sidecars by scanning a directory
+  declare  scaffold a declaration file (apairo.yaml) from a directory scan
   status   show what a dataset directory contains
+  check    validate a dataset: its channels and clocks, its declarations,
+           its manifest, calibration and views; exit 1 on any issue
   alias    expose a channel under a clean public name
-  channel  manage channel declarations (e.g. channel remove)
-  check    validate the .apairo schema
+  channel  manage channel declarations in .apairo
+  export   copy a subset (sequences x channels) to a new self-contained root
 ```
 
 `PATH` defaults to the current directory, so you can `cd` into a dataset and run
@@ -29,7 +32,7 @@ the commands with no arguments.
 
 ### Ecosystem commands
 
-Beyond the built-ins (`init`, `status`), `apairo` is also a **dispatcher** for
+Beyond its own commands, `apairo` is also a **dispatcher** for
 the wider ecosystem. Installed tools register a subcommand via the
 `apairo.cli_plugins` entry-point group, so they appear as `apairo <tool>`:
 
@@ -55,7 +58,7 @@ Scan a directory and write its `.apairo` sidecar(s). **Root-aware**: it
 auto-detects whether the path is a single sequence or a dataset root.
 
 ```
-apairo init [PATH] [--name NAME] [--force] [--as CLASS]
+apairo init [PATH] [--name NAME] [--force] [--as CLASS] [--declare FILE|NAME]
 ```
 
 - **Sequence** (its sub-directories hold data files) -> writes
@@ -112,10 +115,13 @@ issues      none
 | `--name NAME` | Dataset name for the root manifest (default: directory name) |
 | `--force` | Rebuild from scratch instead of merging |
 | `--as CLASS` | Interpret with a specific dataset class (default: `RawDataset`) |
-| `--declare FILE` | External declaration file the scan should respect (the in-tree `apairo.yaml` is always read; `RawDataset` family only) |
+| `--declare FILE\|NAME` | External declaration the scan should respect: a file, or the name of one that ships with apairo (`tum_rgbd`, `kuka_ft_imu`, ...). The in-tree `apairo.yaml` is always read; `RawDataset` family only |
 
-`--as <Class>` maps a registered dataset's profile (e.g. `Rellis3DDataset`,
-`Goose3DDataset`, `SemanticKittiDataset`) onto the directories on disk, writing
+`--as <Class>` takes any registered dataset class: `RawDataset`, the standard
+ones (`Rellis3DDataset`, `Goose3DDataset`, `SemanticKittiDataset`,
+`TartanKittiDataset`), and any a package registers through the
+`apairo.datasets` entry point group. A profiled class maps its profile onto the
+directories on disk, writing
 canonical channel names into `.apairo/channels.yaml`. The dataset **class** is
 recorded in `.apairo/dataset.yaml`, so a later `apairo status` dispatches through
 the same profile instead of falling back to the generic reading.
@@ -144,7 +150,8 @@ header, and a **`key:` suggestion** when a channel has no `timestamps.txt`:
 from the stems (unit guessed from the width of a trailing digit run -- a
 19-digit epoch suggests `units: [ns]`), or, for a table, from the column whose
 header names a clock (`timestamp`, `time`, `t`, ...) and never decreases -- a
-16-digit epoch suggests `units: [us]`. A confident suggestion is written
+16-digit epoch suggests `units: [us]`. A stacked array (one `.npy`) gets a
+commented sidecar hint, `key: {file: ...}`. A confident suggestion is written
 uncommented, so the scaffold loads as generated; check it all the same. It never overwrites an existing declaration --
 the file is yours the moment it exists.
 
@@ -159,7 +166,8 @@ the file is yours the moment it exists.
     loading the subset it holds, a sequence's own `apairo.yaml` refining it.
     Any other name or location works -- `<dataset>.yaml` in your eval repo, one
     file per campaign -- passed explicitly with `declare=` / `--declare FILE`
-    (like `docker build -f`). Per-field precedence, highest first:
+    (like `docker build -f`). The declarations that ship with apairo are passed
+    by name: `--declare tum_rgbd`. Per-field precedence, highest first:
     `declare=` > `<seq>/apairo.yaml` > `<root>/apairo.yaml` >
     `.apairo/channels.yaml`.
 
@@ -167,11 +175,12 @@ the file is yours the moment it exists.
 
 ## `apairo status`
 
-Report what a dataset directory contains, without loading any heavy data (frame
-counts come from each channel's `timestamps.txt`).
+Report what a dataset directory contains, without loading any heavy data: each
+channel's format counts its frames and reads their shape from a listing, a
+header or the first frame, and its clock gives the rate and the span.
 
 ```
-apairo status [PATH] [-s ID] [--json] [--show-tf] [--missing]
+apairo status [PATH] [-s ID] [--json] [--show-tf] [--missing] [--declare FILE|NAME]
 ```
 
 It distinguishes **tracked** channels (declared in `.apairo`) from **untracked**
@@ -192,7 +201,7 @@ profile-unaware generic reading.
 | `--json` | Machine-readable output (same information as the table) |
 | `--show-tf` | Include the transform layer: static calibration + dynamic `tf` channels (hidden by default) |
 | `--missing` | (root) per-sequence breakdown of which channels each sequence lacks vs the union of all channels |
-| `--declare FILE` | Also validate this external declaration file against the dataset (also on `apairo check`) |
+| `--declare FILE\|NAME` | Read the dataset through this external declaration -- a file, or the name of one that ships with apairo -- and validate it (also on `apairo check`) |
 
 ### On a dataset root - summary
 
@@ -283,9 +292,12 @@ canonical channel names: the raw data lives in nested, profile-mapped directorie
 (e.g. `Rellis-3D/00000/os1_cloud_node_kitti_bin/`) that a plain
 `status <nested-dir>` cannot interpret. `-s` resolves them through the profile.
 
-Every column is cheap:
-`frames`, `rate` and `span` come from each channel's `timestamps.txt`, and
-`shape`/`dtype` are read from the `.npy` header via `mmap` (no data is loaded).
+Every column is cheap. `frames`, `shape` and `dtype` come from the channel's
+format: a file listing, an `.npy` header read through `mmap`, the first image or
+cloud, a table's lines counted without parsing its cells. `rate` and `span` come
+from its clock: a `timestamps.txt`, a declared `key`, moved back by a declared
+`latency`. A `views` line lists the synchronizations persisted in the sequence
+(see [Persisting a synchronization](async-datasets.md#persisting-a-synchronization)).
 
 `span` is shown **relative to the earliest timestamp** of the sequence (printed
 once on the `start` line), so absolute epoch timestamps stay readable and
@@ -444,7 +456,7 @@ schema](datasets/apairo-schema.md) and report any issues. Exits non-zero when
 there is at least one issue, so it drops straight into CI.
 
 ```bash
-apairo check [PATH] [--json]
+apairo check [PATH] [--json] [--declare FILE|NAME]
 ```
 
 ```text
@@ -452,22 +464,51 @@ $ apairo check /data/my_dataset
 OK -- no issues
 ```
 
-It is profile-aware (the same reading as `status`) and covers all three files:
-`channels.yaml`, the optional `dataset.yaml` manifest, and the optional
-`calibration.yaml`. Validation is tolerant -- an unknown field is reported as a
-warning, not a hard error.
+It is profile-aware (the same reading as `status`) and covers:
+
+- `channels.yaml`, and the declarations read with it (the in-tree
+  `apairo.yaml`, a root's, and `--declare`);
+- every channel's clock: a channel with none, a clock that does not hold one
+  timestamp per frame, a timestamp that is not a number;
+- the optional `dataset.yaml` manifest, `calibration.yaml` and `views.yaml`.
+
+Validation is tolerant -- an unknown field is reported as a warning, not a hard
+error.
+
+---
+
+## `apairo export`
+
+Copy a subset of a dataset -- some sequences, some channels -- into a new,
+self-contained root that loads on its own:
+
+```
+apairo export SRC DEST [--keys CHANNEL ...] [--sequences ID ...] [--overwrite] [--link]
+```
+
+```bash
+apairo export /data/barakuda /data/barakuda_lidar --keys lidar pose --sequences seq_a
+```
+
+| Option | Meaning |
+|---|---|
+| `--keys CHANNEL ...` | Channels to include (default: all) |
+| `--sequences ID ...` | Sequence ids to include (default: all) |
+| `--overwrite` | Replace a non-empty destination |
+| `--link` | Hardlink data files on the same filesystem (near-free; falls back to copy) |
 
 ---
 
 ## The `.apairo` layout
 
-Both commands read and write the same on-disk convention:
+Every command reads and writes the same on-disk convention:
 
 ```
 <root>/                         # dataset root
   .apairo/dataset.yaml          # identity: dataset class, name, sequence order
   seq_a/
     .apairo/channels.yaml       # channel -> loader/kind/timestamps (per sequence)
+    .apairo/views.yaml          # persisted synchronizations, indices in views/
     lidar/  000000.npy ... timestamps.txt
     imu/    imu.npy             timestamps.txt
   seq_b/ ...

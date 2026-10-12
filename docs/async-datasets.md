@@ -25,7 +25,7 @@ If you want complete multi-channel frames instead of raw events, resample the da
 
 ```python
 ref = ds.frame_info(i)        # FrameRef(sequence, channel, row)
-ref.sequence                  # sub-sequence on a root, else None
+ref.sequence                  # the sequence the frame belongs to
 ref.channel                   # the channel that fired (one event = one channel)
 ref.row                       # frame index within that channel
 ```
@@ -71,15 +71,16 @@ print(len(ds))        # sum across all sequences
 print(len(ds.sequences))    # number of sequences
 ```
 
-### Lazy initialisation
+### Choosing channels
 
-Omit `keys` to inspect before loading anything:
+Omitting `keys` opens every channel the sequence declares. Narrow the set when
+you open it, or change it later -- loaders are built for the keys you set:
 
 ```python
-ds = TartanKittiDataset("/data/tartan/2024-01-01_forest")   # no loaders built yet
+ds = TartanKittiDataset("/data/tartan/2024-01-01_forest", keys=["velodyne_0"])
 print(ds.available)          # frozenset of channels in .apairo
-ds.keys = ["velodyne_0"]     # build loaders on demand
-ds.keys = "all"              # or load every available channel
+ds.keys = ["velodyne_0", "cmd"]   # rebuild on another set
+ds.keys = "all"              # or every available channel
 ```
 
 ### describe()

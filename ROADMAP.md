@@ -371,3 +371,30 @@ The public API and the `.apairo` format are declared stable at 1.0
   - On a real TartanDrive sequence the frames reload identical, from a 162 KB
     index file. The matching takes about 1 ms and reloading about 11 ms: the
     gain is reproducibility, not speed.
+- **2026-10-12**: pre-release audit, before R8, at the user's request. Three
+  independent reviews ran: a new user following the docs on a clean install, a
+  0.8-to-0.9 consistency check, and a bug hunt with reproductions. Each finding
+  was reproduced before it was fixed.
+  - **Silent wrong data, fixed:**
+    - `overwrite` left a previous output's files;
+    - outputs could replace raw channels;
+    - NaN clocks were accepted;
+    - a suffixed sub-channel ignored its directory's latency.
+  - **Crashes and wrong answers, fixed:**
+    - a non-numeric latency crashed status and check;
+    - `filter()` had no `keys`, a bug from 0.8 that broke the README pipeline;
+    - SemanticKITTI ignored `split=`;
+    - `status -s` showed 0 Rellis labels;
+    - the csv scan disagreed with the loader;
+    - a BOM broke tables;
+    - a plugin whose detect() raised broke every dataset;
+    - views were stranded by aliases;
+    - check refused sidecar keys on stacked formats.
+  - The CHANGELOG gained an "Upgrading from 0.8" section and lost a false
+    claim. The CLI docs, the schema table and a dozen statements in the guides
+    were brought in line with the code.
+  - **For R8:** `apairo_extractor` registers its preprocess outputs with
+    `getattr(cls, "output_loader", "npys")`. It must fall back to `npys` when
+    that is `None`, or merging `apairo_preprocess`'s
+    `feature/output-format-from-input` breaks it. Its `export_mnt.py` also
+    still imports `MNTDataset`, removed from apairo in 0.3.0.

@@ -12,6 +12,8 @@ and stable. Do not confuse it with a [dataset *profile*](yaml-profiles.md)
   channels.yaml      # the channel registry (per sequence directory)
   dataset.yaml       # root manifest -- optional
   calibration.yaml   # static extrinsics -- optional
+  views.yaml         # persisted synchronizations -- optional
+  views/<name>.npz   #   and their index arrays
 ```
 
 Only `channels.yaml` is required for a directory to be a loadable apairo
@@ -27,8 +29,7 @@ Validation is **tolerant**. An unknown field is reported as a warning and
 otherwise ignored, so a sidecar written by a newer apairo still loads on an older
 one. Every file carries a `version` (currently `1`); a different version is
 flagged. Validate with `verify_config`, `verify_manifest`, `verify_calibration`,
-`verify_declaration` (or, from the shell, `apairo status` surfaces channel and
-declaration issues).
+`verify_declaration`, `verify_views` (or, from the shell, `apairo check`).
 
 ## `channels.yaml`
 
@@ -37,7 +38,7 @@ version: 1
 channels:
   ouster_points:           # key == the on-disk directory name
     kind: raw              # "raw" | "preprocess"           (required)
-    loader: bin            # npy | npys | bin | img | zarr   (required)
+    loader: bin            # npy | npys | bin | img | zarr | pcd | csv | a plugin's  (required)
     alias: lidar           # public name exposed at load time          (optional)
     frame: ego             # coordinate frame, descriptive only        (optional)
   trav_gt:
@@ -73,17 +74,20 @@ channels:
 | Field | Required | Meaning |
 |---|---|---|
 | `kind` | yes | `raw` (on-disk modality) or `preprocess` (derived/persisted). |
-| `loader` | yes | Storage format: `npy` (one stacked file, row per frame), `npys` (one file per frame), `bin`, `img`, `zarr`, `pcd`, `csv` (one text table, row per frame) -- or the name of an installed [format plugin](format-plugins.md), whose own fields and `key` forms are then accepted. |
+| `loader` | yes | The channel's storage format -- `loader:` names a format: `npy` (one stacked file, row per frame), `npys` (one file per frame), `bin`, `img`, `zarr`, `pcd`, `csv` (one text table, row per frame) -- or the name of an installed [format plugin](format-plugins.md), whose own fields and `key` forms are then accepted. |
 | `timestamps_from` | no | The channel whose timestamps this one shares (provenance). |
 | `sources` | no | Channels this one was derived from (provenance). |
 | `frame` | no | Coordinate frame the data is expressed in. Descriptive only — apairo never applies transforms. |
 | `transform` | no | Declares the channel *is* a transform stream: `{parent, child, [static], [format], [source]}`. `source` records where it was read from (`apairo_extractor` writes the TF topic). Descriptive only. |
 | `alias` | no | Public name the channel loads under (the directory keeps its real name). Must be unique and must not shadow a real channel directory. |
 | `directory` | no | On-disk directory the channel's files live in, when different from its key: another channel's directory (colocation), or a **nested relative path** (`per_object_gt/pcd` — an annotation tool's export). Resolved from the sequence directory; `..`, absolute paths and drive anchors are rejected. Defaults to the key. |
-| `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). `npys` only. |
+| `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). Formats with suffixed variants only (`npys`, or a plugin's); `check` reports it elsewhere. The sub-channel reads its directory's clock, and its latency. |
 | `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`); for `csv`, the table file (needed for a `.txt` table). `npy` and `csv` only. |
 | `fields` | no | The field contract of a `pcd` channel, e.g. `[x, y, z, intensity]`. A PCD header is self-describing, so two frames may declare different fields; naming them here selects those columns in that order, making the channel's width a declared property rather than a per-file accident. A frame missing one raises, naming both sets. Omitted, every field the file declares is returned in header order. For `csv`, the table columns to keep, by header name. `pcd` and `csv` only. |
-| `latency` | no | How long before its timestamp each frame was captured, in seconds: a sensor's transport delay (`0.008416` for an IMU forwarded by a microcontroller). The channel's clock -- whatever its source -- is moved back by it before anything is aligned to it; a channel borrowing this clock gets the corrected one. |
+| `key` | no | Where the channel's clock comes from, when it is not a `timestamps.txt`: `{name: <regex>}` parses it from each frame's filename (per-frame formats), `{file: <name>}` reads a sidecar of one timestamp per frame, `{column: <index or name>}` takes a table column (`csv`) -- with `units`/`scale`. A form a format plugin provides is accepted on its channels. See [the `key` field](bring-your-own-dataset.md#the-key-field). |
+| `order` | no | The frame order of a per-frame channel, as a filename regex `{name: <regex>}`: the matching files, sorted by the regex's first capture group. See [the `order` field](bring-your-own-dataset.md#the-order-field). |
+| `latency` | no | How long before its timestamp each frame was captured, in seconds: a sensor's transport delay (`0.008416` for an IMU forwarded by a microcontroller). The channel's clock -- whatever its source -- is moved back by it before anything is aligned to it; a channel borrowing this clock, or a suffixed sub-channel sharing its directory, gets the corrected one. A finite number; YAML's `8e-3` string is read as one. |
+| `recipe` | no | Machine provenance written by `run_preprocess`: a hash of the preprocessor's declared configuration, which `reuse=True` compares. Never declared by hand. |
 
 ## `apairo.yaml` — the declaration (human-owned)
 
@@ -94,7 +98,7 @@ written by `run_preprocess`) and what only a human can know — a filename
 `fields` contract, an `alias`. The declaration gives the human half a home of
 its own, **outside** the dot-directory:
 
-* apairo **never writes** `apairo.yaml`. `init` (including `--overwrite`) and
+* apairo **never writes** `apairo.yaml`. `init` (including `--force`) and
   `run_preprocess` only touch `.apairo/`, so a registry rebuild cannot destroy
   a declaration. Version it in git next to your eval code.
 * It uses the same version-1 schema as `channels.yaml`, **minus machine

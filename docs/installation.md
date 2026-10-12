@@ -23,7 +23,7 @@ pip install apairo[zarr]
 # Benchmark / plotting utilities (matplotlib)
 pip install apairo[bench]
 
-# Development tools (pytest, matplotlib)
+# Development tools (pytest, Pillow, zarr, ruff, mypy)
 pip install apairo[dev]
 ```
 

@@ -177,8 +177,15 @@ channels:
   instead.
 - **Names.** A built-in name cannot be replaced. A name that is already taken
   needs `register_format(..., replace=True)`.
-- **Broken plugins.** A plugin that fails to load is skipped, with a warning
-  that names it. One broken package never makes other datasets unreadable.
+- **Broken plugins.** A plugin that fails to load, or whose `detect` raises
+  on a directory, is skipped, with a warning that names it. One broken package
+  never makes other datasets unreadable.
+- **Detection order.** Formats are asked by `priority`, then name. A format
+  whose files are each a channel (`one_channel_per_file`, like tables)
+  answers only when no other format claims the directory.
+- **Suffixed variants.** With `suffixes = True`, a `_` in a frame's stem marks
+  a variant (`000000_intensity`): the base channel reads the other files, and
+  each variant is looked up under every extension of the format.
 - **Heavy dependencies.** apairo imports every installed plugin when it first
   looks a format up. Import heavy libraries inside `open()` or the loader, not
   at the top of the module.

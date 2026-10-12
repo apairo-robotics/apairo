@@ -1339,8 +1339,10 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
             "The scan pre-fills every detected channel: its loader, the actual\n"
             "field list from the first PCD header, and -- when a channel has no\n"
             "timestamps.txt -- an active `key:` guessed from the stems (epoch\n"
-            "width -> unit, literal tails kept), so the scaffold loads as\n"
-            "generated. Commented hints mark the optional refinements."
+            "width -> unit, literal tails kept) or from a table's clock column,\n"
+            "so the scaffold loads as generated. Commented hints mark the\n"
+            "optional refinements (a sidecar `key: {file: ...}` for a stacked\n"
+            "array)."
         ),
         epilog=(
             "naming (like a Dockerfile):\n"
@@ -1348,6 +1350,7 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
             "  On a dataset ROOT it applies to every sequence (a sequence's own\n"
             f"  {DECLARATION_FILE} refines it). Any other name/location works,\n"
             "  passed explicitly: RawDataset(..., declare=...) or --declare FILE\n"
+            "  (or the name of a declaration that ships with apairo)\n"
             "  on init/status/check.\n"
             "\n"
             "examples:\n"
@@ -1402,7 +1405,8 @@ def _build_parser(plugin_names) -> argparse.ArgumentParser:
 
     p_check = sub.add_parser(
         "check",
-        help="validate the .apairo schema (channels / manifest / calibration); exit 1 on any issue",
+        help="validate a dataset: its channels and clocks, its declarations, "
+        "its manifest, calibration and views; exit 1 on any issue",
     )
     _add_common(p_check)
     p_check.add_argument("--json", action="store_true", help="machine-readable output")

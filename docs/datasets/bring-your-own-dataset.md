@@ -25,31 +25,33 @@ so a plain directory of zero-padded files needs no configuration at all.
 |---|---|---|
 | **order** | how are this channel's frames listed and ordered? | files matching the frame-file convention (`is_frame_file`), sorted numerically |
 | **load** | how is one frame decoded to a numpy array? | the loader named in `channels.yaml` (`npy` / `npys` / `bin` / `img` / `zarr` / `pcd` / `csv`) |
-| **key** | what is each frame's alignment key — the value `synchronize()` matches on? | the channel's own `timestamps.txt`, else a borrowed one (`timestamps_from`), else the frame's position |
+| **key** | what is each frame's alignment key — the value `synchronize()` matches on? | the channel's own `timestamps.txt`, else a borrowed one (`timestamps_from`) |
 
 `order` and `load` were always there; `key` used to be hardwired to
 `timestamps.txt`. The additive change is that **`key`** and **`order`** are now
 declarable per channel — and both default to today's behavior, so everything you
 already load keeps loading identically.
 
-!!! note "Position is the default key"
-    A channel with no `key` and no `timestamps.txt` is aligned by frame
-    **position**: frame *i* of every such channel is the same sample (the
-    synchronous, KITTI-style case). A `key` you provide lets channels of
-    different rates — or sparse subsets — align by timestamp or index instead.
-    *(Collapsing the synchronous `ProfiledDataset` family into this same
-    position-as-default key is a separate, larger step — see
-    [Not in scope](#not-in-scope).)*
+!!! note "Every channel needs a clock"
+    A channel with no `timestamps.txt`, no `key` and no `timestamps_from` is
+    refused at load, and `apairo check` names it: frames are never paired by
+    position behind your back. When a channel's frames are numbered like
+    another's (KITTI-style), say so: `timestamps_from` borrows that channel's
+    clock, or `key: {name: '(\d+)'}` makes the frame index the key. *(A
+    synchronous, position-paired layout is what the `ProfiledDataset` family
+    reads -- see [Not in scope](#not-in-scope).)*
 
 ---
 
 ## Nothing is written — keys are read-time, in memory
 
-The key is computed **in memory, at read time. apairo never writes into your
-dataset tree.** A filename-keyed channel derives its clock from the filenames it
-already has, so it needs no `timestamps.txt` sidecar at all. This keeps loading
-strictly read-only — it works on a read-only mount, a shared cluster volume, an
-`ro` container. Materializing a self-contained clock belongs to the *write* side
+The key is computed **in memory, at read time: apairo never writes a clock, nor
+touches your data files.** A filename-keyed channel derives its clock from the
+filenames it already has, so it needs no `timestamps.txt` sidecar at all. The
+only thing loading writes is apairo's own registry, a `.apairo/` directory next
+to the data, on first open; on a read-only mount, a shared cluster volume or an
+`ro` container it keeps that registry in memory instead, and loading works the
+same. Materializing a self-contained clock belongs to the *write* side
 (`export`, the extractor), never to reading.
 
 ## Where to declare — `apairo.yaml`, not the machine registry
@@ -59,7 +61,7 @@ scan can regenerate them. Start from `apairo declare <dir>` (a scaffold with
 the detected channels and commented hints), then write them in a
 [declaration](apairo-schema.md#apairoyaml--the-declaration-human-owned):
 `<seq>/apairo.yaml`, a visible file apairo **never writes**, safe from
-`init --overwrite` and versionable in git. The examples below show the channel
+`init --force` and versionable in git. The examples below show the channel
 entries; they work identically in `apairo.yaml` (preferred) and in
 `.apairo/channels.yaml` (the machine registry — hand-editing it works but
 mixes your knowledge into a regenerable file).
@@ -268,13 +270,14 @@ The alignment engine is unchanged. Once a channel's `key` populates
 `ds.timestamps[channel]`,
 [`synchronize()`](../async-datasets.md#synchronizing-async-sync) aligns it
 exactly as always — `reference=`, `method=` (`nearest` / `previous` / `next`),
-`tolerance=`. Sparse subsets fall out for free: a channel with no key at a
-reference tick simply contributes nothing there.
+`tolerance=`. Sparse subsets fall out for free: a reference tick where a
+channel has no event within the tolerance is dropped from the view, so the view
+holds the moments where every channel has one.
 
 ```python
 ds = apairo.RawDataset(root, keys=["camera", "seg"])
 view = ds.synchronize(reference="camera", method="nearest", tolerance=0.0)
-# every frame carries "camera"; "seg" attaches only where a label exists
+# the camera frames that have a label, each with it; the others are dropped
 ```
 
 ---
@@ -303,7 +306,9 @@ class MyDataset(RawDataset):
   the ordered filenames.
 
 Either can be set on its own; the YAML `key` / `order` specs cover the remaining
-channels.
+channels. Open such a dataset on the channels its providers explain
+(`MyDataset(seq, keys=["camera"])`): a channel whose stems carry a `_` is
+otherwise read by the scan as a base channel and its suffixed variants.
 
 ---
 

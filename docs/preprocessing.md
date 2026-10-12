@@ -2,7 +2,7 @@
 
 apairo provides a framework for running and persisting preprocessing pipelines alongside datasets.
 
-> **Companion library:** [`apairo_preprocess`](https://github.com/apairo/apairo_preprocess) ships ready-made preprocessors (ICP registration, normal estimation, ground removal, …) built on top of this API. Results are stored following the dataset's layout conventions and registered automatically in a `.apairo` sidecar.
+> **Companion library:** [`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) ships ready-made preprocessors (ICP registration, normal estimation, ground removal, …) built on top of this API. Results are stored following the dataset's layout conventions and registered automatically in a `.apairo` sidecar.
 
 ---
 
@@ -20,7 +20,7 @@ class TraversabilityLabel(FramePreprocessor):
     output_key      = "trav_label"   # output subdirectory name
     output_loader   = "npys"         # one .npy file per frame
     input_keys      = ["labels"]     # channels needed as input
-    timestamps_from = "labels"       # inherit timestamps, no timestamps.txt written
+    timestamps_from = "labels"       # provenance: the clock it shares
     sources         = ["labels"]     # provenance metadata in .apairo
 
     def __call__(self, sample: Sample) -> np.ndarray:
@@ -40,7 +40,7 @@ After running, the output is available as a loadable key:
 ```python
 ds = Goose3DDataset("/data/goose/seq_001", keys=["lidar", "trav_label"])
 sample = ds[0]
-print(sample.data["trav_label"].shape)   # torch.Size([N])
+print(sample.data["trav_label"].shape)   # (N,) -- a numpy array
 ```
 
 ### Preview before materializing
@@ -94,7 +94,7 @@ TartanKittiDataset.run_preprocess(GICPPoses(), "/data/tartan/seq_001")
 | `output_keys` | `list[str]` | Multi-output alternative to `output_key` (exclusive). `__call__` returns a `dict` with exactly these keys; one derived channel is written and registered per key, all sharing `output_loader` and provenance. |
 | `output_loader` | `str \| None` | The format to write the output in -- any format that writes (see [the output format](#the-output-format)). Leave it unset unless the output's nature calls for one. |
 | `input_keys` | `list[str]` | Dataset channels required as input |
-| `timestamps_from` | `str \| None` | If set to a channel name, the output inherits that channel's timestamps and no `timestamps.txt` is written. If `None`, timestamps are written from the input sample timestamps. |
+| `timestamps_from` | `str \| None` | The channel whose clock the output shares, recorded as provenance in `.apairo`. The runner writes the output's `timestamps.txt` from the input samples' timestamps either way, so the output carries its own clock. |
 | `sources` | `list[str] \| None` | Provenance recorded in `.apairo` for reference. |
 
 ---

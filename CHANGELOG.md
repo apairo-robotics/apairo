@@ -7,6 +7,48 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Upgrading from 0.8
+
+What 0.8 code or data may meet, and what to do:
+
+- **`apairo.core.config.KNOWN_LOADERS` is gone.** Use
+  `apairo.core.formats.format_names()`.
+- **`apairo.loader.str_to_loader` is read-only.** Register a `Format` with
+  `register_format()` instead of assigning into it.
+- **`WRITERS` no longer decides what `run_preprocess` writes.** Formats do;
+  customize writing with a format plugin (`write_frame` / `write_channel`).
+- **Preprocess outputs** follow the format rule (see Added). Three declared
+  formats write differently:
+  - `output_loader="bin"` holds `(N, 4)` `float32` clouds only, which 0.8 cast
+    to silently. Cast them yourself, or use `npys`;
+  - a `SequencePreprocessor` with `"bin"` writes one file per frame, not one
+    stacked `.bin`;
+  - a `FramePreprocessor` with `"npy"` writes one stacked array. 0.8 wrote
+    per-frame `.npy` files that loaded back as scalars.
+
+  `Preprocessor.output_loader` now defaults to `None` (apairo chooses): read
+  an output's format from `channels.yaml`, not from the attribute.
+  `overwrite=True` replaces the output's directory wholly. An output may not
+  take the name of a raw channel or of an alias, and a directory holding data
+  apairo did not register is refused.
+- **A clock must fit its frames.** Loading refuses a channel whose clock does
+  not hold one finite timestamp per frame. `apairo check` exits 1 on it, and
+  on a channel with no clock, where 0.8 exited 0. Run `apairo check`, then fix
+  the `timestamps.txt` or the stray frame it names.
+- **`apairo status`** counts each channel's frames through its format, not the
+  lines of its `timestamps.txt`. `--json` gains a `views` key.
+- **GOOSE labels are the class.** The instance id is `raw >> 16` of the
+  `.label` files, and samples now carry a timestamp.
+- **A `split=` a profile does not declare is refused**, where 0.8 ignored it
+  (SemanticKITTI declares none). Select sequences with `sequences=[...]`.
+- **A profiled dataset's derived `bin` channel loads as `(N, 4)`**, not flat.
+  Drop a manual `.reshape(-1, 4)`.
+- **`apairo.cli.DATASETS` is gone.** Use
+  `apairo.dataset.registry.dataset_names()` / `get_dataset()`.
+- **`synchronize()` on a root returns a `SynchronizedSequences`**, a
+  `ConcatDataset` that can also `persist`. Code using it as a concat is
+  unchanged.
+
 ### Added
 - **A new storage format is a plugin, not a core change.** Every channel is
   now read through one public contract, `apairo.core.formats.Format`: which
@@ -25,6 +67,16 @@ All notable changes to apairo are documented here. The format is based on
   installs that plugin through its entry point and runs it end to end. A
   plugin that fails to import is skipped with a warning; a built-in name
   cannot be taken over.
+- **New public names.**
+  - `apairo.core.formats`: `Format`, `Facts`, `register_format`,
+    `format_names`, `formats`, `get_format`, `find_format`, `detect_format`.
+  - `apairo.testing`: `check_format`, `check_dataset`.
+  - `apairo.Convert`, which is also `apairo.preprocess.Convert`.
+  - `apairo.dataset.registry`: `register_dataset`, `get_dataset`,
+    `dataset_names`, `declaration`, `declaration_names`.
+  - `SynchronizedView.persist`, and `load_view` on a sequence and on a root.
+  - `AsyncLayoutDataset.channel_format`.
+  - The `latency` channel field.
 - **A preprocess writes in any format, its input's by default.** The format
   contract covers writing too:
   - a format stores a frame (`write_frame`) or a whole channel
@@ -41,17 +93,20 @@ All notable changes to apairo are documented here. The format is based on
     sequence;
   - a format conversion is a preprocess: `Convert("velodyne_0", to="zarr")`
     writes a derived channel with its clock and provenance;
-  - a format that cannot hold an output, or is read-only, is refused by name
-    before anything is written.
+  - a format that cannot hold an output, or is read-only, is refused by name,
+    and every output's format is decided before any is written;
+  - a stacked format chosen automatically falls back to one file per frame
+    when the outputs change shape. A run over a split listing frames never
+    writes a stacked output, which could not hold them.
 
-  Existing preprocessors declare `output_loader` and write exactly as before;
-  `apairo_preprocess`'s suite passes unchanged.
+  Preprocessors that declare `output_loader` keep it. Three declared formats
+  now write differently; see "Upgrading from 0.8". `apairo_preprocess`'s
+  suite passes.
 - **Standard datasets ship with apairo and install by name.**
   - `pip install apairo[tartan]` (also `rellis`, `goose`, `semantic-kitti`,
-    `tum`, `euroc`) brings what reading that dataset needs. The install line
-    stays the same if a dataset later moves to a package of its own.
-  - The TUM RGB-D and EuRoC declarations moved from `examples/` into the
-    package and are selected by name: `declare="tum_rgbd"`,
+    `tum`, `euroc`, `kuka`) brings what reading that dataset needs. The install
+    line stays the same if a dataset later moves to a package of its own.
+  - Shipped declarations are selected by name: `declare="tum_rgbd"`,
     `--declare euroc_vicon_room`.
   - `apairo init --as` takes its classes from a registry. `TartanKittiDataset`
     joins the list, and a dataset kept in its own package registers through
@@ -68,7 +123,9 @@ All notable changes to apairo are documented here. The format is based on
   changed since -- a frame added, a timestamp moved, a `latency` declared, or
   another declaration -- and names the channel. On a root, each sequence keeps
   its own view. An interpolated channel takes its interpolator again at load
-  (it is code, not state); a custom matcher is not needed. `apairo status`
+  (it is code, not state); a custom matcher is not needed. Channels are
+  stored under their real names, so an alias added later does not strand a
+  view. `apairo status`
   lists a sequence's views, `apairo check` validates `views.yaml`, and the
   schema documents it. On a real TartanDrive sequence, the view of 5041 frames
   over three channels is a 162 KB index file. Its frames reload identical.
@@ -76,8 +133,10 @@ All notable changes to apairo are documented here. The format is based on
   declaration.** A channel field in seconds -- how long before its timestamp
   each frame was captured -- that moves the channel's clock back, whatever its
   source (a `key`, a `timestamps.txt`, a borrowed clock), before
-  `synchronize()` aligns it. `status` shows the corrected span, and `check`
-  wants a number.
+  `synchronize()` aligns it. A suffixed or colocated sub-channel, which reads
+  its directory's clock, takes that directory's latency. `status` shows the
+  corrected span, and `check` wants a finite number (YAML's `8e-3` string
+  counts as one).
 - **Guide: the KUKA F/T and IMU logs, a robot arm read in place.** Three
   sensors, each with its own CSV file and microsecond clock: orientation at
   100 Hz, force/torque at 700 Hz, IMU at 254 Hz. The `kuka_ft_imu`
@@ -123,16 +182,17 @@ All notable changes to apairo are documented here. The format is based on
   column, keeping it out of the frame data. An integer nanosecond stamp is
   converted exactly before scaling. `fields` selects columns by name and
   `array_file` names the table (a `.txt`, or one of several); `directory: "."`
-  reaches a table at the sequence root. `init` detects a `.csv` directory,
-  `status` reports its rows, rate and width, and `check` validates the column
-  key.
+  reaches a table at the sequence root. A UTF-8 byte-order mark (Excel's
+  "CSV UTF-8") is dropped. `init` detects a directory holding one `.csv`,
+  `status` reports its rows, rate and width -- counted without converting a
+  cell, 0.3 s for 600,000 rows -- and `check` validates the column key.
 - **A directory that holds its data files itself is a dataset.** `init`
   answered "no channels" for a channel directory opened on its own
   (`seq/velodyne_0`) and for a logger's folder of CSV tables. A directory with
   no sub-directory is now a sequence of its own: its frames are one channel
   named after the directory (with its suffixed variants), and each table is one
   channel named after its file -- or after the directory when it is alone --
-  all reading from `directory: "."`. Loading, `init` (and `--merge`), `status`,
+  all reading from `directory: "."`. Loading, `init` (merging by default), `status`,
   `check` and `declare` accept both entry points; a directory with a
   sub-directory keeps its meaning, so a table beside channel directories is
   not picked up on its own.
@@ -171,8 +231,8 @@ All notable changes to apairo are documented here. The format is based on
   `status`, `check` and `declare` are otherwise unchanged, byte for byte.
 - **`declare` gives a stacked array a sidecar hint.** A lone `.npy` without a
   `timestamps.txt` used to get a filename `key` regex, which `check` then
-  refused on a stacked loader; it now gets a commented `key: {file: ...}`.
-
+  refused on a stacked loader; it now gets a commented `key: {file: ...}`,
+  which `check` accepts.
 - **A profiled dataset reads its derived channels through their format.**
   SemanticKITTI, Rellis, GOOSE and the other profiled datasets read a
   preprocess output by its file extension. A derived `bin` channel came back
@@ -180,9 +240,13 @@ All notable changes to apairo are documented here. The format is based on
   now opened by its format, so every format that writes reads back there too,
   per frame or stacked per sequence. Their raw modalities are unchanged: their
   YAML profiles describe them.
-- **Overwrite protection looks at the output channel's directory.**
-  `run_preprocess` refuses to write into a channel directory that already
-  holds data, whatever the format; it used to look for the first frame file.
+- **Overwrite protection looks at the output channel's directory**, in
+  every sequence of a root. `run_preprocess` refuses to write into a channel
+  directory that already holds data, whatever the format; it used to look
+  for the first frame file of the first sequence.
+- **`status -s` reads a profiled sequence as loading reads it.** On a Rellis
+  root it showed `?` shapes and left `poses` out; it now gives every
+  channel's frames, shape, dtype and the camera clock's rate.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,
@@ -190,6 +254,17 @@ All notable changes to apairo are documented here. The format is based on
   a read-only view of the registry.
 
 ### Fixed
+- **A filtered dataset keeps its channels.** `ds.filter(...)` had no `keys`,
+  so the README's pipeline (filter, then join) and a concat of filtered
+  datasets failed with an `AttributeError`. This bug dates back to 0.8.
+- **`split=` is no longer silently ignored.** On SemanticKITTI, whose profile
+  declares no split, `"train"`, `"val"` and `"bogus"` all returned every
+  sequence. A split a profile does not declare is now refused, naming the
+  ones it has.
+- **A preprocess output never replaces what it should not.** With 0.8's
+  `overwrite=True`, files of the previous output stayed beside the new ones. An
+  output could also take a raw channel's name, or an alias, in a sequence
+  other than the first. Both now refuse; see "Upgrading from 0.8".
 - **GOOSE labels are the class, and GOOSE has a clock.** A GOOSE label holds
   the class in its lower 16 bits and the instance in the upper 16, like
   SemanticKITTI, but the profile did not mask it. On real scans, 13 to 20% of
@@ -198,7 +273,9 @@ All notable changes to apairo are documented here. The format is based on
   sample's expected range does. The profile also reads each scan's capture
   time from its file name (`<scene>__<frame>_<ns>_vls128.bin`), which GOOSE
   had been loaded without. A tree in the GOOSE format whose files are named
-  otherwise stays clockless, as one without its clock source does.
+  otherwise stays clockless, as one without its clock source does. The
+  clock reads the selected split only, should a scene name recur across
+  splits.
 - **A clock must hold one timestamp per frame.** The timeline gives a channel
   one slot per timestamp, and nothing checked that this matched its frames: a
   `timestamps.txt` one line short silently dropped the last frame (a gap in

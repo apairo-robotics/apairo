@@ -31,6 +31,7 @@ Optional extras:
 
 ```bash
 pip install apairo[vision]   # Image loading (Pillow)
+pip install apairo[zarr]     # Zarr channels
 pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-kitti, tum, euroc, kuka
 ```
 
@@ -62,7 +63,8 @@ sample = ds[0]
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
 
 `RawDataset` is the profile-free loader for the asynchronous layout: it takes its
-channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`) — entirely from
+channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`,
+or a [plugin's](https://apairo-robotics.github.io/apairo/datasets/format-plugins/)) — entirely from
 `.apairo/channels.yaml`, so it loads any such dataset, including the output of
 [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), with no
 code change.
@@ -78,6 +80,7 @@ into your data**:
 
 ```yaml
 # .apairo/channels.yaml
+version: 1
 channels:
   camera: {loader: img, key: {name: 'frame\d+-(\d+)_(\d+)'}}   # timestamp from frame000123-1581624652_750.jpg
   labels: {loader: img, key: {name: 'frame\d+-(\d+)_(\d+)'}}   # same clock; a sparse subset of frames
@@ -85,7 +88,7 @@ channels:
 
 ```python
 ds   = apairo.RawDataset(seq_dir, keys=["camera", "labels"])
-view = ds.synchronize(reference="camera", method="nearest", tolerance=0.0)  # labels attach where they exist
+view = ds.synchronize(reference="camera", method="nearest", tolerance=0.0)  # the camera frames that have a label
 ```
 
 - `key: {name: <regex>}` parses the key from the filename stem (`scale: [...]`
@@ -93,8 +96,8 @@ view = ds.synchronize(reference="camera", method="nearest", tolerance=0.0)  # la
 - A separate `order:` controls enumeration; a subclass can hand in
   `_key_providers` / `_order_providers` callables for anything the DSL can't
   express.
-- No `key` → today's behavior (`timestamps.txt`, or frame position). Fully
-  additive, opt-in, read-only.
+- No `key` → the channel's `timestamps.txt`, or a clock borrowed with
+  `timestamps_from`. Fully additive, opt-in, read-only.
 
 This turns the Rellis-3D camera (2847 frames @ 10 Hz, plus 1200 half-rate
 image-labels) into two lines of `channels.yaml` — no subclass, no
@@ -158,7 +161,7 @@ ds_train = (
 loader = DataLoader(ds_train, batch_size=8, shuffle=True, collate_fn=my_collate)
 ```
 
-See [`examples/`](examples/) for complete runnable pipelines.
+See [`examples/`](https://github.com/apairo-robotics/apairo/tree/main/examples) for complete runnable pipelines.
 
 ---
 
@@ -289,7 +292,7 @@ See [documentation](https://apairo-robotics.github.io/apairo/) for the full guid
 
 ## Contributing
 
-apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](https://github.com/apairo-robotics/apairo/blob/main/CONTRIBUTING.md).
 
 ---
 

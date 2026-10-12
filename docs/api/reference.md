@@ -125,6 +125,25 @@ plugin -- see [Write a Format Plugin](../datasets/format-plugins.md).
 
 ::: apairo.core.formats.register_format
 
+### The format registry
+
+`format_names()` lists every registered format (built-in and plugin) -- the
+replacement for 0.8's `KNOWN_LOADERS`; `formats()` returns them in detection
+order; `get_format` / `find_format` look one up by name; `detect_format` names
+the format of a channel directory.
+
+::: apairo.core.formats.format_names
+
+::: apairo.core.formats.formats
+
+::: apairo.core.formats.get_format
+
+### Facts
+
+What a format's `facts()` returns for `apairo status`.
+
+::: apairo.core.formats.Facts
+
 ---
 
 ### check_format
@@ -151,13 +170,28 @@ declarations that ship with it.
 
 ::: apairo.dataset.registry.declaration
 
+::: apairo.dataset.registry.declaration_names
+
+::: apairo.dataset.registry.get_dataset
+
+### SynchronizedSequences
+
+What `synchronize()` returns on a root: one synchronized view per sequence,
+concatenated; `persist(name)` keeps one view per sequence, and a root's
+`load_view(name)` concatenates them back.
+
+::: apairo.dataset.concat.SynchronizedSequences
+
 ---
 
 ### WRITERS
 
 File writers used by dataset layouts (`DatasetLayout` export: Zarr stores, tar
 archives of images). Preprocess outputs are written through the format
-contract instead -- see `Format.write_frame` / `write_channel`.
+contract instead -- see `Format.write_frame` / `write_channel` -- so replacing
+an entry here does not change what `run_preprocess` writes. `WRITERS["img"]`
+writes a tar archive of JPEG frames, which the `img` format does not read; the
+`img` format writes PNG frames.
 
 ```python
 from apairo import WRITERS

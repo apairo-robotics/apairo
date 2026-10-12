@@ -2,7 +2,7 @@
 
 Transforms let you apply callables to channel data **at access time**, without persisting anything to disk. This is the right tool for normalisations, type conversions, augmentations, or any operation cheap enough to run on the fly.
 
-> **Companion library:** [`apairo_transform`](https://github.com/apairo/apairo_transform) ships a collection of ready-made transforms (range filters, normalisation, voxelisation, …) that plug directly into this API.
+> **Companion library:** [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) ships a collection of ready-made transforms (range filters, normalisation, voxelisation, …) that plug directly into this API.
 
 ---
 

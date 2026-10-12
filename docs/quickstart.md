@@ -50,7 +50,7 @@ Every `__getitem__` call returns a [`Sample`][apairo.core.sample.Sample]:
 @dataclass
 class Sample:
     data: dict[str, np.ndarray]     # key -> numpy array
-    timestamp: float | None         # None for synchronous datasets
+    timestamp: float | None         # None when the dataset has no clock
 ```
 
 ## Iterating
