@@ -1256,6 +1256,10 @@ def verify_declaration(
         issues.append(f"{path.name}: 'channels' is missing or not a mapping")
         return issues
 
+    registered: dict = {}
+    if root_dir is not None and config_exists(Path(root_dir)):
+        found = read_config(Path(root_dir)).get("channels", {})
+        registered = {k: v for k, v in found.items() if isinstance(v, dict)}
     for key, meta in channels.items():
         if not isinstance(meta, dict):
             issues.append(f"{path.name}: channel '{key}': entry is not a mapping")
@@ -1281,9 +1285,11 @@ def verify_declaration(
                 f"{path.name}: channel '{key}': unknown loader '{loader}' (known: "
                 f"{', '.join(sorted(format_names()))})"
             )
-        storage_dir = (
-            Path(root_dir) / str(meta.get("directory", key)) if root_dir else Path(".")
-        )
+        # A declaration overlays the registry: a channel it does not relocate
+        # keeps the directory channels.yaml gives it (a suffixed sub-channel
+        # lives in its base channel's).
+        directory = meta.get("directory", registered.get(key, {}).get("directory", key))
+        storage_dir = Path(root_dir) / str(directory) if root_dir else Path(".")
         if root_dir is not None and not storage_dir.is_dir():
             issues.append(
                 f"{path.name}: channel '{key}': directory not found on disk "

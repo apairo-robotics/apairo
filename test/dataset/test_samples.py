@@ -9,6 +9,7 @@ its sample, its source, and what to expect of it.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -98,3 +99,28 @@ def test_the_check_copies_where_links_are_refused(monkeypatch):
     monkeypatch.setattr("os.symlink", refuse)
     card = CARDS["mini_tum"]
     check_dataset(card["dataset"], ASSETS / card["root"], **check_args(card))
+
+
+def test_the_check_takes_a_root_of_sequences(tmp_path):
+    root = tmp_path / "root"
+    for seq in ("a", "b"):
+        shutil.copytree(ASSETS / "mini_tartan" / "figure_8", root / seq)
+    check_dataset(
+        "RawDataset", root, keys=["velodyne_0", "cmd"], frames=None, clock=True
+    )
+
+
+def test_the_check_takes_a_borrowed_clock_and_the_current_directory(
+    tmp_path, monkeypatch
+):
+    seq = tmp_path / "seq"
+    shutil.copytree(
+        ASSETS / "mini_tartan" / "figure_8",
+        seq,
+        ignore=shutil.ignore_patterns(".apairo"),
+    )
+    (seq / "apairo.yaml").write_text(
+        "version: 1\nchannels:\n  velodyne_0_intensity: {timestamps_from: velodyne_0}\n"
+    )
+    monkeypatch.chdir(seq)
+    check_dataset("RawDataset", ".", keys=["velodyne_0_intensity", "cmd"])

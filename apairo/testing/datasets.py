@@ -76,15 +76,21 @@ def check_dataset(
     extra: dict[str, Any] = {"declare": declared} if declared is not None else {}
     problems: list[str] = []
     with tempfile.TemporaryDirectory() as tmp, _known(cls):
-        work = _stand_in(Path(root).expanduser(), Path(tmp) / Path(root).name)
+        source = Path(root).expanduser().resolve()
+        work = _stand_in(source, Path(tmp) / (source.name or "dataset"))
         try:
             cls.init(work, **extra)
             ds = cls(work, keys=keys, **extra)
         except Exception as exc:
             problems.append(f"init and loading failed: {exc!r}")
         else:
-            _check_loaded(ds, keys, expect or {}, paired or [], frames, problems)
-            _check_clock(ds, clock, problems)
+            if frames is not None and len(ds) != frames:
+                problems.append(f"{len(ds)} frames, the sample holds {frames}")
+            # A root of asynchronous sequences has no channels of its own: each
+            # sequence is checked.
+            for part in _parts(ds):
+                _check_loaded(part, keys, expect or {}, paired or [], problems)
+                _check_clock(part, clock, problems)
             _check_apairo_check(work, declared, problems)
             if splits:
                 _check_splits(cls, work, keys, extra, splits, problems)
@@ -133,17 +139,21 @@ def _stand_in(src: Path, dst: Path) -> Path:
     return dst
 
 
+def _parts(ds) -> list:
+    """The datasets holding channels: the sequences of a root, else *ds*."""
+    if getattr(ds, "_is_root", False) and getattr(ds, "sequences", None):
+        return list(ds.sequences)
+    return [ds]
+
+
 def _picks(n: int) -> list[int]:
     return sorted({0, n // 2, n - 1}) if n else []
 
 
-def _check_loaded(ds, keys, expect, paired, frames, problems: list[str]) -> None:
-    n = len(ds)
-    if n == 0:
+def _check_loaded(ds, keys, expect, paired, problems: list[str]) -> None:
+    if len(ds) == 0:
         problems.append("the dataset loads no frame")
         return
-    if frames is not None and n != frames:
-        problems.append(f"{n} frames, the sample holds {frames}")
     loaders = ds.loaders
     for key in keys or []:
         if key not in loaders:
@@ -200,10 +210,11 @@ def _check_expected(key: str, i: int, arr: np.ndarray, spec: dict, problems) -> 
 
 def _check_clock(ds, clock: bool | None, problems: list[str]) -> None:
     stamps = ds.timestamps
-    if isinstance(stamps, dict):  # asynchronous: one clock per channel
+    if isinstance(stamps, dict):  # asynchronous: one clock per loaded channel
         clocks = {
             k: (np.asarray(v, dtype=float), len(ds.loaders[k]))
             for k, v in stamps.items()
+            if k in ds.loaders  # a borrowed clock's source may not be loaded
         }
         groups = {k: [np.arange(len(c))] for k, (c, _) in clocks.items()}
     elif stamps is None:
@@ -269,7 +280,7 @@ def _check_splits(cls, work, keys, extra, splits, problems: list[str]) -> None:
 def _check_round_trip(cls, work: Path, ds, extra, problems: list[str]) -> None:
     from apairo.core.preprocessor import FramePreprocessor
 
-    ref = next(iter(ds.loaders))
+    ref = ds.keys[0]
 
     class _Copy(FramePreprocessor):
         output_key = _COPY
@@ -284,13 +295,16 @@ def _check_round_trip(cls, work: Path, ds, extra, problems: list[str]) -> None:
     except Exception as exc:
         problems.append(f"a preprocess output does not write and load back: {exc!r}")
         return
-    original, copy = back.loaders[ref], back.loaders[_COPY]
-    if len(copy) != len(original):
-        problems.append(
-            f"the preprocess output has {len(copy)} frames, '{ref}' {len(original)}"
-        )
-        return
-    for i in _picks(len(original)):
-        if not np.array_equal(np.asarray(copy[i]), np.asarray(original[i])):
-            problems.append(f"the preprocess output's frame {i} differs from '{ref}'")
-            break
+    for part in _parts(back):
+        original, copy = part.loaders[ref], part.loaders[_COPY]
+        if len(copy) != len(original):
+            problems.append(
+                f"the preprocess output has {len(copy)} frames, '{ref}' {len(original)}"
+            )
+            return
+        for i in _picks(len(original)):
+            if not np.array_equal(np.asarray(copy[i]), np.asarray(original[i])):
+                problems.append(
+                    f"the preprocess output's frame {i} differs from '{ref}'"
+                )
+                return
