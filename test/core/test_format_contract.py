@@ -464,3 +464,112 @@ def test_the_read_path_never_names_a_builtin_format(module):
     assert named == [], (
         f"{module} names a format -- ask the registry (apairo.core.formats) instead"
     )
+
+
+# ─────────────────── a plugin cannot break detection or replacement ──────────
+
+
+def test_a_plugin_whose_detect_raises_is_skipped(tmp_path, plugins, caplog):
+    class Fragile(Format):
+        name = "fragile"
+        loader = JsonlLoader
+        extensions = frozenset({".frag"})
+        priority = 1
+
+        def detect(self, directory):
+            raise UnicodeDecodeError("utf-8", b"", 0, 1, "unreadable header")
+
+    plugins()
+    register_format(Fragile)
+    seq = _xyz_sequence(tmp_path / "seq")  # its cam/ is plain npys
+    with caplog.at_level(logging.WARNING, logger="apairo.core.formats"):
+        assert RawDataset(seq, keys=["cam"]).keys == ["cam"]
+    assert "format 'fragile' failed to inspect" in caplog.text
+
+
+def test_a_table_format_answers_after_the_frame_formats(tmp_path, plugins):
+    class Arrow(Format):
+        name = "arrow"  # sorts before npys, same default priority
+        loader = JsonlLoader
+        extensions = frozenset({".arrow"})
+        per_frame = False
+        one_channel_per_file = True
+
+    plugins()
+    register_format(Arrow)
+    d = tmp_path / "lidar"
+    d.mkdir()
+    for i in range(3):
+        np.save(d / f"{i:06d}.npy", np.zeros(2))
+    (d / "calibration.arrow").write_bytes(b"\x00")
+    assert registry.detect_format(d).name == "npys"
+
+
+def test_a_format_registered_before_any_lookup_stays_replaceable(monkeypatch):
+    """The notebook flow: register, use, register a fixed version."""
+    from apairo_xyz import XyzFormat
+
+    monkeypatch.syspath_prepend(str(REPO / "examples" / "format_plugin"))
+    monkeypatch.setattr(registry, "_FORMATS", {})
+    monkeypatch.setattr(registry, "_BUILTINS", frozenset())
+    monkeypatch.setattr(registry, "_plugins_loaded", True)
+    register_format(XyzFormat)
+    assert get_format("xyz").name == "xyz"  # the first lookup loads the built-ins
+    assert "npys" in registry.format_names()
+    register_format(XyzFormat, replace=True)
+    with pytest.raises(ValueError, match="built-in"):
+        register_format(type("Npys", (XyzFormat,), {"name": "npys"}))
+
+
+def test_suffix_is_for_formats_with_suffixed_variants(tmp_path):
+    seq = tmp_path / "seq"
+    (seq / "cam").mkdir(parents=True)
+    write_config(
+        seq,
+        {
+            "version": 1,
+            "channels": {"cam": {"kind": "raw", "loader": "img", "suffix": "x"}},
+        },
+    )
+    assert any(
+        "'suffix' selects a suffixed variant" in i and "'img' format has none" in i
+        for i in verify_config(seq)
+    )
+
+
+def test_suffixed_variants_are_found_under_every_extension(tmp_path, plugins):
+    from apairo_xyz import XyzFormat, XYZLoader
+
+    class Asc(XyzFormat):
+        name = "asc"
+        loader = XYZLoader
+        extensions = frozenset({".asc", ".xyz"})
+        suffixes = True
+
+    plugins(("xyz", "apairo_xyz:XyzFormat"))
+    register_format(Asc)
+    seq = tmp_path / "seq"
+    d = seq / "lidar"
+    d.mkdir(parents=True)
+    for i in range(3):
+        (d / f"{i:06d}.xyz").write_text(f"{i} 0 0\n")
+        (d / f"{i:06d}_ground.xyz").write_text(f"{i} 1 0\n")
+    np.savetxt(d / "timestamps.txt", [1.0, 2.0, 3.0])
+    write_config(
+        seq,
+        {
+            "version": 1,
+            "channels": {
+                "lidar": {"kind": "raw", "loader": "asc"},
+                "lidar_ground": {
+                    "kind": "raw",
+                    "loader": "asc",
+                    "directory": "lidar",
+                    "suffix": "ground",
+                },
+            },
+        },
+    )
+    ds = RawDataset(seq)
+    assert len(ds.loaders["lidar_ground"]) == 3
+    np.testing.assert_allclose(ds.loaders["lidar_ground"][2], [[2.0, 1.0, 0.0]])

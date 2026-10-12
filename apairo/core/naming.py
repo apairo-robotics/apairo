@@ -79,6 +79,8 @@ def channel_frame_files(
       default convention reserves for suffixes) enumerate anyway, filters out
       strays, and orders non-zero-padded indices correctly;
     - a ``suffix``: the variant's own files (``000000_intensity.npy``);
+    - the base channel of a format with suffixed variants: the files whose
+      stem holds no ``_``, which marks a variant;
     - otherwise ``None``: the format lists its own frames.
     """
     import re
@@ -94,9 +96,19 @@ def channel_frame_files(
     if spec is None:
         suffix = meta.get("suffix")
         if not suffix:
+            if fmt.suffixes:
+                return [
+                    p.name
+                    for p in fmt.data_files(Path(directory))
+                    if frame_stem_is_valid(p.stem)
+                ]
             return None
-        ext = sorted(fmt.extensions)[0] if fmt.extensions else ""
-        return suffixed_frame_files(directory, str(suffix), ext=ext)
+        # Every extension the format reads: an image's variants may be .png
+        # or .jpg alike.
+        variants: set[str] = set()
+        for ext in fmt.extensions or {""}:
+            variants.update(suffixed_frame_files(directory, str(suffix), ext=ext))
+        return sorted(variants)
     if not fmt.per_frame:
         from apairo.core.formats import formats
 

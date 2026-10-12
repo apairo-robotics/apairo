@@ -246,8 +246,12 @@ def _register_builtins() -> None:
     global _BUILTINS
     if _BUILTINS:
         return
-    importlib.import_module("apairo.loader.formats")  # registers on import
-    _BUILTINS = frozenset(_FORMATS)
+    builtins = importlib.import_module("apairo.loader.formats").BUILTIN_FORMATS
+    for fmt in builtins:
+        if fmt.name not in _FORMATS:
+            register_format(fmt)
+    # By name, from the list: a format a script registered first stays its own.
+    _BUILTINS = frozenset(fmt.name for fmt in builtins)
 
 
 def _load_plugins() -> None:
@@ -308,8 +312,18 @@ def formats() -> list[Format]:
 def detect_format(directory: Path) -> Format | None:
     """The format of the channel stored in *directory*, or ``None``. Formats
     whose files are each a channel of their own (tables) answer only when no
-    other format does."""
-    for fmt in formats():
-        if fmt.detect(directory):
-            return fmt
+    other format does. A format whose ``detect`` raises is skipped, with a
+    warning: one broken plugin must not make other datasets unreadable."""
+    ordered = sorted(formats(), key=lambda f: f.one_channel_per_file)  # stable
+    for fmt in ordered:
+        try:
+            if fmt.detect(directory):
+                return fmt
+        except Exception as exc:
+            logger.warning(
+                "apairo: format '%s' failed to inspect %s and was skipped: %s",
+                fmt.name,
+                directory,
+                exc,
+            )
     return None

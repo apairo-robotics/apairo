@@ -667,10 +667,10 @@ class AsyncLayoutDataset(AbstractDataset):
             if n_files != n_clock:
                 shared = Path(self._files[key]).name
                 raise ValueError(
-                    f"Suffixed sub-channel '{key}' has {n_files} '*_{suffix}.npy' "
+                    f"Suffixed sub-channel '{key}' has {n_files} '*_{suffix}' frame "
                     f"file(s) in '{shared}/' but shares that channel's clock of "
                     f"{n_clock} frame(s): a suffixed variant must cover every base "
-                    f"frame. Check for missing or extra '_{suffix}.npy' files."
+                    f"frame. Check for missing or extra '_{suffix}' files."
                 )
         # A colocated `array_file` sub-channel borrows its shared directory's
         # clock the same way a suffix channel does, but its stacked array's row

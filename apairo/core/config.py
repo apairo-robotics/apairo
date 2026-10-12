@@ -309,6 +309,13 @@ def _verify_key_order(key: str, meta: dict, storage_dir: Path) -> list[str]:
                 f"channel '{key}': 'key' cannot be combined with timestamps_from/suffix "
                 f"(they would be ignored)"
             )
+    if meta.get("suffix") and fmt is not None and not fmt.suffixes:
+        with_suffixes = " or ".join(f"'{f.name}'" for f in formats() if f.suffixes)
+        out.append(
+            f"channel '{key}': 'suffix' selects a suffixed variant of a channel's "
+            f"frames, which the '{loader}' format has none of ({with_suffixes} "
+            f"has them)"
+        )
     if meta.get("latency") is not None:
         try:
             latency_seconds(meta["latency"])

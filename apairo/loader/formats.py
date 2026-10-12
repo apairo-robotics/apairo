@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from apairo.core.formats import Facts, Format, register_format
+from apairo.core.formats import Facts, Format
 from apairo.core.keys import epoch_unit, parse_column_key
 from apairo.core.naming import is_frame_file
 from apairo.loader.bin_loader import BINLoader
@@ -351,13 +351,13 @@ class CsvFormat(Format):
         return out
 
 
-for _fmt in (
-    NpysFormat,
-    NpyFormat,
-    BinFormat,
-    PcdFormat,
-    ImgFormat,
-    ZarrFormat,
-    CsvFormat,
-):
-    register_format(_fmt)
+# Registered by the registry, which keeps their names as the built-in ones.
+BUILTIN_FORMATS = (
+    NpysFormat(),
+    NpyFormat(),
+    BinFormat(),
+    PcdFormat(),
+    ImgFormat(),
+    ZarrFormat(),
+    CsvFormat(),
+)

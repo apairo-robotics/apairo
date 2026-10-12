@@ -54,15 +54,21 @@ def _register_builtins() -> None:
     from apairo.dataset.semantic_kitti import SemanticKittiDataset
     from apairo.dataset.tartan_kitti import TartanKittiDataset
 
-    for cls in (
+    builtins = (
         RawDataset,
         SemanticKittiDataset,
         Rellis3DDataset,
         Goose3DDataset,
         TartanKittiDataset,
-    ):
-        _DATASETS.setdefault(cls.__name__, cls)
-    _BUILTINS = frozenset(_DATASETS)
+    )
+    # RawDataset first in listings, whatever a script registered before.
+    registered = dict(_DATASETS)
+    _DATASETS.clear()
+    for cls in builtins:
+        _DATASETS[cls.__name__] = cls
+    for name, cls in registered.items():
+        _DATASETS.setdefault(name, cls)
+    _BUILTINS = frozenset(cls.__name__ for cls in builtins)
 
 
 def _load_plugins() -> None:
