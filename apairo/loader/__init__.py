@@ -50,7 +50,7 @@ def _load_img(path: Path) -> np.ndarray:
         return np.array(Image.open(path))
     except ImportError as exc:
         raise ImportError(
-            "Loading image files requires Pillow. Install it with: pip install Pillow"
+            "Loading image files requires Pillow. Install it with: pip install 'apairo[vision]'"
         ) from exc
 
 

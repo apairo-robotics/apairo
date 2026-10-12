@@ -41,7 +41,7 @@ class IMGLoader(AbstractLoader):
             from PIL import Image as _Image  # noqa: F401
         except ImportError as exc:
             raise ImportError(
-                "Image loading requires Pillow. Install it with: pip install Pillow"
+                "Image loading requires Pillow. Install it with: pip install 'apairo[vision]'"
             ) from exc
         self.directory = directory
         if files is not None:

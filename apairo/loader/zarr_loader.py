@@ -22,7 +22,7 @@ class ZarrLoader(AbstractLoader):
             import zarr
         except ImportError as exc:
             raise ImportError(
-                "zarr is required for ZarrLoader. Install with: pip install zarr"
+                "zarr is required for ZarrLoader. Install with: pip install 'apairo[zarr]'"
             ) from exc
         self._path = Path(zarr_path)
         self._array = zarr.open_array(str(self._path), mode="r")

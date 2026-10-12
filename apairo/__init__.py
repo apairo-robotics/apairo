@@ -36,7 +36,7 @@ from apairo.dataset.stream import StreamDataset
 from apairo.dataset.tartan_kitti import TartanKittiDataset
 from apairo.dataset.zip import ZipDataset
 from apairo.loader import DERIVED_LOADERS
-from apairo.preprocess import FramePreprocessor, SequencePreprocessor
+from apairo.preprocess import Convert, FramePreprocessor, SequencePreprocessor
 from apairo.writer import WRITERS, ChannelWriter
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
@@ -51,6 +51,7 @@ __all__ = [
     "FrameRef",
     "SynchronousDataset",
     "ConfigurableDataset",
+    "Convert",
     "FramePreprocessor",
     "SequencePreprocessor",
     "RawDataset",

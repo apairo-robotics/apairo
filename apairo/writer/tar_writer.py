@@ -41,7 +41,7 @@ class TarImageWriter:
         except ImportError as exc:
             raise ImportError(
                 "Pillow is required for TarImageWriter. "
-                "Install with: pip install Pillow"
+                "Install with: pip install 'apairo[vision]'"
             ) from exc
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

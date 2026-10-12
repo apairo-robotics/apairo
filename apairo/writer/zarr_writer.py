@@ -43,7 +43,7 @@ class ZarrWriter:
             import zarr
         except ImportError as exc:
             raise ImportError(
-                "zarr is required for ZarrWriter. Install with: pip install zarr"
+                "zarr is required for ZarrWriter. Install with: pip install 'apairo[zarr]'"
             ) from exc
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

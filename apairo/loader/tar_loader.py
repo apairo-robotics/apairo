@@ -84,7 +84,7 @@ class TarImageLoader(AbstractLoader):
         except ImportError as exc:
             raise ImportError(
                 "Pillow is required for TarImageLoader. "
-                "Install with: pip install Pillow"
+                "Install with: pip install 'apairo[vision]'"
             ) from exc
         img: Image.Image = Image.open(BytesIO(data))
         if img.mode in ("P", "CMYK", "YCbCr", "I", "F"):

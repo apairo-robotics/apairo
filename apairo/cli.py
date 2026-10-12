@@ -1151,9 +1151,15 @@ def cmd_alias(args: argparse.Namespace) -> int:
     if clashes:
         for seq, msg in clashes:
             print(f"cannot alias in '{seq.name}': {msg}", file=sys.stderr)
+        directory = any("directory name" in msg for _, msg in clashes)
         print(
-            "Pick another name, clear the conflicting alias with "
-            "`apairo alias <channel> --remove`, or pass --force to reassign it.",
+            "Pick another name"
+            + (
+                "."
+                if directory
+                else ", clear the conflicting alias with `apairo alias <channel> "
+                "--remove`, or pass --force to reassign it."
+            ),
             file=sys.stderr,
         )
         return 1

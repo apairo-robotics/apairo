@@ -115,7 +115,7 @@ class _OutputFormats:
                     f"{self._label}: output '{key}' ({value.dtype}, shape "
                     f"{value.shape}{' per frame' if frame else ''}) cannot be "
                     f"stored in the '{fmt.name}' format. Choose another with "
-                    f"output_format= ({writable})."
+                    f"output_format= or output_loader ({writable})."
                 )
         else:
             self.automatic.add(key)
