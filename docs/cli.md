@@ -464,7 +464,10 @@ $ apairo check /data/my_dataset
 OK -- no issues
 ```
 
-It is profile-aware (the same reading as `status`) and covers:
+It needs no `apairo init`: a directory without `.apairo` is checked as
+loading would read it -- the channels it detects, with the declarations -- and
+nothing is written. It is profile-aware (the same reading as `status`) and
+covers:
 
 - `channels.yaml`, and the declarations read with it (the in-tree
   `apairo.yaml`, a root's, and `--declare`);

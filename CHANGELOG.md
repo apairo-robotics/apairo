@@ -247,6 +247,12 @@ What 0.8 code or data may meet, and what to do:
 - **`status -s` reads a profiled sequence as loading reads it.** On a Rellis
   root it showed `?` shapes and left `poses` out; it now gives every
   channel's frames, shape, dtype and the camera clock's rate.
+- **`check` needs no `apairo init`.** On a directory without `.apairo` it
+  checks the channels loading would detect, with the declarations, and writes
+  nothing. It used to report "not initialized" and exit 1, even on a
+  directory that loads as it lies (the TUM, EuRoC and KUKA guides open theirs
+  without `init`). It now exits 1 only on what loading refuses, such as a
+  channel with no clock.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,

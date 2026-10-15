@@ -59,6 +59,7 @@ from apairo.core.profiled_dataset import ProfiledDataset
 from apairo.core.views import read_views, verify_views
 from apairo.dataset.async_layout.dataset import _bare_channel_entries, _detect_loader
 from apairo.dataset.raw import RawDataset
+from apairo.dataset.raw.dataset import bootstrap_channels
 from apairo.dataset.registry import (
     dataset_names,
     declaration_names,
@@ -291,13 +292,11 @@ def _untracked_channels(seq_dir: Path) -> list[str]:
     ]
 
 
-def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
-    cfg = read_config(seq_dir).get("channels", {}) if config_exists(seq_dir) else {}
-    # Status must see what loading sees: the inherited root declaration, then
-    # the in-tree one, then an external ``--declare`` file (``declare=`` at load
-    # time) overlay the registry -- key/order specs drive the frame count and
-    # the clock checks below. A broken declaration is skipped here --
-    # verify_declaration reports it in issues.
+def _declared_over(seq_dir: Path, cfg: dict, declare: Path | None) -> dict:
+    """*cfg* with the declarations overlaid, as loading does: the inherited root
+    declaration, then the in-tree one, then an external ``--declare`` file
+    (``declare=`` at load time). A broken declaration is skipped here --
+    verify_declaration reports it in issues."""
     own = declaration_path(seq_dir) if declaration_exists(seq_dir) else None
     for decl in (inherited_declaration(seq_dir), own, declare):
         if decl is None or not Path(decl).is_file():
@@ -306,6 +305,31 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
             cfg = merge_declared_channels(cfg, read_declaration(decl))
         except ValueError:
             pass
+    return cfg
+
+
+def _detected_channels(seq_dir: Path, declare: Path | None) -> dict:
+    """The channels loading would register in a sequence with no ``.apairo``."""
+    declares = [
+        d
+        for d in (inherited_declaration(seq_dir), declare)
+        if d is not None and Path(d).is_file()
+    ]
+    try:
+        return bootstrap_channels(seq_dir, *declares)
+    except ValueError:  # a broken declaration -- reported in issues
+        return bootstrap_channels(seq_dir)
+
+
+def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
+    initialized = config_exists(seq_dir)
+    # Status must see what loading sees: the declarations overlay the registry
+    # -- key/order specs drive the frame count and the clock checks below.
+    cfg = _declared_over(
+        seq_dir,
+        read_config(seq_dir).get("channels", {}) if initialized else {},
+        declare,
+    )
     cache: dict = {}
     channels = {
         k: _channel_detail(seq_dir, k, _with_owner_latency(k, v, cfg), cache)
@@ -315,13 +339,17 @@ def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
         u: _channel_detail(seq_dir, u, None) for u in _untracked_channels(seq_dir)
     }
     starts = [c["span"][0] for c in {**channels, **untracked}.values() if c["span"]]
-    issues = (
-        verify_config(seq_dir)
-        if config_exists(seq_dir)
-        else ["not initialized -- run `apairo init`"]
-    )
+    if initialized:
+        issues = verify_config(seq_dir)
+        loaded = cfg
+    else:
+        # No .apairo: loading registers the channels it detects (in memory on a
+        # read-only mount), so the issues are those of that reading. Neither
+        # check nor status needs `apairo init`, and neither writes.
+        issues = []
+        loaded = _declared_over(seq_dir, _detected_channels(seq_dir, declare), declare)
     issues += verify_declaration(declaration_path(seq_dir), seq_dir)
-    issues += _clock_coverage_issues(seq_dir, cfg, cache)
+    issues += _clock_coverage_issues(seq_dir, loaded, cache)
     issues += verify_views(seq_dir)
     return {
         "channels": channels,

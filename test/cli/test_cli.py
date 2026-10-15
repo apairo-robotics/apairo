@@ -177,6 +177,44 @@ def test_check_not_a_dataset(tmp_path):
     assert _run(["check", str(empty)]) == 1
 
 
+def test_check_needs_no_init(raw_root, capsys):
+    """A directory loading opens as it lies passes check before any `init`,
+    and check writes nothing into it."""
+    rc = _run(["check", str(raw_root), "--json"])
+    assert json.loads(capsys.readouterr().out) == {"ok": True, "issues": []}
+    assert rc == 0
+    assert not any(config_exists(raw_root / s) for s in ("seq_a", "seq_b"))
+
+
+def test_check_before_init_reports_what_loading_refuses(raw_root, capsys):
+    """Without .apairo, check reads the channels loading would detect: a clock
+    that does not fit its frames is reported, as loading refuses it."""
+    from apairo import RawDataset
+
+    np.savetxt(raw_root / "seq_a" / "lidar" / "timestamps.txt", [0.0, 0.5])
+    rc = _run(["check", str(raw_root), "--json"])
+    issues = json.loads(capsys.readouterr().out)["issues"]
+    assert rc == 1
+    assert len(issues) == 1 and "seq_a: channel 'lidar'" in issues[0]
+    with pytest.raises(ValueError, match="lidar"):
+        RawDataset(raw_root / "seq_a")
+
+
+def test_check_declare_needs_no_init(tmp_path, capsys):
+    """The KUKA guide's folder: tables with no clock of their own pass check
+    through the shipped declaration, uninitialized, and fail without it."""
+    import shutil
+    from pathlib import Path
+
+    logs = tmp_path / "kuka_logs"
+    shutil.copytree(Path(__file__).parents[1] / "assets" / "mini_kuka_ft_imu", logs)
+    assert _run(["check", str(logs), "--declare", "kuka_ft_imu"]) == 0
+    assert "OK" in capsys.readouterr().out
+    assert _run(["check", str(logs)]) == 1
+    assert "no clock" in capsys.readouterr().out
+    assert not config_exists(logs)
+
+
 def test_check_reports_bad_calibration(raw_root, capsys):
     _run(["init", str(raw_root)])
     (raw_root / "seq_a" / ".apairo" / "calibration.yaml").write_text(

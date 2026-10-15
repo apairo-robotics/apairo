@@ -87,6 +87,32 @@ def _is_dataset_root(path: Path) -> bool:
     )
 
 
+def bootstrap_channels(sequence_dir: Path, *declares: str | Path | None) -> dict:
+    """The channels loading registers for a sequence with no ``.apairo``: one
+    per channel directory whose format is detected, its suffixed variants, and
+    the tables lying directly in the sequence. *declares* (the inherited and the
+    external declaration) name the channels a ``key``/``order`` regex explains.
+    Writes nothing: ``check`` reads a directory through it as loading would."""
+    sequence_dir = Path(sequence_dir)
+    explained = _declared_key_channels(sequence_dir, *declares)
+    channels: dict = {}
+    for key in sorted(get_files(str(sequence_dir))):
+        channel_dir = sequence_dir / key
+        loader = _detect_loader(channel_dir)
+        if loader is None:
+            continue
+        channels[key] = {"loader": loader, "kind": "raw"}
+        # A declared key/order regex explains this channel's stems (their
+        # '_' is part of the name, not a suffix) -- don't fan them out
+        # into suffixed sub-channels.
+        if key in explained:
+            continue
+        for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
+            channels[f"{key}_{suffix}"] = {"kind": "raw", **frag}
+    channels.update(_bare_channel_entries(sequence_dir))
+    return channels
+
+
 class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
     r"""Generic ``channels.yaml``-driven dataset; single sequence or dataset root.
 
@@ -339,24 +365,9 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
     def _bootstrap_config(self, sequence_dir: Path) -> dict:
         """ConfigurableDataset hook: detect raw channels when .apairo is absent."""
-        explained = _declared_key_channels(
+        channels = bootstrap_channels(
             sequence_dir,
             getattr(self, "_declare_base", None),
             getattr(self, "_declare", None),
         )
-        channels: dict = {}
-        for key in sorted(get_files(str(sequence_dir))):
-            channel_dir = Path(sequence_dir) / key
-            loader = _detect_loader(channel_dir)
-            if loader is None:
-                continue
-            channels[key] = {"loader": loader, "kind": "raw"}
-            # A declared key/order regex explains this channel's stems (their
-            # '_' is part of the name, not a suffix) -- don't fan them out
-            # into suffixed sub-channels.
-            if key in explained:
-                continue
-            for suffix, frag in _suffix_channel_entries(channel_dir, loader).items():
-                channels[f"{key}_{suffix}"] = {"kind": "raw", **frag}
-        channels.update(_bare_channel_entries(Path(sequence_dir)))
         return {"version": 1, "channels": channels}
