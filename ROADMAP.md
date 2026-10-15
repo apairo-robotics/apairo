@@ -29,8 +29,8 @@ about a day, **M** a few days, **L** a week or more.
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
 | R5 | The format contract: a new format is a plugin | L | W42–W44 | ✅ landed, unreleased |
 | R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed, unreleased |
-| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed on `feature/persist-views` |
-| R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
+| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed, unreleased |
+| R8 | Release 0.9.0 | S | W46 (9 Nov) | cut on `release/0.9.0`, unpublished |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
 
 ---
@@ -398,3 +398,14 @@ The public API and the `.apairo` format are declared stable at 1.0
     that is `None`, or merging `apairo_preprocess`'s
     `feature/output-format-from-input` breaks it. Its `export_mnt.py` also
     still imports `MNTDataset`, removed from apairo in 0.3.0.
+- **2026-10-15**: R8 prepared, nothing published.
+  - `apairo_extractor`, branch `fix/apairo-current`:
+    - the MNT export keeps its own paths, so the package imports again; it
+      had failed with every apairo it accepts;
+    - the direct bag-to-MNT path reads ROS2 bags too;
+    - preprocess outputs are registered as written, `npys` per frame and
+      `npy` stacked; with apairo's `main` they were registered as `None`.
+    124 tests pass against apairo 0.8.0 from PyPI and against `main`.
+  - `apairo`, branch `release/0.9.0`: the CHANGELOG section, the version and
+    `CITATION.cff`, dated 9 November. The v0.9.0 DOI is added once Zenodo
+    mints it from the tag, as for 0.8.0.
