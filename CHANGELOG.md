@@ -7,6 +7,8 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-29
+
 ### Upgrading from 0.8
 
 What 0.8 code or data may meet, and what to do:
@@ -1029,7 +1031,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/apairo-robotics/apairo/compare/v0.6.2...v0.7.0
 [0.5.0]: https://github.com/apairo-robotics/apairo/compare/v0.4.0...v0.5.0

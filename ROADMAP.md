@@ -20,22 +20,22 @@ about a day, **M** a few days, **L** a week or more.
 
 | # | Item | Size | Target week | Status |
 |---|---|---|---|---|
-| — | `csv` loader, `key: {column}` | M | — | ✅ landed (`20f843e`), unreleased |
-| — | A clock must hold one timestamp per frame | S | — | ✅ landed (`b6b6eb0`), unreleased |
-| — | `check` reports what loading refuses | S | — | ✅ landed (`53300f9`), unreleased |
-| — | `check` needs no `apairo init` | S | — | ✅ landed (`729baff`), unreleased |
-| R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
-| R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
-| R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
-| R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
-| R5 | The format contract: a new format is a plugin | L | W42–W44 | ✅ landed, unreleased |
-| R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed, unreleased |
-| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed, unreleased |
-| R8 | Release 0.9.0 | S | W46 (9 Nov) | first cut on `release/0.9.0`, to cut again |
-| U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ landed, unreleased |
-| U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ landed, unreleased |
-| U3 | KITTI Odometry through `SemanticKittiDataset` | S | W44 (26 Oct) | planned |
-| U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ landed, unreleased |
+| — | `csv` loader, `key: {column}` | M | — | ✅ in 0.9.0 (`20f843e`) |
+| — | A clock must hold one timestamp per frame | S | — | ✅ in 0.9.0 (`b6b6eb0`) |
+| — | `check` reports what loading refuses | S | — | ✅ in 0.9.0 (`53300f9`) |
+| — | `check` needs no `apairo init` | S | — | ✅ in 0.9.0 (`729baff`) |
+| R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ in 0.9.0 |
+| R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ in 0.9.0 |
+| R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ in 0.9.0 |
+| R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ in 0.9.0 |
+| R5 | The format contract: a new format is a plugin | L | W42–W44 | ✅ in 0.9.0 |
+| R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ in 0.9.0 |
+| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ in 0.9.0 |
+| R8 | Release 0.9.0 | S | W46 (9 Nov) | ✅ released 2026-10-29 |
+| U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ in 0.9.0 |
+| U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ in 0.9.0 |
+| U3 | KITTI Odometry through `SemanticKittiDataset` | S | after 0.9.0 | structure checked, real sequence owed |
+| U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ in 0.9.0 |
 | U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
 | D1 | One docs site for the ecosystem, built from the satellites | M | W47 (16 Nov) | planned |
 | D2 | Executed examples for `apairo_transform` | S | W48 (23 Nov) | planned |
@@ -671,3 +671,18 @@ The public API and the `.apairo` format are declared stable at 1.0
   Fixed the same day in `apairo_visu` (`a1e3eb3`). `cli.md` also opens on a
   typical session and lists the four ecosystem commands, each checked on
   `mini_tartan` except the extractor.
+- **2026-10-27**: R8 cut again from `main`, so the release carries U1, U2,
+  U4, `check` without `init` and the docs work since 15 October. The
+  release commit is the first cut's (CHANGELOG section, version, and
+  `CITATION.cff` dated 9 November, without the v0.8.0 DOI); nothing is
+  tagged or published. U3 is checked structurally: a KITTI Odometry tree
+  (`sequences/XX/velodyne/*.bin`, `times.txt`, `calib.txt`, no `labels/`)
+  loads through `SemanticKittiDataset(root, keys=["lidar"])`. The check on
+  one real sequence is still owed.
+- **2026-10-29**: R8, 0.9.0 released, ten days ahead of W46: R1–R7, U1,
+  U2 and U4 had all landed, and the docs already described 0.9 while PyPI
+  served 0.8. Before the tag: 952 tests, ruff and mypy clean, the wheel
+  installed clean, and the four satellites' suites pass against it
+  (extractor 124, preprocess 133, transform 162, visu 111). A tag now
+  uploads only after the whole CI passes (`45ed776`). U3 moves after 0.9:
+  its structural check passed, the real-sequence check is docs only.
