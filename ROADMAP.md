@@ -31,6 +31,11 @@ about a day, **M** a few days, **L** a week or more.
 | R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed, unreleased |
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed on `feature/persist-views` |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
+| U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ landed on `feature/tutorial-s1-ergonomics` |
+| U2 | Installation names the ecosystem | S | W43 (19 Oct) | planned |
+| U3 | KITTI Odometry through `SemanticKittiDataset` | S | W44 (26 Oct) | planned |
+| U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | planned |
+| U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
 
 ---
@@ -210,6 +215,118 @@ REASSEMBLE needs the container plugin, so it moves to "After 0.9".*
   resolves to 0.9.0; CI is green on the tag.
 - **Depends on.** Whatever of R1–R7 has landed. An item not done by W46 moves
   to "After 0.9" rather than delaying the release.
+
+---
+
+## What a new user hits first (from the tutorial)
+
+The U items come from tutorial sessions in which the author uses apairo as a
+newcomer would: a fresh virtualenv, the docs only, real data. The friction
+journal lives outside the repositories, in `~/dev/apairo/tutorial/journal.md`.
+Session 1 (2026-10-15) installed 0.9.0 from `release/0.9.0`, then loaded the
+`barakuda1` rosbag extraction with `RawDataset`.
+
+U1–U4 are small enough to join 0.9.0 if they land before R8 publishes. The
+release is already cut on `release/0.9.0`, so including them means cutting it
+again on top of them.
+
+### U1. `ds[-1]`, `print(ds)`, `sample[key]`
+
+- **Goal.** The three things a first session tried and that failed now work.
+- **Why.** Each is a Python habit: `ds[-1]` raised `IndexError: Index -1 out
+  of range [0, 21236)`, `print(ds)` showed `<RawDataset object at 0x…>`
+  while every view already had a summary, and `sample["timestamp"]` raised
+  `'Sample' object is not subscriptable`.
+- **Scope.** Negative integer indices in `AbstractDataset.__getitem__` and
+  `SequenceView` (the profiled `(sequence, index)` tuple is unchanged). One
+  `__repr__` on `AbstractDataset` (length, sequences on a root, keys, root),
+  built from what the dataset holds; views keep theirs. `Sample.__getitem__`
+  and `__contains__` over `data`; `"timestamp"` stays a channel name, and the
+  `KeyError` for a missing one points to `sample.timestamp`. A `Sample` stays
+  a dataclass, not a mapping and not iterable, so `torch`'s
+  `default_collate` cannot rebuild it without its timestamp. **Out:** slices
+  (`ds[a:b]`).
+- **Done when.** Tests cover each case; the Quickstart shows them; checked
+  on the real `barakuda1` extraction.
+- **Placement.** Core. Branch `feature/tutorial-s1-ergonomics`.
+
+### U2. Installation names the ecosystem
+
+- **Goal.** `installation.md` says what each satellite does and how to
+  install it today.
+- **Why.** The installation page lists the dataset extras but no satellite.
+  A newcomer looked for `pip install apairo[extractor]`. The extractor
+  appears in the README only, and not at all in the docs.
+- **Scope.** An "Ecosystem" section: `apairo_extractor`, `apairo_transform`,
+  `apairo_preprocess`, `apairo_rr`, `apairo_visu`, one line each, with the
+  install command that works today (from git, none is on PyPI) and the
+  `apairo <command>` it adds when it does. **Out:** the extras (U5).
+- **Done when.** Each command was run in a fresh virtualenv.
+- **Placement.** Core docs; the README links to the section.
+
+### U3. KITTI Odometry through `SemanticKittiDataset`
+
+- **Goal.** The docs say whether plain KITTI Odometry loads, and how.
+- **Why.** A newcomer looks for `apairo[kitti]` and finds only
+  `semantic-kitti`. The SemanticKITTI profile reads the KITTI Odometry
+  layout (`sequences/XX/velodyne/*.bin`, `times.txt`) and adds `labels/`, so
+  `SemanticKittiDataset(root, keys=["lidar"])` should read KITTI Odometry
+  unchanged. Nobody has checked it.
+- **Scope.** Check on one real KITTI Odometry sequence; say it in
+  `installation.md` and `datasets/index.md`; decide whether a `kitti` extra
+  is worth an alias. State that KITTI Raw (`<drive>/<sensor>/data/`, one
+  `timestamps.txt` per sensor written as dates) is a different layout that
+  no class reads today. **Out:** a KITTI Raw declaration (needs a date clock
+  parser; a candidate for "After 0.9").
+- **Done when.** The sequence checked is named in the docs.
+- **Placement.** Core docs; a fixture test if the check needs a code change.
+
+### U4. "KITTI" names KITTI only; when to use which storage
+
+- **Goal.** One name per thing, and the docs say which storage to choose.
+- **Why.** "KITTI" names four things today: the extractor's export, the
+  "asynchronous (KITTI-layout)" datasets of `concepts.md`,
+  `TartanKittiDataset`, and SemanticKITTI, which is synchronous. The
+  extractor's export is not KITTI: it writes `.npy` files with epoch-second
+  `timestamps.txt` and a `channels.yaml`, the `.apairo` layout, which KITTI
+  tools do not read. A user with real KITTI data who trusts the name fails.
+  A newcomer also asked whether this layout is meant as a standard, when
+  Zarr and HDF5 suit training better. The answer follows from the design: the
+  standard is the `.apairo` contract (the sidecar that describes data where
+  it is), not one storage; the per-channel directory is the default because
+  it needs only numpy and `ls` can read it.
+- **Scope.**
+  - `apairo_extractor`: name the export after its storage (for example
+    `files` and `zarr`, both with the `.apairo` sidecar), in the TUI, the
+    README and the package description ("Extract ROS bags to KITTI format").
+  - `concepts.md`: "the per-channel directory layout" instead of
+    "KITTI-layout".
+  - A short docs section on storage choice: directories of files for
+    inspection and for frames read one at a time; Zarr or HDF5 (through a
+    `Convert` preprocess, or the containers plugin after 0.9) for many small
+    frames, compression, network filesystems, or a single file to ship.
+  - The `RawDataset` name ("raw" also reads as KITTI Raw or "unprocessed")
+    is an open question. Record it in `IDEAS.md`; any rename waits for 1.0
+    and goes through a deprecated alias.
+- **Done when.** `grep -ri kitti` over the docs and the extractor only
+  finds the KITTI datasets themselves.
+- **Placement.** Core docs and `apairo_extractor`.
+
+### U5. Satellites on PyPI, then `apairo[extractor]` and the like
+
+- **Goal.** `pip install apairo[extractor]` (and `transform`, `preprocess`,
+  `rerun`) installs the satellite.
+- **Why.** It is how a newcomer expects to find the rest of the ecosystem,
+  and it matches the dataset extras.
+- **Scope.** Publish `apairo-extractor`, `apairo-transform`,
+  `apairo-preprocess` and `apairo-rr` on PyPI (all four names were free on
+  2026-10-15). Replace their `git+https` dependencies (`apairo_rr`,
+  `apairo_preprocess`), which PyPI refuses. Then add the extras to apairo,
+  each with a compatible version range that is updated at every release. An
+  extra is an install shortcut only: apairo still never imports a satellite.
+- **Done when.** Each extra installs in a fresh virtualenv and its
+  `apairo <command>` runs.
+- **Depends on.** R8.
 
 ---
 
@@ -398,3 +515,7 @@ The public API and the `.apairo` format are declared stable at 1.0
     that is `None`, or merging `apairo_preprocess`'s
     `feature/output-format-from-input` breaks it. Its `export_mnt.py` also
     still imports `MNTDataset`, removed from apairo in 0.3.0.
+- **2026-10-15**: tutorial session 1, a fresh install of 0.9.0 used as a
+  newcomer would on the `barakuda1` extraction, added U1–U5. U1 landed on
+  `feature/tutorial-s1-ergonomics` the same day (949 tests, ruff and mypy
+  clean), with the merge pending.
