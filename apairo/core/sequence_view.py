@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from apairo.core.utils.indexing import from_end
+
 if TYPE_CHECKING:
     from apairo.core.sample import Sample
 
@@ -44,6 +46,8 @@ class SequenceView:
         return len(self._indices)
 
     def __getitem__(self, idx: int) -> Sample:
+        if idx < 0:
+            idx = from_end(idx, len(self))
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
         return self._parent[self._indices[idx]]

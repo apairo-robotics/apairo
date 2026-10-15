@@ -585,3 +585,36 @@ def test_bootstrap_read_only_directory(tmp_path, caplog):
         assert "Cannot write the .apairo sidecar" in caplog.text
     finally:
         _chmod_tree(seq, 0o755, 0o644)
+
+
+# ─────────────────────────────── indexing and repr ───────────────────────────
+
+
+def test_negative_index_counts_from_the_end(root_dataset):
+    root, len_a, len_b = root_dataset
+    ds = RawDataset(root)
+    n = len_a + len_b
+    assert ds[-1].timestamp == ds[n - 1].timestamp
+    assert ds[-n].timestamp == ds[0].timestamp
+    with pytest.raises(IndexError, match=rf"Index {-n - 1} out of range \[{-n}, {n}\)"):
+        ds[-n - 1]
+
+
+def test_negative_index_through_a_sequence(root_dataset):
+    root, len_a, len_b = root_dataset
+    seq_b = RawDataset(root).sequences[0]
+    assert seq_b[-1].timestamp == seq_b[len_b - 1].timestamp
+
+
+def test_repr_summarises_without_loading(tmp_path):
+    seq = tmp_path / "seq_a"
+    n = _make_sequence(seq, n_lidar=3)
+    ds = RawDataset(seq, keys=["imu"])
+    assert repr(ds) == f"RawDataset(n={n - 3}, keys=['imu'], root={str(seq)!r})"
+    assert str(ds) == repr(ds)
+
+
+def test_repr_counts_sequences_on_a_root(root_dataset):
+    root, len_a, len_b = root_dataset
+    text = repr(RawDataset(root))
+    assert text.startswith(f"RawDataset(n={len_a + len_b}, sequences=2, keys=[")
