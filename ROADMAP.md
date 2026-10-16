@@ -23,15 +23,16 @@ about a day, **M** a few days, **L** a week or more.
 | — | `csv` loader, `key: {column}` | M | — | ✅ landed (`20f843e`), unreleased |
 | — | A clock must hold one timestamp per frame | S | — | ✅ landed (`b6b6eb0`), unreleased |
 | — | `check` reports what loading refuses | S | — | ✅ landed (`53300f9`), unreleased |
+| — | `check` needs no `apairo init` | S | — | ✅ landed (`729baff`), unreleased |
 | R1 | Dataset guides: TUM RGB-D and EuRoC | S | W40 (28 Sep) | ✅ landed, unreleased |
 | R2 | Multi-channel preprocess on asynchronous datasets (tier 1) | M | W41 (5 Oct) | ✅ landed, unreleased |
 | R3 | A directory is a dataset | M | W42 (12 Oct) | ✅ landed, unreleased |
 | R4 | Schema and status hygiene | S | W42 (12 Oct) | ✅ landed, unreleased |
 | R5 | The format contract: a new format is a plugin | L | W42–W44 | ✅ landed, unreleased |
 | R6 | Manipulation example: the KUKA F/T and IMU logs, and `latency` | M | W44–W45 (26 Oct) | ✅ landed, unreleased |
-| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed on `feature/persist-views` |
-| R8 | Release 0.9.0 | S | W46 (9 Nov) | planned |
-| U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ landed on `feature/tutorial-s1-ergonomics` |
+| R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed, unreleased |
+| R8 | Release 0.9.0 | S | W46 (9 Nov) | first cut on `release/0.9.0`, to cut again |
+| U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ landed, unreleased |
 | U2 | Installation names the ecosystem | S | W43 (19 Oct) | planned |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | W44 (26 Oct) | planned |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | planned |
@@ -519,3 +520,11 @@ The public API and the `.apairo` format are declared stable at 1.0
   newcomer would on the `barakuda1` extraction, added U1–U5. U1 landed on
   `feature/tutorial-s1-ergonomics` the same day (949 tests, ruff and mypy
   clean), with the merge pending.
+- **2026-10-16**: U1 and `check` without `apairo init` merged into `main`
+  (952 tests, ruff and mypy clean).
+  - The two `apairo_extractor` gaps noted for R8 are fixed on its `main`
+    (`a914697`): preprocess outputs are registered as written, `npys` per
+    frame and `npy` stacked, and the MNT export keeps its own paths instead
+    of importing `MNTDataset`. The direct bag-to-MNT path reads ROS2 bags too.
+  - `release/0.9.0` (`9144c31`, 2026-10-15, unpublished) predates both merges.
+    R8 cuts it again from `main`; the tutorial venv still runs that first cut.
