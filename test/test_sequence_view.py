@@ -109,3 +109,21 @@ def test_sequences_cover_all_frames(rellis_root):
     ds = Rellis3DDataset(root, keys=["lidar"])
     total = sum(len(ds.sequence(sid)) for sid in ds.sequence_ids)
     assert total == len(ds)
+
+
+def test_sequence_view_negative_index(rellis_root):
+    root, n_frames = rellis_root
+    view = Rellis3DDataset(root, keys=["lidar"]).sequence("00001")
+    np.testing.assert_array_equal(
+        view[-1].data["lidar"], view[n_frames - 1].data["lidar"]
+    )
+    with pytest.raises(IndexError, match=rf"Index {-n_frames - 1} out of range"):
+        view[-n_frames - 1]
+
+
+def test_profiled_dataset_repr(rellis_root):
+    root, n_frames = rellis_root
+    ds = Rellis3DDataset(root, keys=["lidar"])
+    assert repr(ds).startswith(
+        f"Rellis3DDataset(n={3 * n_frames}, sequences=3, keys=['lidar'], root="
+    )

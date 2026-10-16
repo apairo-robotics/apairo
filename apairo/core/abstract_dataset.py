@@ -19,6 +19,7 @@ from . import abstract_loader
 from .config import Calibration, read_calibration
 from .sample import Sample
 from .utils.exceptions import KeysDuplicateError, KeysEmptyError
+from .utils.indexing import from_end
 from .utils.typing import _Key
 
 
@@ -171,6 +172,19 @@ class AbstractDataset(ABC):
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
+
+    def __repr__(self) -> str:
+        # Built from what the dataset already holds: printing never loads data.
+        parts = [f"n={len(self)}"]
+        # Absent on a single sequence and on data with no sequence structure.
+        sequence_ids = getattr(self, "sequence_ids", None)
+        if sequence_ids is not None:
+            parts.append(f"sequences={len(sequence_ids)}")
+        parts.append(f"keys={list(self.keys)}")
+        root = getattr(self, "root_dir", None)
+        if root is not None:
+            parts.append(f"root={str(root)!r}")
+        return f"{type(self).__name__}({', '.join(parts)})"
 
     def transform(
         self,
@@ -666,6 +680,9 @@ class AbstractDataset(ABC):
     def _load(self, idx: int) -> "Sample": ...
 
     def __getitem__(self, idx: int) -> "Sample":
+        # Integers only: profiled datasets also take a (sequence, index) tuple.
+        if isinstance(idx, (int, np.integer)) and idx < 0:
+            idx = from_end(idx, len(self))
         return self._apply_transforms(self._load(idx))
 
     def frame_info(self, idx: int) -> "FrameRef":

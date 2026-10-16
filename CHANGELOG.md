@@ -217,6 +217,19 @@ What 0.8 code or data may meet, and what to do:
   with TUM's own `associate.py` on a real sequence: 789 of its 792 pairs are
   identical, and the difference -- per-frame matching against one-to-one --
   is stated rather than glossed over.
+- **Three things a first session tries now work.** Found by going through the
+  Quickstart on a fresh install, against a real rosbag extraction:
+  - `ds[-1]` is the last sample, on every dataset and on a `SequenceView`.
+    Below `-len(ds)`, the `IndexError` gives the allowed range. The
+    `(sequence, index)` tuple of profiled datasets is unchanged.
+  - `print(ds)` shows `RawDataset(n=21236, keys=['imu_data'], root='...')`:
+    the length, the number of sequences on a root, the keys and the root. It
+    is built from what the dataset already holds and never loads a frame. The
+    views keep their own summaries.
+  - `sample["lidar"]` is `sample.data["lidar"]`, and `"lidar" in sample`
+    works. Channel names are free, so `sample["timestamp"]` reads a channel
+    of that name; without one, the `KeyError` points to `sample.timestamp`.
+    A `Sample` is still a dataclass, not a mapping, and is not iterable.
 
 ### Changed
 - **`status` counts what loading reads.** A channel's frame count, shape and

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from apairo.core.sample import Sample
 
@@ -27,3 +28,35 @@ def test_sample_is_dataclass():
 
     names = {f.name for f in fields(Sample)}
     assert names == {"data", "timestamp"}
+
+
+def test_subscript_reads_a_channel():
+    lidar = np.zeros((10, 4))
+    s = Sample(data={"lidar": lidar}, timestamp=1.0)
+    assert s["lidar"] is lidar
+    assert "lidar" in s
+    assert "labels" not in s
+
+
+def test_subscript_timestamp_is_a_channel_name():
+    # Channel names are free: a channel called "timestamp" wins.
+    s = Sample(data={"timestamp": np.array([5.0])}, timestamp=1.0)
+    assert s["timestamp"][0] == 5.0
+
+
+def test_missing_channel_names_the_channels():
+    s = Sample(data={"lidar": np.zeros(1)})
+    with pytest.raises(KeyError, match=r"no channel 'labels'.*\['lidar'\]"):
+        s["labels"]
+
+
+def test_missing_timestamp_points_to_the_attribute():
+    s = Sample(data={"imu": np.zeros(6)}, timestamp=1.0)
+    with pytest.raises(KeyError, match=r"sample\.timestamp"):
+        s["timestamp"]
+
+
+def test_sample_is_not_iterable():
+    # Iterating would otherwise fall back to s[0] and raise a KeyError.
+    with pytest.raises(TypeError, match="not iterable"):
+        iter(Sample(data={"x": np.zeros(1)}))

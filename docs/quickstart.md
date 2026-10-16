@@ -14,6 +14,8 @@ ds = apairo.SemanticKittiDataset(
 )
 
 print(len(ds))              # total number of frames across all sequences
+print(ds)                   # SemanticKittiDataset(n=..., sequences=..., keys=['lidar', 'labels'], root=...)
+last = ds[-1]               # negative indices count from the end
 sample = ds[0]
 print(sample.data["lidar"].shape)   # (N, 4)  numpy.ndarray -- x, y, z, intensity
 print(sample.data["labels"].shape)  # (N,)    numpy.ndarray -- semantic class IDs
@@ -52,6 +54,18 @@ class Sample:
     data: dict[str, np.ndarray]     # key -> numpy array
     timestamp: float | None         # None when the dataset has no clock
 ```
+
+A channel can also be read straight from the sample:
+
+```python
+sample["lidar"]       # same as sample.data["lidar"]
+"lidar" in sample     # True
+sample.timestamp      # the time is an attribute: sample["timestamp"] would be a channel
+```
+
+Channel names are free, so `sample["timestamp"]` reads a channel called
+`timestamp` if there is one; otherwise the `KeyError` points to
+`sample.timestamp`.
 
 ## Iterating
 
