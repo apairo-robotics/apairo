@@ -259,9 +259,13 @@ again on top of them.
   A newcomer looked for `pip install apairo[extractor]`. The extractor
   appears in the README only, and not at all in the docs.
 - **Scope.** An "Ecosystem" section: `apairo_extractor`, `apairo_transform`,
-  `apairo_preprocess`, `apairo_rr`, `apairo_visu`, one line each, with the
-  install command that works today (from git, none is on PyPI) and the
-  `apairo <command>` it adds when it does. **Out:** the extras (U5).
+  `apairo_preprocess`, `apairo_visu`, one line each, with the install
+  command that works today (from git, none is on PyPI) and the
+  `apairo <command>` it adds when it does. `apairo_visu` adds three, each
+  behind its own extra: `apairo visu` (`open3d`), `apairo studio` (`studio`)
+  and `apairo rerun` (`rerun`). `apairo_rr` is not listed: it was folded
+  into `apairo_visu` as its Rerun backend and is deprecated. **Out:** the
+  extras (U5).
 - **Done when.** Each command was run in a fresh virtualenv.
 - **Placement.** Core docs; the README links to the section.
 
@@ -316,15 +320,17 @@ again on top of them.
 ### U5. Satellites on PyPI, then `apairo[extractor]` and the like
 
 - **Goal.** `pip install apairo[extractor]` (and `transform`, `preprocess`,
-  `rerun`) installs the satellite.
+  `visu`) installs the satellite.
 - **Why.** It is how a newcomer expects to find the rest of the ecosystem,
   and it matches the dataset extras.
 - **Scope.** Publish `apairo-extractor`, `apairo-transform`,
-  `apairo-preprocess` and `apairo-rr` on PyPI (all four names were free on
-  2026-10-15). Replace their `git+https` dependencies (`apairo_rr`,
-  `apairo_preprocess`), which PyPI refuses. Then add the extras to apairo,
-  each with a compatible version range that is updated at every release. An
-  extra is an install shortcut only: apairo still never imports a satellite.
+  `apairo-preprocess` and `apairo-visu` on PyPI (all four names were free on
+  2026-10-19). `apairo-rr` is deprecated and is not published. Replace
+  `apairo_preprocess`'s `git+https` dependency on `apairo_transform`, which
+  PyPI refuses. Then add the extras to apairo, each with a compatible version
+  range that is updated at every release; whether `apairo[visu]` also brings
+  a backend, such as `apairo-visu[rerun]`, is decided then. An extra is an
+  install shortcut only: apairo still never imports a satellite.
 - **Done when.** Each extra installs in a fresh virtualenv and its
   `apairo <command>` runs.
 - **Depends on.** R8.
@@ -528,3 +534,7 @@ The public API and the `.apairo` format are declared stable at 1.0
     of importing `MNTDataset`. The direct bag-to-MNT path reads ROS2 bags too.
   - `release/0.9.0` (`9144c31`, 2026-10-15, unpublished) predates both merges.
     R8 cuts it again from `main`; the tutorial venv still runs that first cut.
+- **2026-10-19**: U2 and U5 named `apairo_rr`, deprecated since 2026-07-23
+  and folded into `apairo_visu` as its `rerun` extra; the local clone was
+  behind. They now name `apairo_visu`. Its Rerun examples still said
+  `pip install apairo-rr`, and now name the extra (`f65109b`).
