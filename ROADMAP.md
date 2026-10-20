@@ -35,7 +35,7 @@ about a day, **M** a few days, **L** a week or more.
 | U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ landed, unreleased |
 | U2 | Installation names the ecosystem | S | W43 (19 Oct) | planned |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | W44 (26 Oct) | planned |
-| U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | planned |
+| U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ landed, unreleased |
 | U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
 
@@ -538,3 +538,15 @@ The public API and the `.apairo` format are declared stable at 1.0
   and folded into `apairo_visu` as its `rerun` extra; the local clone was
   behind. They now name `apairo_visu`. Its Rerun examples still said
   `pip install apairo-rr`, and now name the extra (`f65109b`).
+- **2026-10-20**: U4 landed. The docs no longer call the per-channel
+  directory layout KITTI, and `concepts.md` says which storage to choose,
+  with `Convert` to move a channel between them; `IDEAS.md` holds the
+  `RawDataset` name for 1.0. In `apairo_extractor` (`9365d84`), the export
+  is "apairo", not "KITTI", in the TUI, `--help`, the README and the
+  package description. The scope had suggested `files` and `zarr`, "both
+  with the `.apairo` sidecar"; the second output is the MNT mission, which
+  has no sidecar, so it keeps its name. No flag changed. What `grep -ri
+  kitti` still finds is SemanticKITTI and KITTI's own conventions
+  (`poses.txt`, frames numbered alike across sensors).
+  - Also: the logo is redrawn solid, with a heavier wordmark (`fbc6174`),
+    on the docs and the organisation site.
