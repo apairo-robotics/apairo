@@ -1,53 +1,60 @@
-<svg viewBox="5 95 700 545" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="apairo logo">
+<svg viewBox="2 47 738 581" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="apairo logo">
   <title>apairo</title>
 
   <!-- ===================== PICTOGRAM: two clinking databases ===================== -->
+  <!-- Drawn on a 200x200 grid (docs/resources/logo/apairo_mark.svg), scaled 1.6. -->
+  <g transform="translate(211,63) scale(1.6)">
 
-  <!-- clink spark -->
-  <g stroke="#6B7A88" stroke-width="5" stroke-linecap="round">
-    <line x1="355" y1="168" x2="355" y2="132"/>
-    <line x1="342" y1="172" x2="329" y2="144"/>
-    <line x1="368" y1="172" x2="381" y2="144"/>
+    <!-- the ochre database stands in front: cut a 6.5 halo around it out of the other -->
+    <defs>
+      <mask id="apairo-full-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
+        <rect width="200" height="200" fill="#fff"/>
+        <path transform="translate(132,118) rotate(-14)" d="M-32,-48 A32,12 0 0,1 32,-48 V48 A32,12 0 0,1 -32,48 Z" fill="#000" stroke="#000" stroke-width="13" stroke-linejoin="round"/>
+      </mask>
+    </defs>
+
+    <!-- LEFT database (charbon): lid, upper band, lower band -->
+    <g mask="url(#apairo-full-cut)">
+      <g transform="translate(68,118) rotate(14)" fill="#2E3A48">
+        <ellipse cx="0" cy="-48" rx="32" ry="12"/>
+        <path d="M-32,-41.5 A32,12 0 0,0 32,-41.5 V-1.25 A32,12 0 0,1 -32,-1.25 Z"/>
+        <path d="M-32,5.25 A32,12 0 0,0 32,5.25 V48 A32,12 0 0,1 -32,48 Z"/>
+      </g>
+    </g>
+
+    <!-- RIGHT database (ocre) -->
+    <g transform="translate(132,118) rotate(-14)" fill="#DDA42A">
+      <ellipse cx="0" cy="-48" rx="32" ry="12"/>
+      <path d="M-32,-41.5 A32,12 0 0,0 32,-41.5 V-1.25 A32,12 0 0,1 -32,-1.25 Z"/>
+      <path d="M-32,5.25 A32,12 0 0,0 32,5.25 V48 A32,12 0 0,1 -32,48 Z"/>
+    </g>
+
+    <!-- clink spark -->
+    <g stroke="#6B7A88" stroke-width="9" stroke-linecap="round" fill="none">
+      <line x1="100" y1="44" x2="100" y2="26"/>
+      <line x1="86" y1="48" x2="78" y2="32"/>
+      <line x1="114" y1="48" x2="122" y2="32"/>
+    </g>
   </g>
 
-  <!-- LEFT database (charbon) -->
-  <g transform="translate(291,250) rotate(14)" fill="none" stroke="#2E3A48" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-    <ellipse cx="0" cy="-70" rx="46" ry="15"/>
-    <line x1="-46" y1="-70" x2="-46" y2="70"/>
-    <line x1="46" y1="-70" x2="46" y2="70"/>
-    <path d="M-46,-23 a46,15 0 0,0 92,0"/>
-    <path d="M-46,24 a46,15 0 0,0 92,0"/>
-    <path d="M-46,70 a46,15 0 0,0 92,0"/>
-  </g>
-
-  <!-- RIGHT database (ocre) -->
-  <g transform="translate(419,250) rotate(-14)" fill="none" stroke="#DDA42A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
-    <ellipse cx="0" cy="-70" rx="46" ry="15"/>
-    <line x1="-46" y1="-70" x2="-46" y2="70"/>
-    <line x1="46" y1="-70" x2="46" y2="70"/>
-    <path d="M-46,-23 a46,15 0 0,0 92,0"/>
-    <path d="M-46,24 a46,15 0 0,0 92,0"/>
-    <path d="M-46,70 a46,15 0 0,0 92,0"/>
-  </g>
-
-  <!-- ===================== WORDMARK: apairo (geometric monoline) ===================== -->
-  <g transform="translate(0,520)" fill="none" stroke="#2E3A48" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+  <!-- ===================== WORDMARK: apairo (geometric, heavy line) ===================== -->
+  <g transform="translate(0,520)" fill="none" stroke="#2E3A48" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
     <!-- a -->
     <circle cx="110" cy="-50" r="50"/>
     <line x1="160" y1="-100" x2="160" y2="0"/>
     <!-- p -->
-    <circle cx="244" cy="-50" r="50"/>
-    <line x1="194" y1="-100" x2="194" y2="50"/>
+    <circle cx="250" cy="-50" r="50"/>
+    <line x1="200" y1="-100" x2="200" y2="50"/>
     <!-- a -->
-    <circle cx="378" cy="-50" r="50"/>
-    <line x1="428" y1="-100" x2="428" y2="0"/>
+    <circle cx="390" cy="-50" r="50"/>
+    <line x1="440" y1="-100" x2="440" y2="0"/>
     <!-- i -->
-    <line x1="462" y1="-100" x2="462" y2="0"/>
-    <circle cx="462" cy="-122" r="5" fill="#2E3A48" stroke="none"/>
+    <line x1="480" y1="-100" x2="480" y2="0"/>
+    <circle cx="480" cy="-132" r="10" fill="#2E3A48" stroke="none"/>
     <!-- r -->
-    <line x1="496" y1="-100" x2="496" y2="0"/>
-    <path d="M496,-72 Q496,-100 524,-100"/>
+    <line x1="520" y1="-100" x2="520" y2="0"/>
+    <path d="M520,-72 Q520,-100 552,-100"/>
     <!-- o -->
-    <circle cx="600" cy="-50" r="50"/>
+    <circle cx="632" cy="-50" r="50"/>
   </g>
 </svg>

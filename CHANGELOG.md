@@ -266,6 +266,10 @@ What 0.8 code or data may meet, and what to do:
   directory that loads as it lies (the TUM, EuRoC and KUKA guides open theirs
   without `init`). It now exits 1 only on what loading refuses, such as a
   channel with no clock.
+- **Logo.** The two clinking databases are drawn solid, and the wordmark is
+  heavier to match. `docs/resources/logo/` holds the avatars and the mark for
+  light and dark surfaces; the docs header, which is charcoal, shows the
+  light-on-dark mark, where the left database used to vanish.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,

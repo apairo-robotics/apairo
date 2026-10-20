@@ -6,7 +6,7 @@ repo_name: apairo-robotics/apairo
 
 theme:
   name: material
-  logo: resources/apairo_mark.svg
+  logo: resources/logo/apairo_mark_on_dark.svg  # the header is charcoal
   favicon: resources/apairo_mark.svg
   palette:
     - scheme: default
