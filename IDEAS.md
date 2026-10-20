@@ -455,3 +455,12 @@ Two ways out, to weigh before 1.0:
 
 The first is closer to what the data is. Calibration poses also overlap with
 `calibration.yaml`, which describes transforms and intrinsics, not tables.
+
+## The `RawDataset` name
+
+Open, not scheduled. "Raw" also reads as KITTI Raw, which no class reads, or
+as "unprocessed", while `RawDataset` loads whatever `.apairo/channels.yaml`
+declares, derived channels included: it is the profile-free loader for a
+directory per channel. Candidates: `DirectoryDataset`, `ChannelDataset`,
+`DeclaredDataset`. A rename waits for 1.0 and keeps the old name as a
+deprecated alias for a release, as `process()` was kept for `__call__`.

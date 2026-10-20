@@ -31,7 +31,7 @@ ds = apairo.Rellis3DDataset("/data/rellis", keys=["lidar"])
 
 ## Asynchronous datasets
 
-Asynchronous datasets (TartanDrive, KITTI) interleave multiple sensor streams into a single timestamp-ordered timeline. Every `ds[i]` returns one event from one sensor.
+Asynchronous datasets (TartanDrive, a rosbag extraction) interleave multiple sensor streams into a single timestamp-ordered timeline. Every `ds[i]` returns one event from one sensor.
 
 ```python
 ds = apairo.TartanKittiDataset("/data/tartan/2024-01-01_forest")

@@ -7,7 +7,7 @@
 apairo handles the two fundamental layouts found in robotics datasets:
 
 - **Synchronous** -- every index `i` returns a complete co-captured frame (semantic segmentation datasets)
-- **Asynchronous** -- multiple sensors firing at different rates, interleaved into a single timestamp-ordered timeline (KITTI-style multi-modal recordings)
+- **Asynchronous** -- multiple sensors firing at different rates, interleaved into a single timestamp-ordered timeline (rosbag extractions, TartanDrive)
 
 ---
 

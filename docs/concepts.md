@@ -19,7 +19,7 @@ sequences/
 
 ### Asynchronous
 
-In asynchronous (KITTI-layout) datasets, each sensor has its own subdirectory with its own file sequence and a `timestamps.txt`. The sensors fire at different rates.
+In asynchronous datasets, stored one directory per channel, each sensor has its own subdirectory with its own file sequence and a `timestamps.txt`. The sensors fire at different rates.
 
 ```
 velodyne_0/   000000.bin   000001.bin   ...   timestamps.txt
@@ -71,6 +71,28 @@ ds = Goose3DDataset("/data/goose", keys=["lidar", "trav_label"])
 ```
 
 The sidecar is created and updated automatically by `run_preprocess`. You can also write it manually for ad-hoc derived data.
+
+---
+
+## Which storage to choose
+
+What apairo standardizes is the `.apairo` contract, not a storage: the sidecar describes the data where it lies, each channel with its format and its clock. A directory per channel, with one file per frame and a `timestamps.txt`, is the default because numpy alone reads it and `ls` shows it. It is not KITTI: KITTI tools do not read it, and KITTI's own datasets load through their profiles.
+
+| Storage | Formats | Choose it for |
+|---|---|---|
+| One file per frame | `npys`, `bin`, `img`, `pcd` | Large frames read one at a time, such as scans and images; inspecting or replacing one frame with ordinary tools. |
+| One stacked file per channel | `npy`, `csv` | Small frames at a high rate, such as an IMU, poses or forces: at 200 Hz, one file per frame makes 12,000 files a minute. |
+| A Zarr store per channel | `zarr` (`pip install apairo[zarr]`) | Chunked and compressed arrays; many frames on a network filesystem, where opening a file costs more than reading it. |
+
+Moving a channel from one storage to another is a preprocess. The new channel is registered in `.apairo` beside its source, with the source's clock:
+
+```python
+from apairo import Convert, RawDataset
+
+RawDataset.run_preprocess(Convert("imu", to="zarr"), seq)   # -> seq/imu_zarr/
+```
+
+One container holding a whole recording, such as an HDF5 file or a Zarr group of several channels, is not read yet.
 
 ---
 
