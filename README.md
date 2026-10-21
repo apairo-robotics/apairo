@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/apairo-robotics/apairo/main/docs/resources/apairo_logo_full.png" alt="apairo" width="380">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/apairo-robotics/apairo/main/docs/resources/logo/apairo_logo_full_on_dark.png">
+    <img src="https://raw.githubusercontent.com/apairo-robotics/apairo/main/docs/resources/apairo_logo_full.png" alt="apairo" width="380">
+  </picture>
 </p>
 
 <p align="center">

@@ -269,7 +269,8 @@ What 0.8 code or data may meet, and what to do:
 - **Logo.** The two clinking databases are drawn solid, and the wordmark is
   heavier to match. `docs/resources/logo/` holds the avatars and the mark for
   light and dark surfaces; the docs header, which is charcoal, shows the
-  light-on-dark mark, where the left database used to vanish.
+  light-on-dark mark, where the left database used to vanish. The README does
+  the same with the full logo under GitHub's dark theme.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,
