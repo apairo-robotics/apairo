@@ -276,7 +276,10 @@ What 0.8 code or data may meet, and what to do:
   works today (from GitHub) and the `apairo` command each adds; the README
   links to it. The tab that held transforms, filtering, caching and
   preprocessing is now "User Guide", and `synchronize()` has its own page
-  instead of the end of Async Datasets. The build validates anchors.
+  instead of the end of Async Datasets. The build validates anchors. The
+  Command Line page opens on a typical session, from bags to a viewer, and
+  its Ecosystem commands section lists `extractor`, `studio`, `rerun` and
+  `visu` with an example each.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,

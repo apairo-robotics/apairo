@@ -30,15 +30,45 @@ Inspect and initialize apairo datasets.
 `PATH` defaults to the current directory, so you can `cd` into a dataset and run
 the commands with no arguments.
 
-### Ecosystem commands
+## A typical session
+
+From ROS bags to a dataset you can look at, in the terminal. `extractor`,
+`studio` and `rerun` come from the [ecosystem](#ecosystem-commands); the
+others ship with apairo.
+
+```bash
+apairo extractor -i bags/ -l                            # the bags and their topics
+apairo extractor -i bags/ -o dataset/ -t /lidar /imu /tf
+cd dataset/
+apairo status                                           # channels, rates, spans, issues
+apairo check                                            # exit 1 if loading would refuse something
+apairo alias ouster_points lidar                        # optional: a clean public name
+apairo studio . --sync lidar                            # the dataset in the browser
+apairo rerun . --lidar lidar                            # or replayed in Rerun
+```
+
+A dataset that did not come from bags starts at `apairo status` instead:
+`status` and `check` read a directory as it is, and
+[`apairo declare`](#apairo-declare) writes the declaration it needs when the
+layout cannot be guessed.
+
+## Ecosystem commands
 
 Beyond its own commands, `apairo` is also a **dispatcher** for
 the wider ecosystem. Installed tools register a subcommand via the
-`apairo.cli_plugins` entry-point group, so they appear as `apairo <tool>`:
+`apairo.cli_plugins` entry-point group, so they appear as `apairo <tool>`.
+Each comes with its package
+([Installation → Ecosystem](installation.md#ecosystem)); its README has the
+full reference.
 
-```bash
-apairo extractor -i bags/ -o dataset/ -t /lidar /tf   # = apairo-extractor
-```
+| Command | Package | What it does | Example |
+|---|---|---|---|
+| `apairo extractor` | `apairo_extractor` | ROS bags to an apairo dataset; with no argument, an interactive TUI | `apairo extractor -i bags/ -o dataset/ -t /lidar /tf` |
+| `apairo studio` | `apairo_visu[studio]` | The pipeline graph and the samples of a dataset, in the browser | `apairo studio dataset/ --sync lidar` |
+| `apairo rerun` | `apairo_visu[rerun]` | Point clouds, images and labels replayed together in Rerun; `--save` writes a `.rrd` | `apairo rerun dataset/ --lidar lidar --camera image` |
+| `apairo visu` | `apairo_visu[open3d]` | Open3D viewer for GOOSE, Rellis-3D and SemanticKITTI, with their labels | `apairo visu --dataset goose --root /data/goose` |
+
+`apairo extractor` is also installed as `apairo-extractor`.
 
 This is plugin discovery, not a dependency: `apairo` never imports its tools, it
 just dispatches to whatever is installed (so there is no circular dependency

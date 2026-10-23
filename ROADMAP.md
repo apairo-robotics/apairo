@@ -668,3 +668,6 @@ The public API and the `.apairo` format are declared stable at 1.0
   `ds.available_keys`, which does not exist, and falls back to the first
   event's channels, a single one on an asynchronous dataset. Use
   `ds.available`.
+  Fixed the same day in `apairo_visu` (`a1e3eb3`). `cli.md` also opens on a
+  typical session and lists the four ecosystem commands, each checked on
+  `mini_tartan` except the extractor.
