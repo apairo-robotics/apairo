@@ -33,7 +33,7 @@ about a day, **M** a few days, **L** a week or more.
 | R7 | Persist a `synchronize()` result | M | W45 (2 Nov) | ✅ landed, unreleased |
 | R8 | Release 0.9.0 | S | W46 (9 Nov) | first cut on `release/0.9.0`, to cut again |
 | U1 | `ds[-1]`, `print(ds)`, `sample[key]` | S | W43 (19 Oct) | ✅ landed, unreleased |
-| U2 | Installation names the ecosystem | S | W43 (19 Oct) | planned |
+| U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ landed, unreleased |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | W44 (26 Oct) | planned |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ landed, unreleased |
 | U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
@@ -657,3 +657,14 @@ The public API and the `.apairo` format are declared stable at 1.0
   also decides whether `apairo_transform` and `apairo_preprocess` publish as
   one package. The dataset API tab is now "User Guide", with a
   Synchronization page (`9a52ce2`); mkdocs validates anchors.
+- **2026-10-23**: U2 landed. `installation.md` has an Ecosystem section and
+  the README links to it. Each install line ran in a fresh Python 3.12
+  virtualenv, against apairo 0.8.0 from PyPI: the extractor, transform and
+  preprocess packages, then `apairo_visu` once per extra. `apairo studio`
+  served `mini_tartan` (HTTP 200), `apairo rerun --save` wrote a `.rrd`, and
+  open3d 0.20 imported; `apairo extractor` ran `--help` only, with no bag at
+  hand. Found on the way, in `apairo_visu`: without `--lidar`, `apairo rerun`
+  offers `multisense_imu` only, not `velodyne_0`: `rerun/cli.py` reads
+  `ds.available_keys`, which does not exist, and falls back to the first
+  event's channels, a single one on an asynchronous dataset. Use
+  `ds.available`.

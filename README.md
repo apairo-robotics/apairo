@@ -40,6 +40,10 @@ pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-
 
 Requires Python ≥ 3.11.
 
+The extractor, transforms, preprocessors and viewers are separate packages,
+installed from GitHub: see [Ecosystem](https://apairo-robotics.github.io/apairo/installation/#ecosystem)
+for what each does and its install line.
+
 ---
 
 ## Quickstart

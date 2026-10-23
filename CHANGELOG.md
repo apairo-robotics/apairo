@@ -271,6 +271,12 @@ What 0.8 code or data may meet, and what to do:
   light and dark surfaces; the docs header, which is charcoal, shows the
   light-on-dark mark, where the left database used to vanish. The README does
   the same with the full logo under GitHub's dark theme.
+- **Docs.** The installation page has an Ecosystem section: what the
+  extractor, transforms, preprocessors and viewers do, the install line that
+  works today (from GitHub) and the `apairo` command each adds; the README
+  links to it. The tab that held transforms, filtering, caching and
+  preprocessing is now "User Guide", and `synchronize()` has its own page
+  instead of the end of Async Datasets. The build validates anchors.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,
