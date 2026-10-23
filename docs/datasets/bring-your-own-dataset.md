@@ -59,7 +59,7 @@ same. Materializing a self-contained clock belongs to the *write* side
 The `key` / `order` / `fields` / `alias` contracts are *human* knowledge — no
 scan can regenerate them. Start from `apairo declare <dir>` (a scaffold with
 the detected channels and commented hints), then write them in a
-[declaration](apairo-schema.md#apairoyaml--the-declaration-human-owned):
+[declaration](apairo-schema.md#apairoyaml-the-declaration-human-owned):
 `<seq>/apairo.yaml`, a visible file apairo **never writes**, safe from
 `init --force` and versionable in git. The examples below show the channel
 entries; they work identically in `apairo.yaml` (preferred) and in
@@ -268,7 +268,7 @@ You rarely set it, because it defaults sensibly:
 
 The alignment engine is unchanged. Once a channel's `key` populates
 `ds.timestamps[channel]`,
-[`synchronize()`](../async-datasets.md#synchronizing-async-sync) aligns it
+[`synchronize()`](../synchronization.md) aligns it
 exactly as always — `reference=`, `method=` (`nearest` / `previous` / `next`),
 `tolerance=`. Sparse subsets fall out for free: a reference tick where a
 channel has no event within the tolerance is dropped from the view, so the view

@@ -31,7 +31,7 @@ apairo merges all channels into a single timestamp-ordered timeline. `ds[i]` ret
 
 ### Bridging the two: `synchronize()`
 
-An asynchronous dataset can be resampled onto a reference clock with `ds.synchronize()`. The result is a synchronous view -- complete multi-channel samples, random access, full chaining API -- making the two layouts interchangeable downstream. See [Async Datasets](async-datasets.md#synchronizing-async-sync).
+An asynchronous dataset can be resampled onto a reference clock with `ds.synchronize()`. The result is a synchronous view -- complete multi-channel samples, random access, full chaining API -- making the two layouts interchangeable downstream. See [Synchronization](synchronization.md).
 
 ---
 

@@ -54,5 +54,18 @@ sample = ds[0]
 
 ---
 
+## User guide
+
+| Page | What it covers |
+|---|---|
+| [Synchronization](synchronization.md) | `synchronize()`: an asynchronous recording resampled onto one clock, interpolation, persisted views |
+| [Transforms](transform.md) | `transform()` and `Compose`: callables applied at read time, published and temporary channels |
+| [Filtering](filter.md) | `filter()`: a view restricted to the frames that pass a predicate |
+| [Views & Caching](views.md) | `select()` and `cache()`: channel projection, in-memory materialisation |
+| [Combining Datasets](combining.md) | `concat()` and `join()`: datasets stacked along frames or merged along channels |
+| [Preprocessing](preprocessing.md) | `FramePreprocessor` and `SequencePreprocessor`: derived channels written to disk |
+
+---
+
 [Get started ->](quickstart.md){ .md-button .md-button--primary }
 [Installation ->](installation.md){ .md-button }

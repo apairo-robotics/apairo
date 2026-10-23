@@ -103,7 +103,7 @@ issues      none
 !!! note "`init` writes only the machine registry"
     `init` (including `--force`) touches only `.apairo/` - it **never** writes
     or rebuilds an
-    [`apairo.yaml` declaration](datasets/apairo-schema.md#apairoyaml--the-declaration-human-owned),
+    [`apairo.yaml` declaration](datasets/apairo-schema.md#apairoyaml-the-declaration-human-owned),
     so a `--force` rebuild cannot destroy hand-written `key` / `fields` /
     `alias` contracts. The scan *respects* an existing declaration: stems
     explained by a declared `key`/`order` regex are not fanned out into
@@ -134,7 +134,7 @@ apairo init /data/RELLIS --as Rellis3DDataset
 
 ## `apairo declare`
 
-Scaffold a [declaration](datasets/apairo-schema.md#apairoyaml--the-declaration-human-owned)
+Scaffold a [declaration](datasets/apairo-schema.md#apairoyaml-the-declaration-human-owned)
 from a directory scan -- the human counterpart of `init`:
 
 ```bash
@@ -297,7 +297,7 @@ format: a file listing, an `.npy` header read through `mmap`, the first image or
 cloud, a table's lines counted without parsing its cells. `rate` and `span` come
 from its clock: a `timestamps.txt`, a declared `key`, moved back by a declared
 `latency`. A `views` line lists the synchronizations persisted in the sequence
-(see [Persisting a synchronization](async-datasets.md#persisting-a-synchronization)).
+(see [Persisting a synchronization](synchronization.md#persisting-a-synchronization)).
 
 `span` is shown **relative to the earliest timestamp** of the sequence (printed
 once on the `start` line), so absolute epoch timestamps stay readable and

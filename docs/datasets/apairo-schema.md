@@ -21,7 +21,7 @@ sequence. `dataset.yaml` and `calibration.yaml` are **optional** — a dataset w
 no extrinsics simply has no `calibration.yaml`. The split between `apairo.yaml`
 and `.apairo/` is by **owner**: the declaration is yours (apairo reads it and
 never writes it), the sidecar directory is the machine's — see
-[`apairo.yaml`](#apairoyaml--the-declaration-human-owned) below.
+[`apairo.yaml`](#apairoyaml-the-declaration-human-owned) below.
 
 ## Compatibility policy
 
@@ -151,7 +151,7 @@ and `apairo studio root/seq` read the same contract as entering by the root.
 ## `views.yaml` (persisted synchronizations)
 
 Written by `SynchronizedView.persist(name)`, read by `load_view(name)`
-([Persisting a synchronization](../async-datasets.md#persisting-a-synchronization)).
+([Persisting a synchronization](../synchronization.md#persisting-a-synchronization)).
 One entry per view; the indices live beside it in `views/<name>.npz`
 (`reference_timestamps`, and `index_<i>` for the *i*-th channel of `method`).
 
