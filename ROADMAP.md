@@ -37,6 +37,11 @@ about a day, **M** a few days, **L** a week or more.
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | W44 (26 Oct) | planned |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ landed, unreleased |
 | U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
+| D1 | One docs site for the ecosystem, built from the satellites | M | W47 (16 Nov) | planned |
+| D2 | Executed examples for `apairo_transform` | S | W48 (23 Nov) | planned |
+| D3 | A screen recording of `apairo studio` | S | W48 (23 Nov) | planned |
+| D4 | Studio live on a Hugging Face Space | M | after JOSS | planned |
+| D5 | Real-data results for `apairo_preprocess` | M | after JOSS | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
 
 ---
@@ -329,11 +334,107 @@ again on top of them.
   `apairo_preprocess`'s `git+https` dependency on `apairo_transform`, which
   PyPI refuses. Then add the extras to apairo, each with a compatible version
   range that is updated at every release; whether `apairo[visu]` also brings
-  a backend, such as `apairo-visu[rerun]`, is decided then. An extra is an
+  a backend, such as `apairo-visu[rerun]`, is decided then. Whether
+  `apairo_transform` and `apairo_preprocess` publish as one package, with
+  two extras, is decided before the names are taken. An extra is an
   install shortcut only: apairo still never imports a satellite.
 - **Done when.** Each extra installs in a fresh virtualenv and its
   `apairo <command>` runs.
 - **Depends on.** R8.
+
+
+---
+
+## Documentation: one site for the ecosystem
+
+The core docs are the only docs site. Each satellite gets a page in it, while
+its sources (docstrings, examples) stay in its own repository and are pulled
+in at build time, so the docs show the code that runs. Satellite READMEs
+shrink to the install line and a link. Decided on 2026-10-23: one site
+(one search, working cross-links, one build to maintain, one site for the
+JOSS reviewers) rather than a docs site per repository.
+
+D1–D3 follow 0.9.0; D4 and D5 follow the JOSS submission.
+
+### D1. One docs site for the ecosystem, built from the satellites
+
+- **Goal.** An "Ecosystem" tab with one page per satellite: what it does,
+  its install line, its `apairo <command>`, its examples and its API.
+- **Why.** U2 names the satellites on the installation page, but their
+  documentation lives in four READMEs, outside the site and its search.
+- **Scope.** `docs.yml` checks out `apairo_extractor`, `apairo_transform`,
+  `apairo_preprocess` and `apairo_visu` beside the core and installs them.
+  `mkdocstrings` documents their public API; `pymdownx.snippets` includes
+  their `examples/*.py` as they are. A satellite change reaches the site at
+  the next core build: a weekly scheduled build, or a `repository_dispatch`
+  from each satellite. The satellite READMEs keep the install line and link
+  to their page. `apairo_visu/docs/` and `apairo_huggingface/docs/` move into
+  the site or are dropped. **Out:** executing examples (D2), recordings (D3).
+- **Done when.** `mkdocs build --strict` passes in CI with the four
+  satellites checked out; each page's examples are included from its
+  repository, not copied.
+- **Placement.** Core docs and `docs.yml`; the satellite READMEs.
+- **Depends on.** U2, R8.
+
+### D2. Executed examples for `apairo_transform`
+
+- **Goal.** The transform page shows each example's output, produced by the
+  docs build.
+- **Why.** A transform is easier to judge by its output (a cloud cropped, a
+  label remapped, an augmentation's jitter) than by its code.
+- **Scope.** `markdown-exec` (or `mkdocs-gallery`) runs `augmentation.py`,
+  `compose.py`, `labels.py` and `pointcloud.py` at build time on a mini
+  dataset from the core's `test/assets` (`mini_semantic_kitti`, 1.8 MB for
+  all of them), and renders their text output
+  and a matplotlib figure (a bird's-eye view of a cloud). The examples are
+  adapted to take the fixture's path. **Out:** real datasets, which CI
+  cannot download.
+- **Done when.** A wrong example fails the docs build.
+- **Placement.** `apairo_transform/examples`, core docs.
+- **Depends on.** D1.
+
+### D3. A screen recording of `apairo studio`
+
+- **Goal.** The Studio page shows the studio in use.
+- **Why.** Studio is a FastAPI server over live dataset objects; GitHub
+  Pages is static and cannot run it. A recording is the cheapest way to show
+  it.
+- **Scope.** A short recording (GIF or MP4, under 30 s, light and dark) of
+  `apairo studio` on a public dataset: the pipeline graph, a node clicked,
+  its channel table. A script or a written procedure to record it again when
+  the UI changes.
+- **Done when.** The recording is on the Studio page and its procedure is
+  committed.
+- **Placement.** Core docs (the Studio page from D1).
+- **Depends on.** D1.
+
+### D4. Studio live on a Hugging Face Space
+
+- **Goal.** A reader can use the studio from the docs, without installing
+  anything.
+- **Scope.** A Docker Space running `apairo studio` on a small public
+  dataset, embedded in the Studio page by iframe, as was done for toaster
+  (its `hf-space` branch). The free tier sleeps when idle; the page says so.
+  A static, serverless demo mode (graph and samples frozen to JSON, served
+  by the zero-build front) is the alternative if the Space proves too slow.
+- **Done when.** The Space starts from the page and serves the graph.
+- **Depends on.** D3, the JOSS submission.
+
+### D5. Real-data results for `apairo_preprocess`
+
+- **Goal.** Each preprocessor's page shows what it produces on a real
+  recording.
+- **Why.** Ground segmentation, KISS-ICP odometry and traversability are
+  judged on real data, which CI cannot download.
+- **Scope.** A script in `apairo_preprocess` renders each example on a named
+  public sequence into images or short videos, committed with the dataset
+  and the command that produced them. 3D results also as a Rerun `.rrd`
+  served with the docs and opened in Rerun's web viewer, so the cloud can be
+  turned. **Out:** running them in CI.
+- **Done when.** Every image says which sequence and which command produced
+  it, and the script regenerates them all.
+- **Placement.** `apairo_preprocess`, core docs.
+- **Depends on.** D1, the JOSS submission.
 
 ---
 
@@ -550,3 +651,9 @@ The public API and the `.apairo` format are declared stable at 1.0
   (`poses.txt`, frames numbered alike across sensors).
   - Also: the logo is redrawn solid, with a heavier wordmark (`fbc6174`),
     on the docs and the organisation site.
+- **2026-10-23**: D1–D5 added: one docs site for the ecosystem, the
+  satellites' docs built from their repositories, executed examples, a
+  studio recording, then after JOSS a live studio and real-data results. U5
+  also decides whether `apairo_transform` and `apairo_preprocess` publish as
+  one package. The dataset API tab is now "User Guide", with a
+  Synchronization page (`9a52ce2`); mkdocs validates anchors.
