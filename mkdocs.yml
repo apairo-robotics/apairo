@@ -72,7 +72,6 @@ nav:
   - Getting Started:
     - Installation: installation.md
     - Quickstart: quickstart.md
-    - Command Line: cli.md
   - Concepts:
     - Concepts: concepts.md
     - Design & Philosophy: design.md
@@ -95,6 +94,7 @@ nav:
     - Views & Caching: views.md
     - Combining Datasets: combining.md
     - Preprocessing: preprocessing.md
+  - Command Line: cli.md
   - Examples:
     - Multi-dataset training: examples/cross_dataset_concat.md
     - Sequence k-fold CV: examples/sequence_kfold.md

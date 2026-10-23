@@ -89,3 +89,15 @@ Available keys for each dataset class are exposed as a class attribute:
 ```python
 print(apairo.Goose3DDataset.available_keys)   # frozenset({'lidar', 'labels'})
 ```
+
+## From the terminal
+
+The `apairo` command inspects and checks a dataset without any Python:
+
+```bash
+apairo status /data/my_dataset   # channels, rates, spans, issues
+apairo check /data/my_dataset    # exit 1 if loading would refuse something
+```
+
+The [Command Line](cli.md) tab has a typical session, from ROS bags to a
+viewer, and every command.

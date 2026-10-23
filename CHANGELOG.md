@@ -279,7 +279,8 @@ What 0.8 code or data may meet, and what to do:
   instead of the end of Async Datasets. The build validates anchors. The
   Command Line page opens on a typical session, from bags to a viewer, and
   its Ecosystem commands section lists `extractor`, `studio`, `rerun` and
-  `visu` with an example each.
+  `visu` with an example each. It moved out of Getting Started into a tab of
+  its own, and the Quickstart points to it.
 
 ### Removed
 - `apairo.core.config.KNOWN_LOADERS`: the registry is the list of formats,
