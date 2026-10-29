@@ -686,3 +686,8 @@ The public API and the `.apairo` format are declared stable at 1.0
   (extractor 124, preprocess 133, transform 162, visu 111). A tag now
   uploads only after the whole CI passes (`45ed776`). U3 moves after 0.9:
   its structural check passed, the real-sequence check is docs only.
+- **2026-10-30**: R8 done. Zenodo archived v0.9.0 as
+  `10.5281/zenodo.23768995`, and the concept DOI resolves to it;
+  `CITATION.cff` names it. `apairo_preprocess` merged
+  `feature/output-format-from-input` (`ac9a901`), and the organisation site
+  shows 0.9.0 (`aa37cea`).
