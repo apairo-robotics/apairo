@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # publish.yml runs the whole CI on a release tag before it uploads.
+  workflow_call:
 
 jobs:
   lint:
