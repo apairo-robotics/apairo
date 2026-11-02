@@ -79,13 +79,22 @@ def _read_manifest(root: Path) -> dict:
 
 def _is_dataset_root(path: Path) -> bool:
     """A root has a dataset manifest, or subdirectories that are sequences --
-    already initialised (``.apairo``) or a bare channel layout to bootstrap."""
+    already initialised (``.apairo``), a bare channel layout to bootstrap, or
+    declared (an ``apairo.yaml``: a container recording, whose channels only a
+    declaration can name, has no channel directory to detect)."""
     if (path / CONFIG_DIR / _MANIFEST_FILE).exists():
         return True
     return any(
-        config_exists(d) or RawDataset._is_sequence_layout(d)
+        _is_sequence_dir(d)
         for d in path.iterdir()
         if d.is_dir() and not d.name.startswith(".")
+    )
+
+
+def _is_sequence_dir(d: Path) -> bool:
+    """Is *d* a sequence of a root: initialised, declared, or a bare layout?"""
+    return (
+        config_exists(d) or declaration_exists(d) or RawDataset._is_sequence_layout(d)
     )
 
 
@@ -307,8 +316,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         manifest = _read_manifest(root)
         self._name = manifest.get("name", root.name)
 
-        def is_seq(d: Path) -> bool:  # initialised, or a bare layout to bootstrap
-            return config_exists(d) or self._is_sequence_layout(d)
+        is_seq = _is_sequence_dir
 
         # Sequence order: manifest order if given, else sorted discovery.
         if manifest.get("sequences"):
