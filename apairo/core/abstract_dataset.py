@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from apairo.core.chain import InferenceView
     from apairo.core.filtered_view import FilteredView
-    from apairo.core.synchronized_view import ChannelStrategy
+    from apairo.core.synchronized_view import ChannelStrategy, Tolerance
 from . import abstract_loader
 from ._ops import Op, records
 from .config import Calibration, read_calibration
@@ -719,7 +719,7 @@ class AbstractDataset(ABC):
         self,
         reference: "str | np.ndarray | None" = None,
         method: "ChannelStrategy | dict[str, ChannelStrategy]" = "previous",
-        tolerance: float | None = None,
+        tolerance: "Tolerance" = None,
     ) -> "AbstractDataset":
         """Resample this asynchronous dataset onto a single reference clock.
 
@@ -768,9 +768,18 @@ class AbstractDataset(ABC):
                 index = no match); or an
                 :class:`~apairo.core.interpolator.Interpolator` synthesizing
                 the value at ``t_ref`` from the two bracketing events.
-            tolerance: Maximum ``|t - t_ref|`` in seconds.  Reference frames
-                where any channel has no match within tolerance are dropped
-                (for interpolated channels, both bracketing events count).
+            tolerance: Maximum ``|t - t_ref|`` in seconds, for every channel;
+                or a dict of per-channel tolerances, like ``method`` (unlisted
+                channels, and channels mapped to ``None``, are unconstrained).
+                Reference frames where any channel has no match within its
+                tolerance are dropped (for interpolated channels, both
+                bracketing events count)::
+
+                    ds.synchronize(
+                        reference="camera",
+                        method={"lidar": "nearest", "poses": Se3Interp()},
+                        tolerance={"lidar": 0.05, "poses": 0.15},
+                    )
 
         Returns:
             :class:`~apairo.core.synchronized_view.SynchronizedView`

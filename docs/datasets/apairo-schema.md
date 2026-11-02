@@ -163,7 +163,7 @@ views:
     reference: velodyne_0          # null for an external clock
     method: {velodyne_0: nearest, multisense_imu: nearest,
              gicp_poses: "interpolate:apairo_transform.interp.Se3Interp"}
-    tolerance: 0.05                # null for none
+    tolerance: 0.05                # null for none; per channel: {velodyne_0: 0.05}
     frames: 5041
     sources:                       # the fingerprint load_view checks
       velodyne_0: {frames: 5041, clock: 3fa2b0c94e17d8a1}
@@ -176,7 +176,7 @@ views:
 | `file` | The index file, relative to `.apairo/`. |
 | `reference` | The channel whose clock the view resamples onto; `null` for an external clock. |
 | `method` | Per channel: `previous`, `next`, `nearest`, `custom:<name>` (a callable, not needed to reload), or `interpolate:<class>` (passed again to `load_view`). |
-| `tolerance` | The tolerance, in seconds, or `null`. |
+| `tolerance` | The tolerance, in seconds, or `null`. A tolerance given per channel is a mapping of channel to seconds (or `null`); a channel it does not list is unconstrained. |
 | `frames` | The number of frames the view kept. |
 | `sources` | Per channel, its frame count and a hash of its clock when the view was persisted. A difference makes `load_view` refuse the view as stale. |
 | `created` | When the view was persisted (UTC). |
