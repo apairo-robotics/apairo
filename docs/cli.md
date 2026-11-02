@@ -93,7 +93,7 @@ apairo init [PATH] [--name NAME] [--force] [--as CLASS] [--declare FILE|NAME]
 
 - **Sequence** (its sub-directories hold data files) -> writes
   `.apairo/channels.yaml`, inferring each channel's loader from the files on
-  disk (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`; an `hdf5`
+  disk (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`, `video`; an `hdf5`
   channel is declared, never detected).
 - **A directory with its data files directly inside**, and no sub-directory ->
   a sequence of its own: its frames are one channel named after the directory

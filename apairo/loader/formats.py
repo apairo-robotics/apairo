@@ -21,6 +21,8 @@ from apairo.loader.img_loader import IMGLoader
 from apairo.loader.npy_loader import NPYLoader
 from apairo.loader.npys_loader import NPYSLoader
 from apairo.loader.pcd_loader import PCDLoader, _parse_header
+from apairo.loader.video_loader import EXTENSIONS as VIDEO_EXTENSIONS
+from apairo.loader.video_loader import VideoLoader
 from apairo.loader.zarr_loader import ZarrLoader
 
 
@@ -383,7 +385,7 @@ class Hdf5Format(Format):
     loader = Hdf5ArrayLoader
     extensions = HDF5_EXTENSIONS
     per_frame = False
-    fields = frozenset({"array_file", "array"})
+    fields = frozenset({"array_file", "array", "decode"})
     key_forms = frozenset({"array"})
     priority = 80
     detectable = False
@@ -403,7 +405,10 @@ class Hdf5Format(Format):
                 f"(in {directory})"
             )
         return Hdf5ArrayLoader(
-            str(directory), array=array, array_file=meta.get("array_file")
+            str(directory),
+            array=array,
+            array_file=meta.get("array_file"),
+            decode=meta.get("decode"),
         )
 
     def clock(self, loader, spec: dict, label: str) -> np.ndarray:
@@ -422,8 +427,11 @@ class Hdf5Format(Format):
     ) -> Facts:
         loader = self.open(directory, meta, files)
         dataset = loader._dataset()
+        decoded = meta.get("decode") == "video"
         facts = Facts(
-            frames=len(loader), shape=list(loader.shape), dtype=str(dataset.dtype)
+            frames=len(loader),
+            shape=list(loader.shape),
+            dtype="uint8" if decoded else str(dataset.dtype),
         )
         spec = meta.get("key")
         if isinstance(spec, dict) and "array" in spec and len(loader):
@@ -460,6 +468,9 @@ class Hdf5Format(Format):
             issues.append(
                 f"{key}: 'array' must be a path inside the file, got {array!r}"
             )
+        decode = meta.get("decode")
+        if decode is not None and decode != "video":
+            issues.append(f"{key}: decode: only 'video' is known, got {decode!r}")
         spec = meta.get("key")
         if (
             isinstance(spec, dict)
@@ -472,6 +483,44 @@ class Hdf5Format(Format):
         return issues
 
 
+class VideoFormat(Format):
+    """One video file per channel (MP4, MKV, ...): frame ``i`` is its ``i``-th
+    frame, decoded with random access. ``key: {pts: true}`` takes the clock
+    from the frames' presentation timestamps, in seconds from the stream's
+    origin; otherwise the channel needs a ``timestamps.txt`` or a borrowed
+    clock. Read-only: a re-encoded video would not read back unchanged."""
+
+    name = "video"
+    loader = VideoLoader
+    extensions = VIDEO_EXTENSIONS
+    per_frame = False
+    fields = frozenset({"array_file"})
+    key_forms = frozenset({"pts"})
+    priority = 45
+
+    def detect(self, directory: Path) -> bool:
+        return len(self.data_files(directory)) == 1
+
+    def open(self, directory: Path, meta: dict, files: list[str] | None = None):
+        return VideoLoader(str(directory), array_file=meta.get("array_file"))
+
+    def clock(self, loader, spec: dict, label: str) -> np.ndarray:
+        if spec.get("pts") is not True:
+            raise ValueError(f"{label}: the video clock is 'key: {{pts: true}}'.")
+        return loader.reader.seconds()
+
+    def facts(
+        self, directory: Path, meta: dict, files: list[str] | None = None
+    ) -> Facts:
+        loader = self.open(directory, meta, files)
+        facts = Facts(frames=len(loader), shape=list(loader.shape), dtype="uint8")
+        spec = meta.get("key")
+        if isinstance(spec, dict) and spec.get("pts") is True:
+            clock = loader.reader.seconds()
+            facts.span = (float(clock[0]), float(clock[-1]))
+        return facts
+
+
 # Registered by the registry, which keeps their names as the built-in ones.
 BUILTIN_FORMATS = (
     NpysFormat(),
@@ -482,4 +531,5 @@ BUILTIN_FORMATS = (
     ZarrFormat(),
     CsvFormat(),
     Hdf5Format(),
+    VideoFormat(),
 )

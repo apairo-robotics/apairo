@@ -1,7 +1,7 @@
 # Write a Format Plugin
 
-apairo reads every channel through a **format**. Eight are built in: `npy`,
-`npys`, `bin`, `img`, `zarr`, `pcd`, `csv` and `hdf5`. If your data is stored some other
+apairo reads every channel through a **format**. Nine are built in: `npy`,
+`npys`, `bin`, `img`, `zarr`, `pcd`, `csv`, `hdf5` and `video`. If your data is stored some other
 way, you don't need to change apairo. You write a small class in a package of
 your own, and apairo finds it through an entry point. Once that package is
 installed, `loader: <name>` works everywhere a built-in name does:
@@ -113,7 +113,7 @@ frame, recognized by its extension, opened as `loader(directory)` or
 | `suffixes` | `False` | Frames may have suffixed variants (`000000_intensity.npy`), which become sibling channels. |
 | `fields` | `{}` | The channel fields the format reads, which may include fields of its own. `check` accepts them on its channels and flags them on others. |
 | `key_forms` | `{}` | Clock forms the data provides, such as `{"column"}` for `csv`. Declared as `key: {<form>: ...}`. |
-| `priority` | `50` | The detection order, lowest first. The built-ins use `zarr` 10, `bin` 20, `pcd` 30, `img` 40, `npys` 50, `npy` 51, `hdf5` 80 and `csv` 90. |
+| `priority` | `50` | The detection order, lowest first. The built-ins use `zarr` 10, `bin` 20, `pcd` 30, `img` 40, `video` 45, `npys` 50, `npy` 51, `hdf5` 80 and `csv` 90. |
 | `write_suffix` | `""` | The suffix of the frame files a per-frame format writes, one of its `extensions`. |
 | `detectable` | `True` | `False` for a format a channel only ever declares, such as `hdf5`: a container file holds a whole recording, which only a declaration splits into channels. Its `detect` answers `False`, and `check_format` checks that instead of detection. |
 

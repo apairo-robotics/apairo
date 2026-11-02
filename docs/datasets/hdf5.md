@@ -47,13 +47,14 @@ one HDF5 file in which every sensor has its own clock under `/timestamps`:
   robot_state/pose               (13401, 7)     ~600 Hz
   timestamps/measured_force      (23240,)       epoch seconds
   timestamps/...
-  hama1, hama2, hand             encoded MP4 bytes (cameras)
+  hama1, hama2, hand             cameras: MP4 bytes, 30 Hz
+  timestamps/hama1               (697,)         one stamp per video frame
 ```
 
 A declaration ships with apairo,
 [`reassemble`](https://github.com/apairo-robotics/apairo/blob/main/apairo/dataset/declarations/reassemble.yaml):
-force, torque, joints, pose and gripper. `pip install apairo[reassemble]`
-brings `h5py`. A sequence is a directory holding one demonstration. The
+force, torque, joints, pose, gripper, and the three cameras.
+`pip install apairo[reassemble]` brings `h5py` and PyAV. A sequence is a directory holding one demonstration. The
 download holds every demonstration in one folder, so give each one a directory
 of its own, with a link rather than a copy:
 
@@ -69,6 +70,8 @@ gripper  raw   hdf5    22549   970.6 Hz   0.01-23.24s  (2) float64
 joints   raw   hdf5    22549   970.6 Hz   0.01-23.24s  (7) float64
 pose     raw   hdf5    13401   576.6 Hz   0.00-23.24s  (7) float64
 torque   raw   hdf5    23240   1000.0 Hz  0.00-23.24s  (3) float64
+hama1    raw   hdf5    697     30.0 Hz    0.01-23.21s  (480, 640, 3) uint8
+...
 ```
 
 The rate `status` prints is frames over span. The force sensor bursts, so its
@@ -79,7 +82,9 @@ import numpy as np
 import apairo
 from apairo_transform.interp import Se3Interp
 
-demo = apairo.RawDataset("demos/2025-01-11-14-43-37", declare="reassemble")
+demo = apairo.RawDataset(
+    "demos/2025-01-11-14-43-37", declare="reassemble", keys=["force", "joints", "pose"]
+)
 t0, t1 = demo.timestamps["pose"][[0, -1]]
 frames = demo.synchronize(
     reference=np.arange(t0, t1, 1 / 30),          # the cameras' 30 Hz
@@ -90,8 +95,44 @@ frames[100].data["force"]                         # one row, read from the file
 ```
 
 Nothing is converted: rows are read from the file when a frame is accessed.
-The camera and audio streams are encoded inside the file and are not channels
-yet.
+
+## Encoded video inside a container
+
+The cameras are MP4 videos stored as single values of the file. `decode: video`
+reads such a value as a channel of frames, decoded on access:
+
+```yaml
+  hand:
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /hand
+    decode: video
+    key: {array: /timestamps/hand, units: [s]}
+```
+
+Frame `i` is the video's `i`-th frame, `(H, W, 3)` uint8 RGB, and the clock is
+REASSEMBLE's own, one stamp per frame. Reading frames in order decodes each
+once; a jump decodes from the nearest keyframe before it. On the camera clock,
+every frame gets the force, joints and pose of its instant:
+
+```python
+demo = apairo.RawDataset(
+    "demos/2025-01-11-14-43-37",
+    declare="reassemble",
+    keys=["hand", "force", "joints", "pose"],  # a channel not listed below
+)                                              # would be matched "previous"
+frames = demo.synchronize(
+    reference="hand",
+    method={"force": "nearest", "joints": "nearest", "pose": Se3Interp()},
+    tolerance=0.01,
+)
+frames[200].data["hand"].shape                    # (480, 640, 3)
+```
+
+A video stored as a file of its own (`.mp4`, `.mkv`, ...) is the `video`
+format: a channel directory holding one video file, detected like any other,
+with `key: {pts: true}` for the clock its presentation timestamps give.
 
 ## Notes
 

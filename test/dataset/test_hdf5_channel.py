@@ -199,8 +199,10 @@ def test_reassemble_declaration_ships_by_name(tmp_path):
         ):
             f[f"robot_state/{name}"] = np.zeros((n, width))
             f[f"timestamps/{name}"] = t0 + np.arange(n) / n
-        f["hama1"] = np.void(b"not a channel")
-    ds = apairo.RawDataset(demo, declare="reassemble")
+    # The cameras are MP4 bytes, decoded by the video format: the sample
+    # mini_reassemble covers them (test_samples.py).
+    sensors = ["force", "torque", "joints", "pose", "gripper"]
+    ds = apairo.RawDataset(demo, declare="reassemble", keys=sensors)
     assert set(ds.timestamps) == {"force", "torque", "joints", "pose", "gripper"}
     frames = ds.synchronize(reference="pose", method="nearest", tolerance=0.01)
     assert len(frames) == 60 and frames[0].data["joints"].shape == (7,)

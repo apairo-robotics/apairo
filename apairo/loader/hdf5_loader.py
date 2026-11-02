@@ -68,13 +68,34 @@ class Hdf5ArrayLoader(AbstractLoader):
     """Frame ``i`` is row ``i`` of the array ``array`` of an HDF5 file."""
 
     def __init__(
-        self, directory: str, array: str, array_file: str | None = None
+        self,
+        directory: str,
+        array: str,
+        array_file: str | None = None,
+        decode: str | None = None,
     ) -> None:
         self.directory = Path(directory)
         self.path = locate(self.directory, array_file)
         self.array = array
         self._handle = _Handle(self.path)
+        self._video = None
+        self._shape: tuple[int, ...]
         dataset = self._dataset()
+        if decode is not None:
+            if decode != "video":
+                raise ValueError(f"decode: only 'video' is known, got {decode!r}")
+            if dataset.ndim != 0:
+                raise ValueError(
+                    f"{self.path.name}:{array} is an array of shape {dataset.shape}; "
+                    f"decode: video reads one value holding an encoded video."
+                )
+            from apairo.loader.video_loader import VideoReader
+
+            # A bound method, not a lambda: the loader pickles into workers.
+            self._video = VideoReader(self._encoded)
+            self._len = len(self._video)
+            self._shape = (self._video.height, self._video.width, 3)
+            return
         if dataset.ndim == 0:
             raise ValueError(
                 f"{self.path.name}:{array} is a scalar, not an array of frames; "
@@ -90,10 +111,16 @@ class Hdf5ArrayLoader(AbstractLoader):
             raise KeyError(f"{self.path.name} has no array '{name}'")
         return f[name]
 
+    def _encoded(self) -> bytes:
+        value = self._dataset()[()]
+        return value.tobytes() if hasattr(value, "tobytes") else bytes(value)
+
     def __len__(self) -> int:
         return self._len
 
     def __getitem__(self, idx: int) -> np.ndarray:
+        if self._video is not None:
+            return self._video[idx]
         if idx < 0:
             idx += self._len
         if not 0 <= idx < self._len:
