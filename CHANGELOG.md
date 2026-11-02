@@ -38,6 +38,12 @@ All notable changes to apairo are documented here. The format is based on
   refused with the list of formats the writer can write.
 
 ### Fixed
+- **A declared sequence is a sequence of its root.** A root's subdirectory
+  counted only when it had a `.apairo/` or a channel directory a format
+  detects. A recording whose channels only a declaration can name -- one HDF5
+  container file, split into channels by `array:` -- has neither until it is
+  opened once, so its root failed with "neither a sequence nor a dataset
+  root". A subdirectory with an `apairo.yaml` now counts.
 - **`ds.run_preprocess(p)` reopens the dataset as `ds` was opened.** The
   runner reopens the dataset with the preprocessor's input keys, and the
   instance form passed it only the directory: a `declare=`, a `split=` or a

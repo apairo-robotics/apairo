@@ -627,3 +627,59 @@ def test_repr_counts_sequences_on_a_root(root_dataset):
     root, len_a, len_b = root_dataset
     text = repr(RawDataset(root))
     assert text.startswith(f"RawDataset(n={len_a + len_b}, sequences=2, keys=[")
+
+
+def test_root_of_declared_only_sequences(tmp_path):
+    # A sequence whose only channel is a container file no format detects (an
+    # HDF5 recording, split into channels by its declaration) is still a
+    # sequence of its root: its apairo.yaml marks it.
+    from apairo.core.abstract_loader import AbstractLoader
+    from apairo.core.formats import Format, register_format
+
+    class RowsLoader(AbstractLoader):
+        def __init__(self, directory, files=None):
+            self.rows = np.loadtxt(os.path.join(directory, "rec.rows"), ndmin=2)
+
+        def __len__(self):
+            return len(self.rows)
+
+        def __getitem__(self, i):
+            return self.rows[i]
+
+        @property
+        def shape(self):
+            return self.rows.shape[1:]
+
+    class DeclaredOnly(Format):
+        name = "declared_only_rows"
+        loader = RowsLoader
+        extensions = frozenset({".rows"})
+        per_frame = False
+
+        def detect(self, directory):
+            return False
+
+    register_format(DeclaredOnly, replace=True)
+    root = tmp_path / "root"
+    for name in ("demo_a", "demo_b"):
+        seq = root / name
+        seq.mkdir(parents=True)
+        np.savetxt(seq / "rec.rows", np.arange(6.0).reshape(3, 2))
+        np.savetxt(seq / "t.stamps", [0.0, 0.1, 0.2])
+        (seq / "apairo.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "version": 1,
+                    "channels": {
+                        "rows": {
+                            "loader": "declared_only_rows",
+                            "directory": ".",
+                            "key": {"file": "t.stamps"},
+                        }
+                    },
+                }
+            )
+        )
+    ds = RawDataset(root, keys=["rows"])
+    assert ds.sequence_ids == ["demo_a", "demo_b"]
+    assert len(ds) == 6
