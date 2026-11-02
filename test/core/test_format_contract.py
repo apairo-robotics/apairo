@@ -452,7 +452,8 @@ def test_an_unknown_loader_points_at_plugins(tmp_path, plugins, capsys):
         seq, {"version": 1, "channels": {"scan": {"kind": "raw", "loader": "mcap"}}}
     )
     assert any(
-        "unknown loader 'mcap' (known: bin, csv, hdf5, img, npy, npys, pcd, zarr)" in i
+        "unknown loader 'mcap' (known: bin, csv, hdf5, img, npy, npys, pcd, video, zarr)"
+        in i
         for i in verify_config(seq)
     )
 

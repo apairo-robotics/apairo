@@ -8,6 +8,15 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Video: the `video` format, and `decode: video` in `hdf5`**
+  (`pip install apairo[video]`, PyAV). A channel is a video's frames, `(H, W,
+  3)` uint8 RGB, decoded on access with random access: the packets are indexed
+  once, a jump decodes from the nearest keyframe before the frame, and a
+  sequential pass decodes each frame once. A channel directory holding one
+  video file is detected; `key: {pts: true}` takes its clock from the
+  presentation timestamps. Inside an HDF5 container, `decode: video` reads one
+  value holding an encoded video. REASSEMBLE's three cameras are now channels
+  of its declaration.
 - **HDF5 containers: the `hdf5` format** (`pip install apairo[hdf5]`). A
   channel is one array of a container file, named by its path inside it
   (`array: /robot_state/measured_force`), and its clock is another array of

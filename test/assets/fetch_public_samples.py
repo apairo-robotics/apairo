@@ -17,9 +17,10 @@ the same indices for both, so every label stays on its point.
   the first second of the two other test runs; the static calibration tables,
   which carry no clock, are left out.
 - ``mini_reassemble``: REASSEMBLE (TU Wien, doi:10.48436/0ewrv-8cb44,
-  CC BY 4.0). The first half second of the five sensors the ``reassemble``
-  declaration reads, each with its own clock, from the smallest demonstration
-  of ``data.zip``; the cameras, audio and events are left out.
+  CC BY 4.0). The first half second of the five sensors and three cameras
+  the ``reassemble`` declaration reads, each with its own clock, from the
+  smallest demonstration of ``data.zip``; the camera clips are re-encoded
+  (a cut of an encoded stream is a new stream), audio and events left out.
 
 Usage::
 
@@ -63,6 +64,7 @@ REASSEMBLE_ARRAYS = (
     "pose",
     "gripper_positions",
 )
+REASSEMBLE_CAMERAS = ("hama1", "hama2", "hand")
 
 
 class _RangeFile(io.RawIOBase):
@@ -205,7 +207,39 @@ def fetch_reassemble(
                 n = int(np.searchsorted(clock, t0 + seconds, side="right"))
                 out[f"robot_state/{a}"] = f[f"robot_state/{a}"][:n]
                 out[f"timestamps/{a}"] = clock[:n]
+            for cam in REASSEMBLE_CAMERAS:
+                clock = f[f"timestamps/{cam}"][()]
+                n = int(np.searchsorted(clock, t0 + seconds, side="right"))
+                out[cam] = np.void(_first_frames(f[cam][()].tobytes(), n))
+                out[f"timestamps/{cam}"] = clock[:n]
     return dst
+
+
+def _first_frames(mp4: bytes, n: int) -> bytes:
+    """The first *n* frames of an MP4, re-encoded (H.264): a cut of an encoded
+    stream is a new stream."""
+    import av
+
+    frames = []
+    with av.open(io.BytesIO(mp4)) as src:
+        for frame in src.decode(video=0):
+            frames.append(frame.to_ndarray(format="rgb24"))
+            if len(frames) == n:
+                break
+    buf = io.BytesIO()
+    with av.open(buf, "w", format="mp4") as out:
+        stream = out.add_stream("libx264", rate=30)
+        stream.height, stream.width = frames[0].shape[:2]
+        stream.pix_fmt = "yuv420p"
+        stream.options = {"crf": "30"}
+        for img in frames:
+            for packet in stream.encode(
+                av.VideoFrame.from_ndarray(img, format="rgb24")
+            ):
+                out.mux(packet)
+        for packet in stream.encode():
+            out.mux(packet)
+    return buf.getvalue()
 
 
 if __name__ == "__main__":

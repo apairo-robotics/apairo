@@ -83,6 +83,7 @@ What apairo standardizes is the `.apairo` contract, not a storage: the sidecar d
 | One file per frame | `npys`, `bin`, `img`, `pcd` | Large frames read one at a time, such as scans and images; inspecting or replacing one frame with ordinary tools. |
 | One stacked file per channel | `npy`, `csv` | Small frames at a high rate, such as an IMU, poses or forces: at 200 Hz, one file per frame makes 12,000 files a minute. |
 | A Zarr store per channel | `zarr` (`pip install apairo[zarr]`) | Chunked and compressed arrays; many frames on a network filesystem, where opening a file costs more than reading it. |
+| One video file per channel | `video` (`pip install apairo[video]`) | Camera streams as recorded or published (MP4, MKV): decoded frame by frame with random access, never extracted to images. |
 | One container file per recording | `hdf5` (`pip install apairo[hdf5]`) | A recording already stored as an HDF5 file, read in place: each channel is one of its arrays, its clock another. See [HDF5 containers](datasets/hdf5.md). |
 
 Moving a channel from one storage to another is a preprocess. The new channel is registered in `.apairo` beside its source, with the source's clock:

@@ -161,13 +161,14 @@ samples:
     declare: reassemble
     root: mini_reassemble
     source: >-
-      real excerpt: the first half second of the five sensors the declaration
-      reads, each on its own clock, from demonstration 2025-01-11-14-43-37 of
-      data.zip (TU Wien, doi:10.48436/0ewrv-8cb44); cameras, audio and events
-      left out; test/assets/fetch_public_samples.py
+      real excerpt: the first half second of the five sensors and three
+      cameras the declaration reads, each on its own clock, from demonstration
+      2025-01-11-14-43-37 of data.zip (TU Wien, doi:10.48436/0ewrv-8cb44); the
+      camera clips re-encoded, audio and events left out;
+      test/assets/fetch_public_samples.py
     license: CC BY 4.0
     real_env: APAIRO_REAL_REASSEMBLE
-    keys: [force, torque, joints, pose, gripper]
+    keys: [force, torque, joints, pose, gripper, hama1, hama2, hand]
     clock: true
     expect:
       force: {shape: [3], dtype: float64}
@@ -175,3 +176,6 @@ samples:
       joints: {shape: [7], dtype: float64}
       pose: {shape: [7], dtype: float64}
       gripper: {shape: [2], dtype: float64}
+      hama1: {shape: [480, 640, 3], dtype: uint8}
+      hama2: {shape: [480, 640, 3], dtype: uint8}
+      hand: {shape: [480, 640, 3], dtype: uint8}

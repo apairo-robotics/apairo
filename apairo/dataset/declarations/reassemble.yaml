@@ -1,7 +1,8 @@
 # REASSEMBLE (TU Wien, CC BY 4.0, doi:10.48436/0ewrv-8cb44): one HDF5 file per
 # demonstration, every sensor on its own clock under /timestamps (epoch s).
-# A sequence is a directory holding one demonstration's .h5. The cameras and
-# audio are encoded MP4/MP3 bytes in the same file: not channels yet.
+# A sequence is a directory holding one demonstration's .h5. The cameras are
+# MP4 bytes in the same file, decoded frame by frame (decode: video); the
+# audio and the event stream are not channels.
 version: 1
 channels:
   force:                    # end-effector force, ~1.7 kHz
@@ -34,3 +35,24 @@ channels:
     array_file: "*.h5"
     array: /robot_state/gripper_positions
     key: {array: /timestamps/gripper_positions, units: [s]}
+  hama1:                    # external camera 1, 640x480 RGB, 30 Hz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /hama1
+    decode: video
+    key: {array: /timestamps/hama1, units: [s]}
+  hama2:                    # external camera 2, 640x480 RGB, 30 Hz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /hama2
+    decode: video
+    key: {array: /timestamps/hama2, units: [s]}
+  hand:                     # wrist camera, 640x480 RGB, 30 Hz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /hand
+    decode: video
+    key: {array: /timestamps/hand, units: [s]}

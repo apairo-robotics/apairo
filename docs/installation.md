@@ -23,10 +23,13 @@ pip install apairo[zarr]
 # HDF5 containers (h5py)
 pip install apairo[hdf5]
 
+# Video channels: MP4, MKV, ... (PyAV)
+pip install apairo[video]
+
 # Benchmark / plotting utilities (matplotlib)
 pip install apairo[bench]
 
-# Development tools (pytest, Pillow, zarr, h5py, ruff, mypy)
+# Development tools (pytest, Pillow, zarr, h5py, PyAV, ruff, mypy)
 pip install apairo[dev]
 ```
 
