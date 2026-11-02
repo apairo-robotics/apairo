@@ -10,6 +10,7 @@ import numpy as np
 
 from apairo.core.abstract_dataset import AbstractDataset
 from apairo.core.interpolator import Interpolator
+from apairo.core.utils.indexing import from_end
 
 if TYPE_CHECKING:
     from apairo.core.abstract_dataset import FrameRef
@@ -459,28 +460,46 @@ class SynchronizedView(AbstractDataset):
 
         if not 0 <= idx < len(self):
             raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        data = {key: self._channel_value(key, idx) for key in self._keys}
+        return Sample(data=data, timestamp=float(self._ref_timestamps[idx]))
 
+    def load(self, key: str, idx: int):
+        """Channel *key* of frame *idx*, read alone: the event matched to the
+        frame's tick, or the value interpolated at it. Only that channel's
+        events are read -- the cheap way to look at one channel of a frame
+        (``self[idx]`` reads every channel). Like ``load`` on any dataset, the
+        stored value: transforms registered on the view are not applied.
+
+        Raises:
+            KeyError: *key* is not one of the view's channels.
+            IndexError: *idx* is out of range.
+        """
+        if key not in self._index_map:
+            raise KeyError(
+                f"{key!r} is not a channel of this view; its channels are {self._keys}."
+            )
+        if isinstance(idx, (int, np.integer)) and idx < 0:
+            idx = from_end(int(idx), len(self))
+        if not 0 <= idx < len(self):
+            raise IndexError(f"Index {idx} out of range [0, {len(self)})")
+        return self._channel_value(key, int(idx))
+
+    def _reads_channel(self, key: str) -> bool:
+        return key in self._index_map
+
+    def _channel_value(self, key: str, idx: int):
+        """Frame *idx*'s value for *key*, reading that channel only."""
+        loader = self._parent.loaders[key]
+        strat = self._strategies[key]
+        if not isinstance(strat, Interpolator):
+            return loader[int(self._index_map[key][idx])]
+        i0, i1 = (int(i) for i in self._index_map[key][idx])
+        v0 = loader[i0]
+        if i0 == i1:  # exact match -- no synthesis needed
+            return v0
+        ts = self._channel_ts[key]
         t_ref = float(self._ref_timestamps[idx])
-        data = {}
-        for key in self._keys:
-            strat = self._strategies[key]
-            if isinstance(strat, Interpolator):
-                i0, i1 = (int(i) for i in self._index_map[key][idx])
-                v0 = self._parent.loaders[key][i0]
-                if i0 == i1:  # exact match -- no synthesis needed
-                    data[key] = v0
-                else:
-                    ts = self._channel_ts[key]
-                    data[key] = strat(
-                        t_ref,
-                        float(ts[i0]),
-                        v0,
-                        float(ts[i1]),
-                        self._parent.loaders[key][i1],
-                    )
-            else:
-                data[key] = self._parent.loaders[key][int(self._index_map[key][idx])]
-        return Sample(data=data, timestamp=t_ref)
+        return strat(t_ref, float(ts[i0]), v0, float(ts[i1]), loader[i1])
 
     def __repr__(self) -> str:
         ref = self._reference if self._reference is not None else "<external clock>"

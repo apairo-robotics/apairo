@@ -460,6 +460,15 @@ def test_root_synchronize_concats_per_sequence(root_dataset):
     assert {"lidar", "imu"} <= set(sample.data)
 
 
+def test_root_synchronize_loads_one_channel_of_a_frame(root_dataset):
+    # On a root, load(key, k) reaches the sequence that holds frame k.
+    root, _, _ = root_dataset
+    synced = RawDataset(root).synchronize(reference="lidar")
+    for k in range(len(synced)):
+        np.testing.assert_array_equal(synced.load("imu", k), synced[k].data["imu"])
+    assert len(synced.filter("lidar", lambda x: x.shape == (4, 3))) == 5
+
+
 def test_root_external_clock_rejected(root_dataset):
     root, _, _ = root_dataset
     ds = RawDataset(root)
