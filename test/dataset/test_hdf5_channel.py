@@ -183,6 +183,29 @@ def test_is_a_builtin_format():
     assert get_format("hdf5").name == "hdf5"
 
 
+def test_reassemble_declaration_ships_by_name(tmp_path):
+    # The layout of a REASSEMBLE demonstration: sensors under /robot_state,
+    # each clock under /timestamps, epoch seconds.
+    demo = tmp_path / "2025-01-11-14-43-37"
+    demo.mkdir()
+    t0 = 1736603018.4
+    with h5py.File(demo / "2025-01-11-14-43-37.h5", "w") as f:
+        for name, width, n in (
+            ("measured_force", 3, 170),
+            ("measured_torque", 3, 170),
+            ("joint_positions", 7, 100),
+            ("pose", 7, 60),
+            ("gripper_positions", 2, 100),
+        ):
+            f[f"robot_state/{name}"] = np.zeros((n, width))
+            f[f"timestamps/{name}"] = t0 + np.arange(n) / n
+        f["hama1"] = np.void(b"not a channel")
+    ds = apairo.RawDataset(demo, declare="reassemble")
+    assert set(ds.timestamps) == {"force", "torque", "joints", "pose", "gripper"}
+    frames = ds.synchronize(reference="pose", method="nearest", tolerance=0.01)
+    assert len(frames) == 60 and frames[0].data["joints"].shape == (7,)
+
+
 def test_status_and_check_read_a_container_through_a_declaration(tmp_path, capsys):
     # No .apairo and no channel directory: --declare alone makes it a sequence,
     # and reading it writes nothing.

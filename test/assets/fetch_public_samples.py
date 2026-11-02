@@ -16,6 +16,10 @@ the same indices for both, so every label stays on its point.
   10.5281/zenodo.11096791, CC BY 4.0). The ``1-baseline`` tables whole, and
   the first second of the two other test runs; the static calibration tables,
   which carry no clock, are left out.
+- ``mini_reassemble``: REASSEMBLE (TU Wien, doi:10.48436/0ewrv-8cb44,
+  CC BY 4.0). The first half second of the five sensors the ``reassemble``
+  declaration reads, each with its own clock, from the smallest demonstration
+  of ``data.zip``; the cameras, audio and events are left out.
 
 Usage::
 
@@ -48,6 +52,17 @@ SEMANTIC_KITTI_LABELS = "http://www.semantic-kitti.org/assets/data_odometry_labe
 SEMANTIC_KITTI = [("00", 3), ("08", 3)]
 KUKA = "https://zenodo.org/records/11096791/files/{name}?download=1"
 KUKA_RUNS = {"1-baseline": None, "2-vibrations": 1.0, "3-vibrations-contact": 1.0}
+REASSEMBLE = (
+    "https://researchdata.tuwien.ac.at/records/0ewrv-8cb44/files/data.zip?download=1"
+)
+REASSEMBLE_DEMO = "2025-01-11-14-43-37"
+REASSEMBLE_ARRAYS = (
+    "measured_force",
+    "measured_torque",
+    "joint_positions",
+    "pose",
+    "gripper_positions",
+)
 
 
 class _RangeFile(io.RawIOBase):
@@ -166,6 +181,38 @@ def fetch_kuka(dst: Path = ASSETS / "mini_kuka_ft_imu") -> Path:
     return dst
 
 
+def fetch_reassemble(
+    dst: Path = ASSETS / "mini_reassemble", seconds: float = 0.5
+) -> Path:
+    """One demonstration's declared sensors, cut after *seconds* from its start:
+    a cut keeps each sensor's rate and clock, which a stride would not."""
+    import tempfile
+
+    import h5py
+
+    if dst.exists():
+        shutil.rmtree(dst)
+    dst.mkdir()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(_archive(REASSEMBLE).extract(f"data/{REASSEMBLE_DEMO}.h5", tmp))
+        with (
+            h5py.File(src, "r") as f,
+            h5py.File(dst / f"{REASSEMBLE_DEMO}.h5", "w") as out,
+        ):
+            t0 = min(float(f[f"timestamps/{a}"][0]) for a in REASSEMBLE_ARRAYS)
+            for a in REASSEMBLE_ARRAYS:
+                clock = f[f"timestamps/{a}"][()]
+                n = int(np.searchsorted(clock, t0 + seconds, side="right"))
+                out[f"robot_state/{a}"] = f[f"robot_state/{a}"][:n]
+                out[f"timestamps/{a}"] = clock[:n]
+    return dst
+
+
 if __name__ == "__main__":
-    for path in (fetch_goose(), fetch_semantic_kitti(), fetch_kuka()):
+    for path in (
+        fetch_goose(),
+        fetch_semantic_kitti(),
+        fetch_kuka(),
+        fetch_reassemble(),
+    ):
         print("wrote", path.relative_to(ASSETS))

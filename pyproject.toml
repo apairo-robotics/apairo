@@ -54,6 +54,7 @@ semantic-kitti = []         # SemanticKITTI: clouds and labels
 tum = ["Pillow"]            # TUM RGB-D: colour and depth images
 euroc = ["Pillow"]          # EuRoC MAV: camera images
 kuka = []                   # KUKA LBR Med F/T and IMU logs: CSV tables
+reassemble = ["h5py>=3.8"]  # REASSEMBLE: one HDF5 file per demonstration
 # The ecosystem, as install shortcuts only: apairo never imports these
 # packages (its CLI finds their commands once installed). Each range is the
 # satellite's release line known to work with this apairo; it moves at every

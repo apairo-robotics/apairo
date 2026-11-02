@@ -85,6 +85,7 @@ nav:
     - Async Datasets: async-datasets.md
     - "Guide: TUM RGB-D": datasets/tum-rgbd.md
     - "Guide: EuRoC MAV": datasets/euroc.md
+    - "Guide: HDF5 containers": datasets/hdf5.md
     - "Guide: KUKA F/T and IMU": datasets/kuka-ft-imu.md
   - User Guide:
     - Frames & Calibration: frames.md
