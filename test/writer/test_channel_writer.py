@@ -89,8 +89,18 @@ def test_partial_timestamps_raise_on_close(tmp_path):
 
 
 def test_rejects_non_per_frame_loader(tmp_path):
-    with pytest.raises(ValueError, match="per-frame loaders"):
+    with pytest.raises(ValueError, match="one file per frame"):
         ChannelWriter(tmp_path / "seq", "gt", loader="npy")  # stacked, out of scope
+
+
+def test_rejects_a_read_only_format(tmp_path):
+    with pytest.raises(ValueError, match="'pcd' is read-only"):
+        ChannelWriter(tmp_path / "seq", "gt", loader="pcd")
+
+
+def test_rejects_an_unknown_format(tmp_path):
+    with pytest.raises(KeyError, match="Unknown loader 'h5'"):
+        ChannelWriter(tmp_path / "seq", "gt", loader="h5")
 
 
 def test_roundtrip_loads_with_rawdataset(tmp_path):
@@ -127,7 +137,99 @@ def test_unpadded_stems_keep_their_own_timestamp(tmp_path):
 
 
 def test_a_bin_channel_takes_n_by_4_points_only(tmp_path):
-    with pytest.raises(ValueError, match=r"\(N, 4\) points.*shape \(8, 3\)"):
+    with pytest.raises(ValueError, match=r"cannot hold.*shape \(8, 3\)"):
         ChannelWriter(tmp_path / "seq", "cloud", loader="bin").add(
             np.zeros((8, 3), np.float32), stem="000000"
         )
+
+# ─────────────────────── any per-frame format that writes ────────────────────
+
+
+def _cloud_sequence(seq, n=3):
+    (seq / "cloud").mkdir(parents=True)
+    for i in range(n):
+        np.save(seq / "cloud" / f"{i:06d}.npy", np.random.rand(8, 3))
+    np.savetxt(seq / "cloud" / "timestamps.txt", 100.0 + np.arange(n))
+    apairo.RawDataset.init(seq)
+    return seq
+
+
+def test_img_masks_round_trip_through_rawdataset(tmp_path):
+    seq = _cloud_sequence(tmp_path / "seq")
+    rng = np.random.default_rng(0)
+    masks = [rng.integers(0, 256, (6, 8), dtype=np.uint8) for _ in range(3)]
+    with ChannelWriter(
+        seq, "mask", loader="img", timestamps_from="cloud", sources=["cloud"]
+    ) as w:
+        for i, mask in enumerate(masks):
+            w.add(mask, stem=f"{i:06d}", timestamp=100.0 + i)
+
+    assert sorted(p.name for p in (seq / "mask").iterdir()) == [
+        "000000.png",
+        "000001.png",
+        "000002.png",
+        "timestamps.txt",
+    ]
+    assert read_config(seq)["channels"]["mask"]["loader"] == "img"
+    ds = apairo.RawDataset(seq, keys=["mask"])
+    assert len(ds) == 3
+    for i, mask in enumerate(masks):
+        got = ds.load("mask", i)
+        assert got.dtype == np.uint8
+        np.testing.assert_array_equal(got, mask)
+    np.testing.assert_allclose(ds.timestamps["mask"], [100.0, 101.0, 102.0])
+
+
+def test_img_resumes_its_own_frames(tmp_path):
+    seq = tmp_path / "seq"
+    with ChannelWriter(seq, "mask", loader="img") as w:
+        w.add(np.zeros((2, 2), np.uint8), stem="000001", timestamp=1.0)
+    with ChannelWriter(seq, "mask", loader="img") as w:
+        w.add(np.ones((2, 2), np.uint8), stem="000002", timestamp=2.0)
+    assert _read_ts(seq / "mask") == [1.0, 2.0]
+
+
+@pytest.mark.parametrize(
+    "loader, frame",
+    [
+        ("img", np.zeros((6, 8), np.float32)),  # PNG holds uint8 / uint16
+        ("img", np.zeros((6, 8, 2), np.uint8)),  # neither grey, RGB nor RGBA
+        ("bin", np.zeros((5, 3), np.float32)),  # bin is (N, 4) float32
+        ("npys", np.array([object()], dtype=object)),
+    ],
+)
+def test_a_frame_the_format_cannot_hold_is_refused(tmp_path, loader, frame):
+    seq = tmp_path / "seq"
+    w = ChannelWriter(seq, "gt", loader=loader)
+    with pytest.raises(ValueError, match=f"format '{loader}' cannot hold"):
+        w.add(frame, stem="000000")
+    assert not (seq / "gt").exists()  # nothing written on refusal
+
+
+def test_a_later_frame_the_format_cannot_hold_is_refused(tmp_path):
+    seq = tmp_path / "seq"
+    w = ChannelWriter(seq, "mask", loader="img")
+    w.add(np.zeros((2, 2), np.uint8), stem="000000")
+    with pytest.raises(ValueError, match="cannot hold"):
+        w.add(np.zeros((2, 2), np.float64), stem="000001")
+    assert [p.name for p in (seq / "mask").iterdir()] == ["000000.png"]
+
+
+@pytest.mark.parametrize(
+    "loader, frame",
+    [
+        ("npys", np.arange(12, dtype=np.int16).reshape(3, 4)),
+        ("npys", np.asfortranarray(np.arange(12.0).reshape(3, 4))),
+        ("bin", np.arange(20, dtype=np.float32).reshape(5, 4)),
+    ],
+)
+def test_npys_and_bin_write_the_bytes_they_always_did(tmp_path, loader, frame):
+    from apairo.writer import BINWriter, NPYWriter
+
+    legacy = {"npys": (NPYWriter, ".npy"), "bin": (BINWriter, ".bin")}[loader]
+    expected = tmp_path / f"expected{legacy[1]}"
+    legacy[0]().write(frame, expected)
+    with ChannelWriter(tmp_path / "seq", "gt", loader=loader) as w:
+        w.add(frame, stem="000000")
+    written = tmp_path / "seq" / "gt" / f"000000{legacy[1]}"
+    assert written.read_bytes() == expected.read_bytes()

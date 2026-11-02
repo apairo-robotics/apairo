@@ -1,5 +1,9 @@
 """ChannelWriter -- write a per-frame channel in the on-disk format apairo reads.
 
+Frames are written through the format contract (:mod:`apairo.core.formats`):
+any registered per-frame format that writes -- ``npys``, ``bin``, ``img``, or a
+plugin's -- stores them, and refuses a frame it could not read back unchanged.
+
 External producers (annotation tools, or preprocessors that already *hold* the
 data rather than expose a deterministic ``process(sample)`` function) use this
 instead of hand-writing the layout.  It owns the three things that make a channel
@@ -24,24 +28,30 @@ Usage::
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
 from apairo.core.config import register_channel
+from apairo.core.formats import Format, formats, get_format
 from apairo.core.naming import frame_order, frame_stem_is_valid, require_frame_stem
-from apairo.writer.bin_writer import BINWriter
-from apairo.writer.npy_writer import NPYWriter
 
-# Per-frame array loaders this writer can emit (one data file per frame). The
-# stacked ``npy`` (one file, many rows) and ``img``/``zarr`` use different on-disk
-# models and are out of scope here.
-_PER_FRAME: dict[str, tuple[Callable[[], Any], str]] = {
-    "npys": (NPYWriter, ".npy"),
-    "bin": (BINWriter, ".bin"),
-}
+
+def _frame_format(loader: str) -> Format:
+    """The registered format *loader*, if it writes one file per frame."""
+    fmt = get_format(loader)
+    if fmt.per_frame and fmt.writes:
+        return fmt
+    writable = sorted(f.name for f in formats() if f.per_frame and f.writes)
+    why = (
+        f"format '{loader}' is read-only"
+        if fmt.per_frame
+        else f"format '{loader}' stores a channel in one object, not one file per frame"
+    )
+    raise ValueError(
+        f"ChannelWriter writes one file per frame: {why}. Formats it can write: "
+        f"{', '.join(writable)}."
+    )
 
 
 class ChannelWriter:
@@ -50,8 +60,10 @@ class ChannelWriter:
     Args:
         seq_dir: The sequence directory the channel lives in.
         channel: Channel name (its on-disk sub-directory and registry key).
-        loader: Per-frame loader to write for -- ``"npys"`` (``.npy``, any dtype)
-            or ``"bin"`` (raw ``float32``).
+        loader: The format to write, any registered per-frame format that
+            writes: ``"npys"`` (``.npy``, any dtype), ``"bin"`` (``(N, 4)``
+            ``float32``), ``"img"`` (PNG: ``uint8`` grey, RGB or RGBA, or a
+            ``uint16`` depth map), or a plugin's.
         timestamps_from: Channel whose timestamps this one shares (provenance).
         sources: Channels this one is derived from (provenance).
         frame: Coordinate frame of the data (descriptive metadata).
@@ -67,12 +79,8 @@ class ChannelWriter:
         sources: list[str] | None = None,
         frame: str | None = None,
     ) -> None:
-        if loader not in _PER_FRAME:
-            raise ValueError(
-                f"ChannelWriter handles per-frame loaders {sorted(_PER_FRAME)}, "
-                f"not {loader!r} (stacked 'npy'/'img'/'zarr' are out of scope)."
-            )
-        writer_cls, self._ext = _PER_FRAME[loader]
+        self._format = _frame_format(loader)
+        self._ext = self._format.write_suffix
         self._seq_dir = Path(seq_dir)
         self._channel = channel
         self._loader = loader
@@ -80,7 +88,6 @@ class ChannelWriter:
         self._sources = list(sources) if sources else None
         self._frame = frame
         self._cdir = self._seq_dir / channel
-        self._writer = writer_cls()
         self._closed = False
         # Resume an existing channel so incremental annotation across runs stays
         # consistent: pick up the frames already on disk and their timestamps.
@@ -89,11 +96,13 @@ class ChannelWriter:
     def _read_existing(self) -> dict[str, float | None]:
         if not self._cdir.is_dir():
             return {}
-        stems = self._in_frame_order(
+        # The frames the format reads back, in the order it reads them, which
+        # timestamps.txt must follow.
+        stems = [
             p.stem
-            for p in self._cdir.glob(f"*{self._ext}")
+            for p in self._format.data_files(self._cdir)
             if frame_stem_is_valid(p.stem)
-        )
+        ]
         if not stems:
             return {}
         ts_path = self._cdir / "timestamps.txt"
@@ -103,30 +112,28 @@ class ChannelWriter:
                 return dict(zip(stems, rows, strict=True))
         return {s: None for s in stems}
 
-    def _in_frame_order(self, stems) -> list[str]:
-        """*stems* in the order the loader reads their files (numeric for plain
-        integers, else by name) -- :func:`apairo.core.naming.frame_order`."""
-        names = frame_order(f"{s}{self._ext}" for s in stems)
-        return [n[: len(n) - len(self._ext)] for n in names]
-
     def add(self, data, stem, timestamp: float | None = None) -> ChannelWriter:
         """Write one frame as ``<seq>/<channel>/<stem><ext>`` and record its
         timestamp.  *stem* is the frame id (no extension) and must not contain
-        ``_``.  Returns ``self`` for chaining."""
+        ``_``.  Returns ``self`` for chaining.
+
+        Raises:
+            ValueError: The format cannot hold *data* so that it reads back
+                unchanged (a float image as ``img``); nothing is written.
+        """
         if self._closed:
             raise RuntimeError("ChannelWriter is closed.")
         stem = require_frame_stem(str(stem))
-        data = np.asarray(data)
-        if self._loader == "bin" and (data.ndim != 2 or data.shape[1] != 4):
-            # A bin channel is read back as (-1, 4): any other shape would
-            # come back as different points, or not at all.
+        frame = np.asarray(data)
+        if not self._format.can_write(frame):
             raise ValueError(
-                f"A frame of a 'bin' channel is (N, 4) points (x, y, z, "
-                f"intensity); got shape {data.shape}. Use loader='npys' for "
-                f"other arrays."
+                f"Frame '{stem}' of '{self._channel}': format "
+                f"'{self._format.name}' cannot hold a {frame.dtype} array of "
+                f"shape {frame.shape} so that it reads back unchanged. Convert "
+                f"it, or choose another loader (npys holds any dtype)."
             )
         self._cdir.mkdir(parents=True, exist_ok=True)
-        self._writer.write(data, self._cdir / f"{stem}{self._ext}")
+        self._format.write_frame(self._cdir / f"{stem}{self._ext}", frame)
         self._ts[stem] = None if timestamp is None else float(timestamp)
         return self
 
@@ -139,7 +146,8 @@ class ChannelWriter:
             raise RuntimeError("ChannelWriter.close() with no frames written.")
         # timestamps.txt must follow, row for row, the order the loader reads
         # the frames in: the same rule, not a second sort.
-        stems = self._in_frame_order(self._ts)
+        names = frame_order(f"{s}{self._ext}" for s in self._ts)
+        stems = [n[: len(n) - len(self._ext)] for n in names]
         have = [self._ts[s] is not None for s in stems]
         if any(have) and not all(have):
             missing = [s for s in stems if self._ts[s] is None]

@@ -241,6 +241,25 @@ def test_a_preprocess_on_plugin_data_writes_the_plugin_format(tmp_path, plugins)
     np.testing.assert_array_equal(ds.loaders["cloud_xyz"][1], ds.loaders["cloud"][1])
 
 
+def test_channel_writer_writes_a_plugin_format(tmp_path, plugins):
+    """ChannelWriter writes through the format contract: a plugin's per-frame
+    format is written, registered and read back like a built-in one."""
+    from apairo.writer import ChannelWriter
+
+    plugins(("xyz", "apairo_xyz:XyzFormat"))
+    seq = tmp_path / "seq"
+    cloud = np.arange(15, dtype=np.float32).reshape(5, 3)
+    with ChannelWriter(seq, "lidar", loader="xyz") as w:
+        w.add(cloud, stem="000000", timestamp=1.0)
+        w.add(cloud + 1, stem="000001", timestamp=2.0)
+    assert sorted(p.name for p in (seq / "lidar").glob("*.xyz")) == [
+        "000000.xyz",
+        "000001.xyz",
+    ]
+    ds = RawDataset(seq, keys=["lidar"])
+    np.testing.assert_array_equal(ds.load("lidar", 1), cloud + 1)
+
+
 def test_a_filename_order_reaches_the_plugin_loader(tmp_path, plugins):
     """The core resolves ``order`` for a plugin as for a built-in: strays are
     filtered and unpadded indices sort numerically."""
