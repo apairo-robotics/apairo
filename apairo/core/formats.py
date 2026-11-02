@@ -90,6 +90,11 @@ class Format:
             claim a directory.
         write_suffix: The suffix of the frame files a per-frame format writes
             (``".png"`` for ``img``, which reads several).
+        detectable: ``False`` for a format a channel only ever *declares*: a
+            container file (``hdf5``) holds a whole recording, which only a
+            declaration splits into channels, so no directory is claimed for
+            it -- its ``detect`` answers ``False`` and the conformance kit
+            checks that instead.
 
     A format that can store a channel -- a preprocess output, a conversion --
     implements :meth:`write_frame` (per-frame) or :meth:`write_channel`
@@ -107,6 +112,7 @@ class Format:
     key_forms: ClassVar[frozenset[str]] = frozenset()
     priority: ClassVar[int] = 50
     write_suffix: ClassVar[str] = ""
+    detectable: ClassVar[bool] = True
 
     # ------------------------------------------------------------ discovery
 

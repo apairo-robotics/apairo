@@ -61,7 +61,11 @@ from apairo.core.profiled_dataset import ProfiledDataset
 from apairo.core.views import read_views, verify_views
 from apairo.dataset.async_layout.dataset import _bare_channel_entries, _detect_loader
 from apairo.dataset.raw import RawDataset
-from apairo.dataset.raw.dataset import bootstrap_channels
+from apairo.dataset.raw.dataset import (
+    _is_dataset_root,
+    _is_sequence_dir,
+    bootstrap_channels,
+)
 from apairo.dataset.registry import (
     dataset_names,
     declaration_names,
@@ -421,15 +425,23 @@ def _with_owner_latency(key: str, meta, cfg: dict):
     return meta
 
 
-def _is_sequence(path: Path) -> bool:
-    return config_exists(path) or RawDataset._is_sequence_layout(path)
+def _is_sequence(path: Path, declare: Path | None = None) -> bool:
+    """As ``RawDataset`` decides: initialised, or a bare channel layout; else,
+    unless *path* is a root, a declaration -- its own ``apairo.yaml`` or an
+    external *declare* -- makes it a sequence (a container recording has no
+    channel directory to detect)."""
+    if config_exists(path) or RawDataset._is_sequence_layout(path):
+        return True
+    if _is_dataset_root(path):
+        return False
+    return declaration_exists(path) or declare is not None
 
 
 def _sequence_dirs(root: Path) -> list[Path]:
     return [
         d
         for d in sorted(root.iterdir())
-        if d.is_dir() and not d.name.startswith(".") and _is_sequence(d)
+        if d.is_dir() and not d.name.startswith(".") and _is_sequence_dir(d)
     ]
 
 
@@ -584,7 +596,7 @@ def _build_sequence_status(
     if profiled is not None:
         return _build_profiled_sequence_status(path, profiled, seq_id)
     seq_dir = path / seq_id
-    if not _is_sequence(seq_dir):
+    if not _is_sequence(seq_dir, declare):
         return None
     return _build_status(seq_dir, declare)
 
@@ -597,7 +609,7 @@ def _build_status(path: Path, declare: Path | None = None) -> dict | None:
     if profiled is not None:
         return _build_profiled_status(path, profiled)
 
-    if _is_sequence(path):
+    if _is_sequence(path, declare):
         return {
             "name": path.name,
             "class": "RawDataset",
@@ -887,7 +899,7 @@ def _external_declare_issues(path: Path, declare: str) -> list[str]:
             f"declaration file not found: {f} (nor a declaration that ships with "
             f"apairo: {', '.join(declaration_names())})"
         ]
-    if _is_sequence(path):
+    if _is_sequence(path, f):
         return verify_declaration(f, path)
     seq_dirs = _sequence_dirs(path)
     if not seq_dirs:
