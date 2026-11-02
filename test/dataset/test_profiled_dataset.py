@@ -604,3 +604,23 @@ def test_profiled_remove_channel_config_only_keeps_data(rellis_root):
 
     assert "lidar" not in read_config(rellis_root)["channels"]
     assert all(d.is_dir() for d in seq_dirs)  # data untouched
+
+
+def test_instance_run_preprocess_keeps_the_instance_selection(goose_root):
+    # ds.run_preprocess reopens the dataset as ds was opened: the sequences it
+    # selected, not the whole root.
+    from apairo.core.preprocessor import FramePreprocessor
+
+    class Copy(FramePreprocessor):
+        output_key = "lidar_copy"
+        input_keys = ["lidar"]
+        sources = ["lidar"]
+
+        def __call__(self, sample):
+            return sample.data["lidar"]
+
+    ds = _GooseDS(goose_root, keys=["lidar"], sequences=["seq_a"])
+    assert ds._open_kwargs == {"sequences": ["seq_a"]}
+    ds.run_preprocess(Copy())
+    written = sorted(p for p in (goose_root / "lidar_copy").rglob("*") if p.is_file())
+    assert written and all("seq_a" in p.parts for p in written)
