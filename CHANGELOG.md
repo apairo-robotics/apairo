@@ -7,6 +7,21 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **A tolerance per channel.** `synchronize(tolerance=...)` takes a dict
+  mapping channels to seconds, as `method` does:
+  `tolerance={"lidar": 0.05, "poses": 0.15}`. A channel it does not list, or
+  maps to `None`, is unconstrained, and an interpolated channel's tolerance
+  bounds both of its bracketing events. A camera reference with a lidar
+  matched within 50 ms and poses interpolated between lidar-clocked events
+  up to 100 ms away no longer needs 0.15 s for every channel. An unknown
+  channel is refused, and so is a tolerance that is not a finite number of
+  seconds `>= 0`, a single one included (a negative bound dropped every
+  frame). `persist` stores a per-channel tolerance as a mapping under the
+  channels' real names. A single tolerance is stored as a number, as in
+  0.9, so views persisted by 0.9 reload unchanged. `apairo check` validates
+  both forms.
+
 ### Fixed
 - **`ds.run_preprocess(p)` reopens the dataset as `ds` was opened.** The
   runner reopens the dataset with the preprocessor's input keys, and the

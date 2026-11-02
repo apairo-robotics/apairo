@@ -88,7 +88,43 @@ def _entry_issues(name: str, entry: Any, seq_dir: Path) -> list[str]:
         issues.append(f"view '{name}': 'method' names no channel")
     if "sources" in entry and not isinstance(entry["sources"], dict):
         issues.append(f"view '{name}': 'sources' is not a mapping")
+    if "tolerance" in entry:
+        issues += _tolerance_issues(name, entry["tolerance"], entry.get("method"))
     return issues
+
+
+def _tolerance_issues(name: str, tolerance: Any, method: Any) -> list[str]:
+    """A registry ``tolerance``: ``null``, a number of seconds, or (given per
+    channel) a mapping of the view's channels to seconds or ``null``."""
+    from apairo.core.synchronized_view import _is_duration
+
+    if tolerance is None or _is_duration(tolerance):
+        return []
+    if not isinstance(tolerance, dict):
+        return [f"view '{name}': 'tolerance' is not a duration: {tolerance!r}"]
+    channels = method if isinstance(method, dict) else {}
+    issues = [
+        f"view '{name}': 'tolerance' names channel '{key}', not one of the view's"
+        for key in tolerance
+        if channels and key not in channels
+    ]
+    issues += [
+        f"view '{name}': the tolerance of '{key}' is not a duration: {value!r}"
+        for key, value in tolerance.items()
+        if value is not None and not _is_duration(value)
+    ]
+    return issues
+
+
+def _renamed_tolerance(tolerance: Any, names: dict[str, str]) -> Any:
+    """*tolerance* with a per-channel mapping's channels renamed by *names*
+    (public <-> real); a single bound, or none, as it is."""
+    if not isinstance(tolerance, dict):
+        return None if tolerance is None else float(tolerance)
+    return {
+        names.get(key, key): None if value is None else float(value)
+        for key, value in tolerance.items()
+    }
 
 
 def _sequence_dir(dataset: Any) -> Path:
@@ -162,7 +198,9 @@ def persist_view(view: SynchronizedView, name: str, *, overwrite: bool = False) 
         if view._reference is None
         else to_real.get(view._reference, view._reference),
         "method": {real[key]: _strategy_spec(view._strategies[key]) for key in keys},
-        "tolerance": None if view._tolerance is None else float(view._tolerance),
+        # A single bound is stored as a number, as 0.9 did; a bound per
+        # channel as a mapping, under the real names.
+        "tolerance": _renamed_tolerance(view._tolerance, to_real),
         "frames": len(view),
         "sources": {
             real[key]: {
@@ -255,7 +293,7 @@ def load_view(
         dataset,
         reference=None if reference is None else public.get(reference, reference),
         strategies=strategies,
-        tolerance=entry["tolerance"],
+        tolerance=_renamed_tolerance(entry["tolerance"], public),
         reference_timestamps=ref_ts,
         index_map=index_map,
     )

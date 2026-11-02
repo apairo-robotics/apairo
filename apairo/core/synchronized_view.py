@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import math
 import warnings
 from collections.abc import Callable
 from pathlib import Path
@@ -26,6 +27,19 @@ SyncMethod = Callable[[np.ndarray, np.ndarray], np.ndarray]
 ChannelStrategy = (
     Literal["previous", "next", "nearest", "latest"] | SyncMethod | Interpolator
 )
+
+# How far, in seconds, a channel's event may lie from the tick: one bound for
+# every channel, or one per channel (unlisted channels are unconstrained).
+Tolerance = float | dict[str, float | None] | None
+
+
+def _is_duration(value: Any) -> bool:
+    """Whether *value* is a tolerance in seconds: a finite number ``>= 0``."""
+    if isinstance(value, (bool, np.bool_)):
+        return False
+    if not isinstance(value, (int, float, np.integer, np.floating)):
+        return False
+    return math.isfinite(value) and bool(value >= 0)
 
 
 class SynchronizedView(AbstractDataset):
@@ -77,9 +91,12 @@ class SynchronizedView(AbstractDataset):
             * an :class:`~apairo.core.interpolator.Interpolator` -- the value
               is synthesized at ``t_ref`` from the two bracketing events
               (continuous signals only: poses, IMU, commands).
-        tolerance: Maximum ``|t - t_ref|`` in seconds.  For interpolated
-            channels, *both* bracketing events must lie within tolerance.
-            Reference ticks where any channel has no match are dropped.
+        tolerance: Maximum ``|t - t_ref|`` in seconds, for every channel, or
+            a dict mapping channel names to per-channel tolerances (unlisted
+            channels, and channels mapped to ``None``, are unconstrained).
+            For interpolated channels, *both* bracketing events must lie
+            within the channel's tolerance. Reference ticks where any channel
+            has no match are dropped.
 
     Example::
 
@@ -89,7 +106,7 @@ class SynchronizedView(AbstractDataset):
         ds_sync = ds.synchronize(
             reference="velodyne_0",
             method={"gicp_poses": Se3Interp()},   # velodyne_0 -> "previous"
-            tolerance=0.05,
+            tolerance={"gicp_poses": 0.15},       # velodyne_0: unconstrained
         )
 
         s = ds_sync[0]
@@ -103,7 +120,7 @@ class SynchronizedView(AbstractDataset):
         parent: AbstractDataset,
         reference: str | np.ndarray | None = None,
         method: ChannelStrategy | dict[str, ChannelStrategy] = "previous",
-        tolerance: float | None = None,
+        tolerance: Tolerance = None,
     ) -> None:
         parent_ts = getattr(parent, "timestamps", None)
         if not isinstance(parent_ts, dict) or not parent_ts:
@@ -115,6 +132,7 @@ class SynchronizedView(AbstractDataset):
 
         keys = list(parent.keys)
         strategies = self._resolve_strategies(method, keys)
+        tolerances = self._resolve_tolerances(tolerance, keys)
         ref_name, ref_ts = self._resolve_clock(reference, parent_ts, keys)
 
         valid = np.ones(len(ref_ts), dtype=bool)
@@ -124,7 +142,7 @@ class SynchronizedView(AbstractDataset):
         for key in keys:
             ts = np.asarray(parent_ts[key], dtype=float)
             channel_ts[key] = ts
-            idx, ok = self._match(strategies[key], ts, ref_ts, tolerance)
+            idx, ok = self._match(strategies[key], ts, ref_ts, tolerances[key])
             valid &= ok
             index_map[key] = idx
 
@@ -133,7 +151,7 @@ class SynchronizedView(AbstractDataset):
         self._reference = ref_name
         self._method = method
         self._strategies = strategies
-        self._tolerance = tolerance
+        self._tolerance = dict(tolerance) if isinstance(tolerance, dict) else tolerance
         self._ref_timestamps = ref_ts[keep]
         self._index_map = {k: v[keep].astype(np.intp) for k, v in index_map.items()}
         self._channel_ts = channel_ts
@@ -146,7 +164,7 @@ class SynchronizedView(AbstractDataset):
         *,
         reference: str | None,
         strategies: dict[str, Any],
-        tolerance: float | None,
+        tolerance: Tolerance,
         reference_timestamps: np.ndarray,
         index_map: dict[str, np.ndarray],
     ) -> SynchronizedView:
@@ -157,7 +175,7 @@ class SynchronizedView(AbstractDataset):
         view._reference = reference
         view._method = dict(strategies)
         view._strategies = dict(strategies)
-        view._tolerance = tolerance
+        view._tolerance = dict(tolerance) if isinstance(tolerance, dict) else tolerance
         view._ref_timestamps = np.asarray(reference_timestamps, dtype=float)
         view._index_map = {
             k: np.asarray(v, dtype=np.intp) for k, v in index_map.items()
@@ -229,6 +247,36 @@ class SynchronizedView(AbstractDataset):
                     f"or an Interpolator, got {strat!r}"
                 )
         return strategies
+
+    @staticmethod
+    def _resolve_tolerances(tolerance, keys: list[str]) -> dict[str, float | None]:
+        """Normalize *tolerance* into one validated bound (or ``None``) per
+        channel, as :meth:`_resolve_strategies` does for *method*."""
+        if isinstance(tolerance, (set, frozenset)):
+            raise TypeError(
+                f"tolerance must be a number of seconds or a dict "
+                f"{{channel: seconds}}, not a set -- did you write {{a, b}} "
+                f"instead of {{a: b}}? Got {tolerance!r}."
+            )
+        if isinstance(tolerance, dict):
+            unknown = set(tolerance) - set(keys)
+            if unknown:
+                raise KeyError(
+                    f"tolerance maps unknown channels {sorted(unknown)}; "
+                    f"dataset keys are {keys}."
+                )
+            given = {k: tolerance.get(k) for k in keys}
+        else:
+            given = {k: tolerance for k in keys}
+        for key, value in given.items():
+            if value is None or _is_duration(value):
+                continue
+            where = f" for {key!r}" if isinstance(tolerance, dict) else ""
+            raise ValueError(
+                f"The tolerance{where} must be a finite number of seconds >= 0, "
+                f"or None for no bound; got {value!r}."
+            )
+        return {k: None if v is None else float(v) for k, v in given.items()}
 
     @staticmethod
     def _resolve_clock(reference, parent_ts: dict, keys: list[str]):
