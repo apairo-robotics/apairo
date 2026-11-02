@@ -292,8 +292,19 @@ with apairo.ChannelWriter(seq_dir, "ground_truth", loader="npys",
 # other channel and synchronizes onto its source by timestamp.
 ```
 
-- **Per-frame loaders only** (`npys`, `bin`); the stacked `npy` and `img`/`zarr`
-  are out of scope. `npys` preserves any dtype (use it for integer labels).
+- **Any per-frame format that writes**: `npys`, `bin`, `img`, or a
+  [format plugin](datasets/format-plugins.md)'s. The writer goes through the
+  format, so a frame the format could not read back unchanged is refused
+  before it is written: `img` holds `uint8` grey, RGB or RGBA images and
+  `uint16` depth maps as PNG, `bin` holds `(N, 4)` `float32` clouds, `npys`
+  any dtype (use it for integer labels). The stacked `npy`, `zarr` and `csv`
+  store a channel in one object and are out of scope.
+
+    ```python
+    with apairo.ChannelWriter(seq_dir, "road_mask", loader="img",
+                              timestamps_from="camera") as w:
+        w.add(mask, stem="000042", timestamp=t)   # (H, W) uint8 -> 000042.png
+    ```
 - The `timestamp` is the source frame's timestamp -- alignment in an async
   dataset is by `timestamps.txt`, not by filename, so the stem is free (it just
   must not contain `_`). Mirroring the source stem (`001813`) keeps it legible.

@@ -21,6 +21,21 @@ All notable changes to apairo are documented here. The format is based on
   channels' real names. A single tolerance is stored as a number, as in
   0.9, so views persisted by 0.9 reload unchanged. `apairo check` validates
   both forms.
+- **`ChannelWriter` writes any per-frame format that writes, images
+  included.** It knew `npys` and `bin` only, from a table of its own. It now
+  writes through the format contract: `img` (PNG: `uint8` masks and images,
+  `uint16` depth maps), `npys`, `bin`, or a plugin's per-frame format, with
+  the format's `write_suffix`. A frame the format cannot read back unchanged
+  is refused before it is written, naming its dtype and shape. `npys` and
+  `bin` frames are written byte for byte as before, and resuming a channel
+  picks up the frames its format reads.
+
+### Changed
+- **`ChannelWriter(loader="bin")` refuses a frame that is not `(N, 4)`
+  `float32`**, as `run_preprocess` does since 0.9. It cast any array to
+  `float32` and flattened it, which did not read back as written. Cast the
+  frame yourself, or write it as `npys`. A stacked or read-only format is
+  refused with the list of formats the writer can write.
 
 ### Fixed
 - **`ds.run_preprocess(p)` reopens the dataset as `ds` was opened.** The

@@ -12,7 +12,8 @@ installed, `loader: <name>` works everywhere a built-in name does:
 - `apairo status` describes it;
 - `RawDataset` loads it, and `synchronize()` aligns it with the other channels;
 - and, when the format writes, a preprocess on its channels writes its output
-  in it, and `Convert` copies any channel into it.
+  in it, `Convert` copies any channel into it, and (per-frame) `ChannelWriter`
+  writes frames in it.
 
 ## What the core keeps, what a format answers
 
