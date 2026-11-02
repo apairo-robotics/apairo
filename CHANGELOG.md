@@ -20,6 +20,11 @@ All notable changes to apairo are documented here. The format is based on
 - **`Format.detectable`.** A format a channel only ever declares sets it to
   `False`: its `detect` answers no, and `check_format` checks that instead of
   detection.
+- **REASSEMBLE ships as a declaration.** `declare="reassemble"` reads a
+  demonstration of the TU Wien contact-rich assembly dataset as published:
+  force and torque (~1.7 kHz), joints (~1 kHz), pose (~600 Hz) and gripper,
+  each on its own clock. `pip install apairo[reassemble]`; sample
+  `mini_reassemble`, cut from the official archive.
 - **A tolerance per channel.** `synchronize(tolerance=...)` takes a dict
   mapping channels to seconds, as `method` does:
   `tolerance={"lidar": 0.05, "poses": 0.15}`. A channel it does not list, or

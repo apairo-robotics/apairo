@@ -155,3 +155,23 @@ samples:
       3-vibrations-contact_orientations: {shape: [9], dtype: float64}
       3-vibrations-contact_wrench: {shape: [6], dtype: float64}
       3-vibrations-contact_accel: {shape: [3], dtype: float64}
+
+  mini_reassemble:
+    dataset: RawDataset
+    declare: reassemble
+    root: mini_reassemble
+    source: >-
+      real excerpt: the first half second of the five sensors the declaration
+      reads, each on its own clock, from demonstration 2025-01-11-14-43-37 of
+      data.zip (TU Wien, doi:10.48436/0ewrv-8cb44); cameras, audio and events
+      left out; test/assets/fetch_public_samples.py
+    license: CC BY 4.0
+    real_env: APAIRO_REAL_REASSEMBLE
+    keys: [force, torque, joints, pose, gripper]
+    clock: true
+    expect:
+      force: {shape: [3], dtype: float64}
+      torque: {shape: [3], dtype: float64}
+      joints: {shape: [7], dtype: float64}
+      pose: {shape: [7], dtype: float64}
+      gripper: {shape: [2], dtype: float64}

@@ -1,0 +1,36 @@
+# REASSEMBLE (TU Wien, CC BY 4.0, doi:10.48436/0ewrv-8cb44): one HDF5 file per
+# demonstration, every sensor on its own clock under /timestamps (epoch s).
+# A sequence is a directory holding one demonstration's .h5. The cameras and
+# audio are encoded MP4/MP3 bytes in the same file: not channels yet.
+version: 1
+channels:
+  force:                    # end-effector force, ~1.7 kHz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /robot_state/measured_force
+    key: {array: /timestamps/measured_force, units: [s]}
+  torque:                   # end-effector torque, ~1.7 kHz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /robot_state/measured_torque
+    key: {array: /timestamps/measured_torque, units: [s]}
+  joints:                   # joint positions, ~1 kHz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /robot_state/joint_positions
+    key: {array: /timestamps/joint_positions, units: [s]}
+  pose:                     # end-effector pose (x y z qx qy qz qw), ~600 Hz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /robot_state/pose
+    key: {array: /timestamps/pose, units: [s]}
+  gripper:                  # gripper finger positions, ~1 kHz
+    loader: hdf5
+    directory: "."
+    array_file: "*.h5"
+    array: /robot_state/gripper_positions
+    key: {array: /timestamps/gripper_positions, units: [s]}
