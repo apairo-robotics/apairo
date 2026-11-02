@@ -82,6 +82,15 @@ def _bare_channel_entries(directory: Path) -> dict[str, dict]:
     return entries
 
 
+def _declares_channels(directory: Path, declare: str | Path | None) -> bool:
+    """Does the in-tree ``apairo.yaml`` or *declare* name a channel with its
+    loader -- one loading can read with no channel directory to detect?"""
+    files = [Path(declare)] if declare is not None else []
+    if declaration_exists(directory):
+        files.append(declaration_path(directory))
+    return any("loader" in meta for f in files for meta in read_declaration(f).values())
+
+
 def _declared_key_channels(directory: Path, *declares: str | Path | None) -> set[str]:
     """Channels whose stems a declaration explains with a ``key`` or ``order``
     regex -- their ``_`` is part of the name, not a suffix, so the scan must
@@ -512,6 +521,12 @@ class AsyncLayoutDataset(AbstractDataset):
             if raw_keys is None or key in raw_keys:
                 channels[key] = entry
 
+        if not channels and _declares_channels(directory, declare):
+            # Nothing to detect, but a declaration names the channels (a
+            # container recording): the registry starts empty and loading
+            # reads them through the declaration.
+            write_config(directory, {"version": 1, "channels": {}})
+            return directory / CONFIG_DIR / CHANNELS_FILE
         if not channels:
             detail = f" (checked: {raw_keys})" if raw_keys else ""
             raise ValueError(

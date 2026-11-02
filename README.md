@@ -35,6 +35,7 @@ Optional extras:
 ```bash
 pip install apairo[vision]   # Image loading (Pillow)
 pip install apairo[zarr]     # Zarr channels
+pip install apairo[hdf5]     # HDF5 containers (h5py)
 pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-kitti, tum, euroc, kuka
 ```
 
@@ -70,7 +71,7 @@ sample = ds[0]
 | `TartanKittiDataset` | asynchronous | any TartanDrive v2 channel |
 
 `RawDataset` is the profile-free loader for the asynchronous layout: it takes its
-channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`,
+channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`, `hdf5`,
 or a [plugin's](https://apairo-robotics.github.io/apairo/datasets/format-plugins/)) — entirely from
 `.apairo/channels.yaml`, so it loads any such dataset, including the output of
 [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), with no

@@ -8,6 +8,18 @@ All notable changes to apairo are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **HDF5 containers: the `hdf5` format** (`pip install apairo[hdf5]`). A
+  channel is one array of a container file, named by its path inside it
+  (`array: /robot_state/measured_force`), and its clock is another array of
+  the same file (`key: {array: /timestamps/measured_force, units: [s]}`), the
+  way asynchronous robot recordings store one clock per sensor. Rows are read
+  in place, a file handle opens lazily once per process, and `array_file`
+  takes a name or a glob that matches one file. The format is declared, never
+  detected: a container holds a whole recording, which only a declaration
+  splits into channels. Guide: "HDF5 containers".
+- **`Format.detectable`.** A format a channel only ever declares sets it to
+  `False`: its `detect` answers no, and `check_format` checks that instead of
+  detection.
 - **A tolerance per channel.** `synchronize(tolerance=...)` takes a dict
   mapping channels to seconds, as `method` does:
   `tolerance={"lidar": 0.05, "poses": 0.15}`. A channel it does not list, or
@@ -38,6 +50,12 @@ All notable changes to apairo are documented here. The format is based on
   refused with the list of formats the writer can write.
 
 ### Fixed
+- **`status`, `check` and `init` read a declared sequence.** A directory
+  whose channels only a declaration names -- no `.apairo/`, no channel
+  directory to detect -- was "not an apairo dataset" for the command line and
+  had "no recognizable channels" for `init`, though `RawDataset` loaded it.
+  A declaration, the directory's own or `--declare`, now makes it a sequence
+  everywhere, unless it is a root.
 - **A declared sequence is a sequence of its root.** A root's subdirectory
   counted only when it had a `.apairo/` or a channel directory a format
   detects. A recording whose channels only a declaration can name -- one HDF5

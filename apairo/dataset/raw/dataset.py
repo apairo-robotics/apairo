@@ -235,7 +235,11 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
             else:
                 declare = declaration_path(path) if declaration_exists(path) else None
 
-        if cls._is_sequence_layout(path):
+        if cls._is_sequence_layout(path) or (
+            declare is not None and not _is_dataset_root(path)
+        ):
+            # A declared directory that is not a root is a sequence too: a
+            # container recording has no channel directory to detect.
             AsyncLayoutDataset.init(
                 path, overwrite=overwrite, merge=merge, declare=declare
             )
@@ -245,7 +249,7 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
         for d in sorted(path.iterdir()):
             if not d.is_dir() or d.name.startswith("."):
                 continue
-            if cls._is_sequence_layout(d):
+            if cls._is_sequence_layout(d) or declaration_exists(d):
                 try:
                     AsyncLayoutDataset.init(
                         d, overwrite=overwrite, merge=merge, declare=declare

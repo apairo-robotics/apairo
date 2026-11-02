@@ -33,7 +33,7 @@ from test.loader.test_pcd_loader import XYZI, write_binary
 
 REPO = Path(__file__).resolve().parents[2]
 T0_NS = 1785248347168248576
-BUILTINS = ("npy", "npys", "bin", "img", "zarr", "pcd", "csv")
+BUILTINS = ("npy", "npys", "bin", "img", "zarr", "pcd", "csv", "hdf5")
 
 
 def _cli(args, capsys):
@@ -95,6 +95,12 @@ def _sample(tmp_path: Path, name: str) -> tuple[Path, dict]:
         zarr = pytest.importorskip("zarr")
         arr = zarr.open_array(str(d), mode="w", shape=(4, 3), dtype="float32")
         arr[:] = np.arange(12, dtype=np.float32).reshape(4, 3)
+    elif name == "hdf5":
+        h5py = pytest.importorskip("h5py")
+        with h5py.File(d / "rec.h5", "w") as f:
+            f["state"] = np.arange(12.0).reshape(4, 3)
+            f["t"] = 1.0 + np.arange(4) * 0.1
+        meta = {"array": "/state", "key": {"array": "/t"}}
     return d, meta
 
 
@@ -439,14 +445,14 @@ def test_a_broken_plugin_is_skipped_with_a_warning(plugins, caplog):
 def test_an_unknown_loader_points_at_plugins(tmp_path, plugins, capsys):
     plugins()
     with pytest.raises(KeyError, match="Write a format plugin"):
-        get_format("h5")
+        get_format("mcap")
     seq = tmp_path / "seq"
     (seq / "scan").mkdir(parents=True)
     write_config(
-        seq, {"version": 1, "channels": {"scan": {"kind": "raw", "loader": "h5"}}}
+        seq, {"version": 1, "channels": {"scan": {"kind": "raw", "loader": "mcap"}}}
     )
     assert any(
-        "unknown loader 'h5' (known: bin, csv, img, npy, npys, pcd, zarr)" in i
+        "unknown loader 'mcap' (known: bin, csv, hdf5, img, npy, npys, pcd, zarr)" in i
         for i in verify_config(seq)
     )
 
