@@ -350,6 +350,9 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
 
     _profile: str
 
+    # Old argument name -> current one, for ds.run_preprocess() reopening.
+    _deprecated_open_kwargs = {"sequence_ids": "sequences"}
+
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         profile_attr = cls.__dict__.get("_profile")

@@ -45,7 +45,8 @@ All notable changes to apairo are documented here. The format is based on
   file failed with "no clock declared", and a selection ran on the whole
   root. The instance's own arguments are now passed again, every one but its
   `keys`, a subclass's included; a keyword argument given to `run_preprocess`
-  replaces the instance's own.
+  replaces the instance's own. The deprecated `sequence_ids=` is passed again
+  as `sequences=`, so the reopened dataset does not warn a second time.
 - **`load(key, k)` works on a synchronized view.** It raised
   `AttributeError: 'SynchronizedView' object has no attribute 'loaders'`. It
   now returns frame `k`'s value for that channel -- the matched event, or the

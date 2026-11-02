@@ -46,6 +46,12 @@ def _opening_kwargs(cls: type, args: tuple, kwargs: dict) -> dict:
             opened.update({k: v for k, v in value.items() if k != "keys"})
         elif kind is not inspect.Parameter.VAR_POSITIONAL and name not in skipped:
             opened[name] = value
+    # A deprecated spelling is passed again under its current name, so the
+    # reopened dataset does not warn a second time.
+    for old, new in getattr(cls, "_deprecated_open_kwargs", {}).items():
+        if old in opened:
+            value = opened.pop(old)
+            opened.setdefault(new, value)
     return opened
 
 
