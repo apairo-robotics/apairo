@@ -139,6 +139,15 @@ loader = DataLoader(ds_train, batch_size=8, shuffle=True, num_workers=4,
                     collate_fn=my_collate)
 ```
 
+To look at one channel of a frame without reading the others, use
+`load(key, k)`: it returns frame `k`'s value for that channel, the matched
+event or the value interpolated at the tick, and reads that channel only.
+A per-channel `filter` reads its channel the same way.
+
+```python
+ds_sync.load("image_left", 42)    # one image, the scan of frame 42 is not read
+```
+
 !!! note "Transforms and synchronize()"
     `synchronize()` reads channel data directly from the loaders -- transforms
     registered on the *async* parent are not applied. Register transforms on

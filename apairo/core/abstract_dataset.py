@@ -555,9 +555,8 @@ class AbstractDataset(ABC):
                     ".synchronize() first, or use the sample-level form "
                     "filter(fn)."
                 )
-            loaders = getattr(self, "loaders", None)
-            if loaders and key in loaders:
-                indices = [i for i in range(len(self)) if fn(loaders[key][i])]
+            if self._reads_channel(key):
+                indices = [i for i in range(len(self)) if fn(self.load(key, i))]
             else:
                 indices = [i for i in range(len(self)) if fn(self._load(i).data[key])]
 
@@ -674,7 +673,21 @@ class AbstractDataset(ABC):
         )
 
     def load(self, key: str, idx: int):
-        return self.loaders[key][idx]
+        """The stored value of channel *key* at *idx*, read alone (no
+        transform applied). Only a dataset that reads one channel without the
+        others has it: an on-disk dataset, a synchronized view."""
+        loaders = getattr(self, "loaders", None)
+        if loaders is None:
+            raise AttributeError(
+                f"{type(self).__name__} cannot load one channel alone; read "
+                f"the frame, ds[idx].data[{key!r}]."
+            )
+        return loaders[key][idx]
+
+    def _reads_channel(self, key: str) -> bool:
+        """Whether :meth:`load` reads *key* alone, cheaper than a frame."""
+        loaders = getattr(self, "loaders", None)
+        return loaders is not None and key in loaders
 
     @abstractmethod
     def _load(self, idx: int) -> "Sample": ...

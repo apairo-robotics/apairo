@@ -16,6 +16,15 @@ All notable changes to apairo are documented here. The format is based on
   root. The instance's own arguments are now passed again, every one but its
   `keys`, a subclass's included; a keyword argument given to `run_preprocess`
   replaces the instance's own.
+- **`load(key, k)` works on a synchronized view.** It raised
+  `AttributeError: 'SynchronizedView' object has no attribute 'loaders'`. It
+  now returns frame `k`'s value for that channel -- the matched event, or the
+  value interpolated at the tick -- and reads that channel only, where `ds[k]`
+  reads them all. On a root, `synchronize()`'s result routes it to the
+  sequence that holds frame `k`. A per-channel `filter(key, fn)` on the view
+  reads its channel alone too, where it read every channel of every frame. On
+  a dataset that cannot read one channel alone (a cached or a filtered view),
+  `load` says so and names the way that works.
 
 ## [0.9.0] - 2026-10-29
 
