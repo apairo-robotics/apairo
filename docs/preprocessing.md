@@ -57,6 +57,11 @@ preview[42].data["trav_label"]        # computed on access — inspect, plot
 ds.run_preprocess(p)                  # once satisfied, persist + register
 ```
 
+On an instance, `run_preprocess` reopens the dataset as `ds` was opened -- the
+same `declare=`, `split=` or `sequences=` -- with the preprocessor's
+`input_keys` as its keys. A keyword argument given to `run_preprocess`
+replaces the instance's own: `ds.run_preprocess(p, declare="other.yaml")`.
+
 (A `SequencePreprocessor` cannot run lazily — it needs the full sequence at
 once, which is exactly why materialization exists.)
 

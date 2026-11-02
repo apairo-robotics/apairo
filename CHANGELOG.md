@@ -7,6 +7,16 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **`ds.run_preprocess(p)` reopens the dataset as `ds` was opened.** The
+  runner reopens the dataset with the preprocessor's input keys, and the
+  instance form passed it only the directory: a `declare=`, a `split=` or a
+  `sequences=` was lost. A sequence whose clock is declared in an external
+  file failed with "no clock declared", and a selection ran on the whole
+  root. The instance's own arguments are now passed again, every one but its
+  `keys`, a subclass's included; a keyword argument given to `run_preprocess`
+  replaces the instance's own.
+
 ## [0.9.0] - 2026-10-29
 
 ### Upgrading from 0.8

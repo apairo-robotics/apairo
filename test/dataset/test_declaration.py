@@ -391,3 +391,57 @@ def test_a_declaration_s_format_fields_are_checked_too(tmp_path):
     )
     issues = verify_declaration(tmp_path / "apairo.yaml", tmp_path)
     assert any("'array_file' selects a stacked array" in i for i in issues)
+
+
+# ─────────────────────────────── run_preprocess ──────────────────────────────
+
+
+def _clock_only_declared(tmp_path):
+    """A sequence whose ``lidar`` clock lives only in an external declaration:
+    ns-stamped stems, no timestamps.txt, no in-tree apairo.yaml."""
+    root = tmp_path / "seq"
+    stems = [f"{int(t * 1e9)}" for t in (1.0, 2.0, 3.0)]
+    _frames(root / "lidar", [f"{s}.npy" for s in stems])
+    external = _declare(
+        tmp_path / "outside.yaml",
+        {"lidar": {"loader": "npys", "key": {"name": r"(\d+)", "units": ["ns"]}}},
+    )
+    return root, external
+
+
+def _doubler():
+    from apairo.core.preprocessor import FramePreprocessor
+
+    class Doubler(FramePreprocessor):
+        output_key = "lidar_x2"
+        output_loader = "npys"
+        input_keys = ["lidar"]
+        timestamps_from = "lidar"
+        sources = ["lidar"]
+
+        def __call__(self, sample):
+            return sample.data["lidar"] * 2
+
+    return Doubler()
+
+
+def test_instance_run_preprocess_reopens_with_the_instance_declaration(tmp_path):
+    # The runner reopens the dataset; on an instance it must reopen it as the
+    # instance was opened, or the clock declared with declare= is lost.
+    root, external = _clock_only_declared(tmp_path)
+    ds = RawDataset(root, declare=external)
+    ds.run_preprocess(_doubler())
+
+    assert read_config(root)["channels"]["lidar_x2"]["kind"] == "preprocess"
+    out = RawDataset(root, keys=["lidar_x2"], declare=external)
+    assert len(out) == 3
+    np.testing.assert_allclose(out.timestamps["lidar_x2"], [1.0, 2.0, 3.0])
+
+
+def test_instance_run_preprocess_explicit_kwargs_win(tmp_path):
+    # A kwarg passed to run_preprocess replaces the instance's own.
+    root, external = _clock_only_declared(tmp_path)
+    ds = RawDataset(root, declare=external)
+    blank = _declare(tmp_path / "blank.yaml", {})
+    with pytest.raises(ValueError, match="clock"):
+        ds.run_preprocess(_doubler(), declare=blank)
