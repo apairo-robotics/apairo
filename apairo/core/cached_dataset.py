@@ -30,7 +30,7 @@ class CachedDataset(AbstractDataset):
     Example::
 
         # Cache only the expensive channel — transforms applied before storing
-        ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+        ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
         ds_prior = ds.select(["ground_prior"]).cache()
 
         # Reuse across different training runs — no re-read, no re-compute

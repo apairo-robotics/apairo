@@ -10,7 +10,7 @@ Returns a `ChannelView`: a view over a subset of channels.  The parent's transfo
 
 ```python
 ds = Rellis3DDataset(root, keys=["lidar"])
-ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
 
 view = ds.select(["ground_prior"])
 view[0].data  # {"ground_prior": ...}  — transform already applied
@@ -67,7 +67,7 @@ Cache an expensive derived channel once, reuse it across multiple training confi
 
 ```python
 ds = Rellis3DDataset(root, keys=["lidar"])
-ds.transform("lidar", expensive_ground_prior, output="ground_prior")  # deterministic
+ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")  # deterministic
 
 # Computed once, stored in RAM
 ds_prior = ds.select(["ground_prior"]).cache()

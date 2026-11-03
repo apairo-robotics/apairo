@@ -152,7 +152,7 @@ ds = Rellis3DDataset(root, keys=["lidar", "labels"])
 ds.run_preprocess(TravLabel())
 
 # 2. Cache an expensive derived channel — computed once, served from RAM
-ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
 ds_prior = ds.select(["ground_prior"]).cache()
 
 # 3. Build train split — filter, join cached prior, apply augmentation
@@ -203,7 +203,7 @@ Apply callables at access time — no disk writes.
 
 ```python
 # Per-channel
-ds.transform("lidar", RangeFilter(max=50.0))
+ds = ds.transform("lidar", RangeFilter(max=50.0))
 
 # Sample-level — consistent mask across aligned channels
 def sync_filter(sample):
@@ -212,7 +212,7 @@ def sync_filter(sample):
     sample.data["labels"] = sample.data["labels"][mask]
     return sample
 
-ds.transform(sync_filter)
+ds = ds.transform(sync_filter)
 ```
 
 See [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) for a collection of ready-made transforms.
@@ -240,7 +240,7 @@ view = ds.filter(np.load("cache/valid.npy"))
 
 ```python
 ds = Rellis3DDataset(root, keys=["lidar"])
-ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
 
 # Compute once, store in RAM
 ds_prior = ds.select(["ground_prior"]).cache()

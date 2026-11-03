@@ -7,9 +7,13 @@ from typing import Any
 class Compose:
     """Chain multiple callables into a single transform.
 
-    Example::
+    Chain ``transform()`` calls to build a dataset; use ``Compose`` to name an
+    operation made of several callables, so it can be reused as one step,
+    inside a dataset or on a bare array::
 
-        ds.transform("lidar", Compose([RangeFilter(max=50), Normalize()]))
+        clean_lidar = Compose([RangeFilter(max=50), Normalize()])
+        ds = ds.transform("lidar", clean_lidar)
+        points = clean_lidar(raw_points)
     """
 
     def __init__(self, transforms: Iterable[Callable]) -> None:

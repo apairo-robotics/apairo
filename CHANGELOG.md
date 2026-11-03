@@ -7,6 +7,34 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Upgrading from 0.9
+
+- **Assign the result of `transform()`: `ds = ds.transform(...)`.** In 0.11
+  `transform()` will return a new dataset and leave the one it is called on
+  unchanged. Assigning already works in 0.9, where the method returns the
+  dataset itself, and gives the same result after the change. Code that
+  ignores the return value, or keeps two names for one dataset
+  (`a = ds.transform(f)` then `ds.transform(g)`), will behave differently.
+- Pass `in_place=False` to adopt the 0.11 behaviour now, or `in_place=True`
+  to keep modifying the dataset. Either silences the warning below.
+
+### Deprecated
+
+- **`transform()` without `in_place`.** It still modifies the dataset and
+  returns it, and now emits a `FutureWarning`: the default becomes
+  `in_place=False` in 0.11, as `synchronize`, `window`, `filter`, `select`
+  and `cache` already return a new dataset.
+
+### Fixed
+
+- `docs/transform.md`: the chained snippets were not valid Python (a line
+  starting with `.transform(` outside parentheses), and the `output` section
+  claimed that two steps reading `lidar_f` were independent branches, while
+  the first, without `output`, replaced `lidar_f` for the second.
+- The lazy preview of a preprocess (`docs/preprocessing.md`) registered the
+  preprocessor on `ds` before `ds.run_preprocess(p)`; it now uses
+  `in_place=False`.
+
 ## [0.9.0] - 2026-10-29
 
 ### Upgrading from 0.8

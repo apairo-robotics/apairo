@@ -1424,7 +1424,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         Applies the split without re-instantiating the dataset — registered
         transforms are preserved.  Replaces :meth:`split` for use mid-chain::
 
-            ds.transform("lidar", RobotFilter())
+            ds = ds.transform("lidar", RobotFilter())
             ds_train = ds.filter_split("train")  # transforms kept
 
         Works for both LST-based splits (SemanticKITTI/Rellis) and directory-layer

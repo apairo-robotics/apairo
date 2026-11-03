@@ -1,10 +1,12 @@
 """At-access transforms: per-channel, sample-level, and filter patterns.
 
-Demonstrates the three core usage patterns of dataset.transform():
+Demonstrates four usage patterns of dataset.transform(), each assigning the
+returned dataset (ds = ds.transform(...)):
 
   1. Per-channel  -- normalise a single modality
   2. Sample-level -- consistent mask across aligned channels (filter)
   3. Publish + keep=False -- intermediate channel used by downstream steps
+  4. Compose -- several callables named and reused as one step
 
 No data is written to disk; transforms run in memory at __getitem__ time.
 
@@ -27,7 +29,7 @@ def example_per_channel(root: str) -> None:
     """Intensity normalisation applied to the lidar channel only."""
 
     ds = Goose3DDataset(root, keys=["lidar"])
-    ds.transform("lidar", lambda pts: pts / (pts.max() + 1e-6))
+    ds = ds.transform("lidar", lambda pts: pts / (pts.max() + 1e-6))
 
     sample = ds[0]
     print("[per-channel] lidar max after norm:", sample.data["lidar"].max())
@@ -56,7 +58,7 @@ def example_filter(root: str) -> None:
         sample.data["labels"] = sample.data["labels"][mask]
         return sample
 
-    ds.transform(range_filter)
+    ds = ds.transform(range_filter)
 
     sample = ds[0]
     n_pts = sample.data["lidar"].shape[0]
@@ -88,7 +90,7 @@ def example_publish(root: str) -> None:
     ds = Goose3DDataset(root, keys=["lidar"])
 
     # Step 1 -- range filter, publish result as 'lidar_f', drop it at the end
-    ds.transform(
+    ds = ds.transform(
         "lidar",
         lambda pts: pts[np.linalg.norm(pts[:, :3], axis=1) < 50.0],
         output="lidar_f",
@@ -96,8 +98,8 @@ def example_publish(root: str) -> None:
     )
 
     # Steps 2a and 2b -- two independent branches from the same filtered source
-    ds.transform("lidar_f", normalize, output="lidar_norm")
-    ds.transform("lidar_f", voxel_downsample, output="lidar_vox")
+    ds = ds.transform("lidar_f", normalize, output="lidar_norm")
+    ds = ds.transform("lidar_f", voxel_downsample, output="lidar_vox")
 
     sample = ds[0]
     assert "lidar_f" not in sample.data, "'lidar_f' should have been dropped"
@@ -114,7 +116,7 @@ def example_compose(root: str) -> None:
     """Bundle several per-channel ops into a named Compose object."""
 
     ds = Goose3DDataset(root, keys=["lidar"])
-    ds.transform(
+    ds = ds.transform(
         "lidar",
         Compose(
             [

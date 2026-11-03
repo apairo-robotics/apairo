@@ -52,10 +52,13 @@ the implementation, visualize a few frames, then materialize the same object:
 
 ```python
 p = TraversabilityLabel()
-preview = ds.transform(p)             # lazy, nothing written
-preview[42].data["trav_label"]        # computed on access — inspect, plot
-ds.run_preprocess(p)                  # once satisfied, persist + register
+preview = ds.transform(p, in_place=False)   # lazy, nothing written
+preview[42].data["trav_label"]              # computed on access — inspect, plot
+ds.run_preprocess(p)                        # once satisfied, persist + register
 ```
+
+`in_place=False` keeps the lazy step off `ds`, so `run_preprocess` runs on
+the dataset as it was. It becomes the default in 0.11.
 
 (A `SequencePreprocessor` cannot run lazily — it needs the full sequence at
 once, which is exactly why materialization exists.)

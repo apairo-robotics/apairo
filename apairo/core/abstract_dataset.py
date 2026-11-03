@@ -1,4 +1,5 @@
 import copy
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import (
@@ -87,6 +88,15 @@ class _PreprocessorStep:
         else:
             sample.data.update(as_output_dict(self.preprocessor, result))
         return sample
+
+
+_IN_PLACE_DEFAULT_CHANGES = (
+    "transform() modifies the dataset it is called on and returns it. In "
+    "apairo 0.11 it will return a new dataset and leave this one unchanged. "
+    "Assign the result (`ds = ds.transform(...)`) and pass in_place=False to "
+    "adopt the new behaviour now, or in_place=True to keep modifying the "
+    "dataset; either silences this warning."
+)
 
 
 class AbstractDataset(ABC):
@@ -192,9 +202,14 @@ class AbstractDataset(ABC):
         fn: Callable | None = None,
         output: str | None = None,
         keep: bool = True,
-        in_place: bool = True,
+        in_place: bool | None = None,
     ) -> "AbstractDataset":
         """Register a transform in the pipeline, applied at access time.
+
+        Use the returned dataset: ``ds = ds.transform(...)``. In 0.11
+        ``transform()`` will return a new dataset and leave the one it is
+        called on unchanged, like ``synchronize``, ``window``, ``filter``,
+        ``select`` and ``cache`` already do (see *Returned dataset* below).
 
         Two forms:
 
@@ -204,15 +219,14 @@ class AbstractDataset(ABC):
         By default the result overwrites ``key``.  Pass ``output`` to publish it
         as a new channel while leaving ``key`` untouched::
 
-            ds.transform("lidar", RangeFilter(max=50), output="lidar_f")
-            ds.transform("lidar_f", Normalize())          # reads published channel
-            ds.transform("lidar_f", Voxelize())           # same source, different branch
+            ds = ds.transform("lidar", RangeFilter(max=50), output="lidar_f")
+            ds = ds.transform("lidar_f", Normalize())     # reads published channel
 
         Set ``keep=False`` together with ``output`` to drop the published channel
         from the final sample (useful for intermediate results)::
 
-            ds.transform("lidar", compute_mask, output="_mask", keep=False)
-            ds.transform(lambda s: apply_mask(s, "_mask"))
+            ds = ds.transform("lidar", compute_mask, output="_mask", keep=False)
+            ds = ds.transform(lambda s: apply_mask(s, "_mask"))
 
         **Sample-level** -- ``transform(fn)``
 
@@ -225,7 +239,7 @@ class AbstractDataset(ABC):
                 sample.data["labels"] = sample.data["labels"][mask]
                 return sample
 
-            ds.transform(range_filter)
+            ds = ds.transform(range_filter)
 
         **Preprocessor** -- ``transform(preprocessor)``
 
@@ -235,9 +249,9 @@ class AbstractDataset(ABC):
         is how to preview a preprocess before materializing it::
 
             p = TravLabel()
-            preview = ds.transform(p)        # lazy, nothing written
-            preview[42].data["trav_label"]   # inspect, iterate on p
-            ds.run_preprocess(p)             # materialize once satisfied
+            preview = ds.transform(p, in_place=False)   # lazy, nothing written
+            preview[42].data["trav_label"]              # inspect, iterate on p
+            ds.run_preprocess(p)                        # materialize once satisfied
 
         A multi-output preprocessor (``output_keys``) publishes every key of
         its returned dict; ``output=`` cannot rename it.
@@ -245,26 +259,30 @@ class AbstractDataset(ABC):
         A :class:`~apairo.core.preprocessor.SequencePreprocessor` is rejected:
         it needs the full sequence at once, materialization is the point.
 
-        All forms compose in registration order and return ``self`` for
-        chaining.
+        All forms compose in registration order.
 
-        **Branching** -- ``transform(..., in_place=False)``
+        **Returned dataset** -- ``in_place``
 
-        Pass ``in_place=False`` to leave ``self`` untouched and register the
-        transform on an independent branch instead: a lightweight copy sharing
-        loaders and indices but owning its pipeline (transforms already
-        registered on ``self`` are inherited)::
+        - ``in_place=False`` returns an independent copy that shares loaders
+          and indices but owns its pipeline (the steps already registered are
+          inherited), and leaves ``self`` untouched. This becomes the default
+          in 0.11::
 
-            base = Rellis3DDataset(root, keys=["lidar"])
-            v1 = base.transform(augment_v1, in_place=False)
-            v2 = base.transform(augment_v2, in_place=False)   # independent
+              base = Rellis3DDataset(root, keys=["lidar"])
+              v1 = base.transform(augment_v1, in_place=False)
+              v2 = base.transform(augment_v2, in_place=False)   # independent
+
+        - ``in_place=True`` registers the step on ``self`` and returns
+          ``self``.
+        - Left unset, it behaves as ``in_place=True`` and emits a
+          :class:`FutureWarning`, because the default changes in 0.11. Code
+          that assigns the result (``ds = ds.transform(...)``) gives the same
+          result either way; pass ``in_place`` to silence the warning.
 
         .. warning::
-            By default transforms are registered **in place**: the return value
-            is the same object, so ``v1 = ds.transform(a)`` and
-            ``v2 = ds.transform(b)`` leave ``v1 is v2 is ds`` with *both*
-            transforms stacked.  To build independent variants, pass
-            ``in_place=False`` (or branch first, e.g. ``ds.filter(...)``).
+            Until 0.11, ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
+            leave ``v1 is v2 is ds`` with *both* steps stacked. To build
+            independent variants, pass ``in_place=False``.
         """
         step: Callable[[Sample], Sample]
         drop_key: str | list[str] | None = output
@@ -312,6 +330,9 @@ class AbstractDataset(ABC):
                 )
             step = _ChannelStep(key, fn, output)
 
+        if in_place is None:
+            warnings.warn(_IN_PLACE_DEFAULT_CHANGES, FutureWarning, stacklevel=2)
+            in_place = True
         target = self if in_place else self._branch()
 
         if not hasattr(target, "_pipeline"):
@@ -347,7 +368,7 @@ class AbstractDataset(ABC):
         Calls ``self[idx]`` (transforms applied) then projects to the requested
         channels.  The primary use case is narrowing scope before caching::
 
-            ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+            ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
             ds_prior = ds.select(["ground_prior"]).cache()
 
         Returns:
