@@ -348,3 +348,58 @@ def test_method_dict_unknown_channel_raises(async_ds):
 def test_method_dict_repr(async_ds):
     view = async_ds.synchronize(method={"imu": LerpInterp()})
     assert "per-channel" in repr(view)
+
+
+# ------------------------------------------------- duplicate timestamps
+
+
+def test_nearest_tie_on_a_repeated_stamp_favours_the_earlier_event(tmp_path):
+    """imu holds two events under t=1: both are at distance 0 from the tick,
+    so the documented tie rule picks the earlier one."""
+    ds = _make_async_dataset(tmp_path, [0.0, 1.0, 2.0], [0.0, 1.0, 1.0, 2.0])
+    view = ds.synchronize(reference="lidar", method="nearest")
+    np.testing.assert_array_equal(view.frame_indices["imu"], [0, 1, 3])
+
+
+def test_nearest_tie_between_neighbours_favours_the_earlier_event(tmp_path):
+    ds = _make_async_dataset(tmp_path, [1.0], [0.0, 0.0, 2.0, 2.0])
+    view = ds.synchronize(reference="lidar", method="nearest")
+    np.testing.assert_array_equal(view.frame_indices["imu"], [0])
+
+
+def test_previous_and_next_on_a_repeated_stamp_follow_their_definition(tmp_path):
+    """previous = last event with t <= t_ref, next = first with t >= t_ref."""
+    ds = _make_async_dataset(tmp_path, [0.0, 1.0, 2.0], [0.0, 1.0, 1.0, 2.0])
+    prev = ds.synchronize(reference="lidar", method="previous")
+    np.testing.assert_array_equal(prev.frame_indices["imu"], [0, 2, 3])
+    nxt = ds.synchronize(reference="lidar", method="next")
+    np.testing.assert_array_equal(nxt.frame_indices["imu"], [0, 1, 3])
+
+
+@pytest.mark.parametrize("method", ["previous", "next", "nearest", "interp"])
+def test_repeated_reference_stamps_pair_row_for_row(tmp_path, method):
+    """The reference itself, and a channel on its clock (repeated scans under
+    one stamp), are matched row for row: no row is served twice or lost."""
+    ts = [0.0, 1.0, 1.0, 1.0, 2.0]
+    ds = _make_async_dataset(tmp_path, ts, ts)
+    strat = LerpInterp() if method == "interp" else method
+    view = ds.synchronize(reference="lidar", method=strat)
+    for key in ("lidar", "imu"):
+        np.testing.assert_array_equal(
+            view.frame_indices[key][:, 0]
+            if method == "interp"
+            else view.frame_indices[key],
+            [0, 1, 2, 3, 4],
+        )
+    np.testing.assert_array_equal(
+        [view[i].data["imu"][0] for i in range(len(view))], [0, 1, 2, 3, 4]
+    )
+
+
+def test_a_reference_repeat_beyond_the_channel_s_takes_its_last(tmp_path):
+    """Three reference repeats, two channel events under the stamp: the third
+    repeat holds the channel's last one."""
+    ds = _make_async_dataset(tmp_path, [1.0, 1.0, 1.0], [0.0, 1.0, 1.0, 2.0])
+    for method in ("previous", "next", "nearest"):
+        view = ds.synchronize(reference="lidar", method=method)
+        np.testing.assert_array_equal(view.frame_indices["imu"], [1, 2, 2])

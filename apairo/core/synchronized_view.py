@@ -76,6 +76,12 @@ class SynchronizedView(AbstractDataset):
             * an :class:`~apairo.core.interpolator.Interpolator` -- the value
               is synthesized at ``t_ref`` from the two bracketing events
               (continuous signals only: poses, IMU, commands).
+
+            A stamp the reference repeats (several frames under one stamp) is
+            paired row for row by every strategy but a callable: its k-th
+            repeat takes the channel's k-th event under that stamp, or the
+            last one when the channel has fewer. The reference itself and a
+            channel on its clock are thus matched one to one.
         tolerance: Maximum ``|t - t_ref|`` in seconds.  For interpolated
             channels, *both* bracketing events must lie within tolerance.
             Reference ticks where any channel has no match are dropped.
@@ -274,8 +280,19 @@ class SynchronizedView(AbstractDataset):
         Returns ``(idx, valid)`` where ``idx`` has shape ``(N,)`` for matching
         strategies or ``(N, 2)`` (bracketing pair) for interpolators.
         """
+        left = np.searchsorted(ts, ref_ts, side="left")
         right = np.searchsorted(ts, ref_ts, side="right")
         latest = right - 1  # last event with t <= t_ref; -1 when none yet
+        # A stamp the reference repeats (several frames under one stamp) is
+        # paired row for row: its k-th repeat takes the k-th event under that
+        # stamp (the last when there are fewer), so the reference itself and a
+        # channel on its clock are matched one to one, no row served twice.
+        first = np.searchsorted(ref_ts, ref_ts, side="left")
+        repeats = np.searchsorted(ref_ts, ref_ts, side="right") - first
+        rank = np.arange(len(ref_ts)) - first
+        paired = np.where(
+            (repeats > 1) & (right > left), np.minimum(left + rank, right - 1), -1
+        )
 
         if isinstance(strat, Interpolator):
             i0 = np.clip(latest, 0, len(ts) - 1)
@@ -283,6 +300,8 @@ class SynchronizedView(AbstractDataset):
             # exact matches collapse to a single index -- the stored value is
             # returned directly, the interpolator is never called
             i1 = np.where(ts[i0] == ref_ts, i0, i1)
+            i0 = np.where(paired >= 0, paired, i0)
+            i1 = np.where(paired >= 0, paired, i1)
             # bracketed: an event at or before the tick, and one at or after
             valid = (latest >= 0) & (ts[i1] >= ref_ts)
             if tolerance is not None:
@@ -303,10 +322,12 @@ class SynchronizedView(AbstractDataset):
             valid = latest >= 0
         elif strat == "next":
             # first event with t >= t_ref; len(ts) when none remains
-            idx = np.searchsorted(ts, ref_ts, side="left")
+            idx = left
             valid = idx < len(ts)
         else:  # nearest -- either side; ties favour the earlier event
-            prev = np.clip(latest, 0, len(ts) - 1)
+            # the earliest of the events under the closest stamp at or before
+            # the tick (equal distance: a repeated stamp is a tie too)
+            prev = np.searchsorted(ts, ts[np.clip(latest, 0, len(ts) - 1)], "left")
             nxt = np.clip(right, 0, len(ts) - 1)
             idx = np.where(
                 np.abs(ts[prev] - ref_ts) <= np.abs(ts[nxt] - ref_ts),
@@ -315,6 +336,9 @@ class SynchronizedView(AbstractDataset):
             )
             valid = np.ones(len(ref_ts), dtype=bool)
 
+        if not callable(strat):
+            idx = np.where(paired >= 0, paired, idx)
+            valid = valid | (paired >= 0)
         idx = np.clip(idx, 0, len(ts) - 1)
         if tolerance is not None:
             valid = valid & (np.abs(ts[idx] - ref_ts) <= tolerance)

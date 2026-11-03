@@ -31,6 +31,10 @@ sample.timestamp      # timestamp of the reference frame
 - **`method="nearest"`** -- each channel contributes the event closest in
   time, past or future, ties favouring the earlier event (best alignment
   for offline training).
+- **Repeated stamps** -- a stamp the reference repeats (several frames under
+  one stamp) is paired row for row: its k-th repeat takes the channel's k-th
+  event under that stamp, or the last when the channel has fewer. The
+  reference itself and a channel on its clock match one to one.
 - **`tolerance`** -- reference frames where any channel has no event within
   the window are dropped, so every sample is guaranteed fresh.
 

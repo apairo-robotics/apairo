@@ -659,7 +659,10 @@ class AbstractDataset(ABC):
                 indices`` implementing a custom matching strategy (negative
                 index = no match); or an
                 :class:`~apairo.core.interpolator.Interpolator` synthesizing
-                the value at ``t_ref`` from the two bracketing events.
+                the value at ``t_ref`` from the two bracketing events. A stamp
+                the reference repeats is paired row for row (its k-th repeat
+                takes the channel's k-th event under it, the last when fewer),
+                so a channel on the reference's clock matches one to one.
             tolerance: Maximum ``|t - t_ref|`` in seconds.  Reference frames
                 where any channel has no match within tolerance are dropped
                 (for interpolated channels, both bracketing events count).

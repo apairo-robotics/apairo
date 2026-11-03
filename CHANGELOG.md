@@ -19,6 +19,14 @@ All notable changes to apairo are documented here. The format is based on
   regeneration crashed under the same recipe. `init` and
   `unregistered_channels` skip marked directories, so a partial output is never
   registered as a raw channel.
+- **`synchronize` on repeated timestamps.** `method="nearest"` now picks the
+  earlier of events at equal distance when they share a stamp, as documented;
+  it picked the later one. A stamp the reference repeats (several frames under
+  one stamp, as TartanDrive scans) is paired row for row by every strategy but a
+  callable: its k-th repeat takes the channel's k-th event under that stamp, or
+  the last when the channel has fewer. Before, the reference channel itself
+  served one of its repeated rows several times and dropped the others
+  (`"previous"` the last, `"next"` the first), and so did a channel on its clock.
 
 ## [0.9.0] - 2026-10-29
 
