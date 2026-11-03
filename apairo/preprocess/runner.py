@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 import shutil
@@ -243,13 +244,35 @@ def _outputs_to_numpy(preprocessor, result) -> dict[str, np.ndarray]:
     return {k: _to_numpy(v) for k, v in as_output_dict(preprocessor, result).items()}
 
 
+def _scalar_params(obj) -> dict:
+    scalar = (int, float, str, bool, type(None))
+    return {
+        k: v
+        for k, v in sorted(vars(obj).items())
+        if not k.startswith("_") and isinstance(v, scalar)
+    }
+
+
+def _reduce_spec(preprocessor) -> dict | None:
+    """The declared identity of a window reducer: ``None`` for the
+    preprocessor's own ``window_reduce`` method (code, like ``__call__``),
+    else the reducer's name and scalar parameters."""
+    reduce = preprocessor.window_reduce
+    if inspect.ismethod(reduce) and reduce.__self__ is preprocessor:
+        return None
+    if inspect.isfunction(reduce) or inspect.ismethod(reduce):
+        return {"class": reduce.__qualname__, "params": {}}
+    params = _scalar_params(reduce) if hasattr(reduce, "__dict__") else {}
+    return {"class": type(reduce).__qualname__, "params": params}
+
+
 def _recipe_key(preprocessor, output_format: str | None = None) -> str:
     """A content hash of the preprocessor's *declared* configuration -- the
     identity of what it produces. Only explicit, serializable attributes go in
     (class name, declared I/O, and scalar constructor params -- never code, never
     array-valued attributes), so an identical recipe hits and a declared-param
-    change mints a fresh one."""
-    scalar = (int, float, str, bool, type(None))
+    change mints a fresh one. A windowed preprocessor adds its window size,
+    stride and reducer (see :func:`_reduce_spec`)."""
     spec = {
         "class": type(preprocessor).__qualname__,
         "input_keys": list(preprocessor.input_keys),
@@ -259,12 +282,22 @@ def _recipe_key(preprocessor, output_format: str | None = None) -> str:
         "output_loader": output_format or getattr(preprocessor, "output_loader", None),
         "timestamps_from": preprocessor.timestamps_from,
         "sources": list(preprocessor.sources or []),
+        # The window settings go under "window" whether they are class or
+        # instance attributes.
         "params": {
             k: v
-            for k, v in sorted(vars(preprocessor).items())
-            if not k.startswith("_") and isinstance(v, scalar)
+            for k, v in _scalar_params(preprocessor).items()
+            if k not in ("window_size", "window_stride")
         },
     }
+    # Only a windowed preprocessor carries the key, so the recipe of every
+    # other one is unchanged.
+    if getattr(preprocessor, "window_size", 1) != 1:
+        spec["window"] = {
+            "size": preprocessor.window_size,
+            "stride": preprocessor.window_stride,
+            "reduce": _reduce_spec(preprocessor),
+        }
     blob = json.dumps(spec, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
@@ -310,6 +343,14 @@ class _SameClockFrames:
 
     def __iter__(self):
         return (self[i] for i in range(len(self)))
+
+    @property
+    def frame_sequence_ids(self) -> np.ndarray:
+        """Sequence name of every row, so a window never crosses a sequence."""
+        return np.repeat(
+            np.array([seq.root_dir.name for seq in self.sequences], dtype=object),
+            [len(c) for c in self._clocks],
+        )
 
     @property
     def _seq_groups(self) -> dict[str, list[int]] | None:
@@ -383,6 +424,12 @@ def run(
     them in one sample when they share one clock (identical timestamps, as with
     a channel derived through ``timestamps_from``): they are zipped row for row,
     and the output is numbered and stamped by that clock.
+
+    A :class:`~apairo.core.preprocessor.FramePreprocessor` with
+    ``window_size > 1`` reads each frame through its causal window
+    (:meth:`~apairo.core.preprocessor.FramePreprocessor.windowed`): one window
+    in memory at a time, never across a sequence, one output per frame placed
+    and stamped as that frame.
 
     The output is written in *output_format* when given, else in the
     preprocessor's ``output_loader``, else in its input channel's format when
@@ -491,7 +538,7 @@ def run(
     )
 
     if isinstance(preprocessor, FramePreprocessor):
-        _run_frame(preprocessor, dataset, outputs)
+        _run_frame(preprocessor, dataset, preprocessor.windowed(dataset), outputs)
     else:
         _run_sequence(preprocessor, dataset, outputs)
 
@@ -514,15 +561,24 @@ def run(
 
 
 def _run_frame(
-    preprocessor: FramePreprocessor, dataset, outputs: _OutputFormats
+    preprocessor: FramePreprocessor, dataset, frames, outputs: _OutputFormats
 ) -> None:
     """One call per frame. A per-frame format gets each output as it comes; a
-    stacked one gets each sequence's outputs stacked, once the run is over."""
+    stacked one gets each sequence's outputs stacked, once the run is over.
+
+    *frames* serves the samples -- *dataset* itself, or its window view, which
+    holds one sample per frame of *dataset*, index for index -- while
+    *dataset* places the outputs."""
     n = len(dataset)
+    if len(frames) != n:
+        raise RuntimeError(
+            f"{preprocessor.__class__.__name__}: the windowed view holds "
+            f"{len(frames)} frames, the dataset {n}; outputs could not be placed."
+        )
     seq_timestamps: dict[Path, list] = {}
     stacks: dict[tuple[Path, str], tuple[Format, list[tuple[int, np.ndarray]]]] = {}
 
-    for idx, sample in enumerate(dataset):
+    for idx, sample in enumerate(frames):
         logger.debug("[%d/%d]", idx + 1, n)
         results = _outputs_to_numpy(preprocessor, preprocessor(sample))
         chosen = outputs.choose_all(results, frame=True)

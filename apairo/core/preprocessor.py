@@ -141,6 +141,20 @@ class FramePreprocessor(Preprocessor):
     result under ``output_key`` at access time, nothing is written.  Preview
     a preprocess this way before materializing it with ``run_preprocess``.
 
+    **Temporal window.** Set ``window_size > 1`` (and optionally
+    ``window_stride``) to see each frame with its past neighbours: the frame
+    plus the ``window_size - 1`` preceding frames spaced ``window_stride``
+    apart, oldest -> newest, clipped at the start of its sequence and never
+    crossing into another one -- the semantics of
+    :meth:`~apairo.core.abstract_dataset.AbstractDataset.window` with
+    ``boundary="clip"``. :meth:`window_reduce` collapses the window into one
+    sample, then ``__call__`` runs on it as usual. There is still one output
+    per frame, placed and stamped as that (anchor) frame, and the run streams:
+    only one window is in memory at a time. The window is taken over the
+    frames the run iterates, so with a split listing frames the neighbours are
+    the previous *selected* frames. ``window_size`` and ``window_stride`` enter
+    the recipe. Preview lazily with ``p.windowed(ds).transform(p)``.
+
     Example::
 
         class TravLabel(FramePreprocessor):
@@ -152,7 +166,62 @@ class FramePreprocessor(Preprocessor):
             def __call__(self, sample: Sample) -> np.ndarray:
                 pts = sample.data["velodyne_0"]
                 return my_model(pts)
+
+        class BevAccumulated(FramePreprocessor):
+            output_key  = "bev_acc"
+            input_keys  = ["lidar", "pose"]
+            window_size = 10                  # this scan + the 9 before it
+
+            def __init__(self):
+                self.window_reduce = StackByPose()   # from apairo_transform
+
+            def __call__(self, sample: Sample) -> np.ndarray:
+                return bev_grid(sample.data["lidar"])
     """
+
+    window_size: int = 1
+    window_stride: int = 1
+
+    def window_reduce(self, samples: list[Sample]) -> Sample:
+        """Collapse a temporal window into the one sample ``__call__`` receives.
+
+        Only used when ``window_size > 1``. *samples* is the causal window
+        ending at the anchor frame, oldest -> newest (``samples[-1]`` is the
+        anchor), clipped at the start of its sequence. The returned sample must
+        carry the anchor's timestamp: the output belongs to the anchor frame.
+
+        Override this method, or assign a reducer callable to the instance
+        (``self.window_reduce = StackByPose()`` from ``apairo_transform``).
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} declares window_size={self.window_size} but "
+            f"no window_reduce: override window_reduce(samples) -> Sample, or "
+            f"assign a reducer such as apairo_transform.StackByPose() to "
+            f"self.window_reduce."
+        )
+
+    def windowed(self, dataset: Any) -> Any:
+        """The view this preprocessor reads frames from: *dataset* itself when
+        ``window_size == 1``, else ``dataset.window(window_size, window_stride,
+        reduce=window_reduce, boundary="clip")`` -- one reduced sample per frame
+        of *dataset*, index for index.
+
+        ``run_preprocess`` reads through this view; the lazy preview is
+        ``p.windowed(ds).transform(p)``, so both see the same windows.
+        """
+        if self.window_size == 1:
+            return dataset
+        from apairo.core.window_view import WindowView
+
+        # WindowView directly, not dataset.window(): the runner also windows
+        # its own row-zipping view, which is not an AbstractDataset.
+        return WindowView(
+            dataset,
+            self.window_size,
+            self.window_stride,
+            reduce=_AnchorStamped(self.window_reduce),
+            boundary="clip",
+        )
 
     @abstractmethod
     def __call__(self, sample: Sample) -> Any:
@@ -206,3 +275,28 @@ class SequencePreprocessor(Preprocessor):
             A ``numpy.ndarray`` of shape ``(N, ...)``.
         """
         ...
+
+
+class _AnchorStamped:
+    """A window reducer whose result must keep the anchor's timestamp: the
+    output of a windowed preprocessor belongs to the anchor frame. Module-level
+    for picklability."""
+
+    __slots__ = ("reduce",)
+
+    def __init__(self, reduce: Callable[[list[Sample]], Sample]) -> None:
+        self.reduce = reduce
+
+    def __call__(self, samples: list[Sample]) -> Sample:
+        result = self.reduce(samples)
+        if not isinstance(result, Sample):
+            raise TypeError(
+                f"window_reduce must return a Sample, got {type(result).__name__}."
+            )
+        if result.timestamp != samples[-1].timestamp:
+            raise ValueError(
+                f"window_reduce returned timestamp {result.timestamp!r}, the "
+                f"anchor frame's is {samples[-1].timestamp!r}: the reduced sample "
+                f"must keep the anchor's (samples[-1]) timestamp."
+            )
+        return result

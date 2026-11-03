@@ -7,6 +7,18 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **Temporal windows for frame preprocessors.** A `FramePreprocessor` with
+  `window_size > 1` (and `window_stride`) receives each frame reduced from its
+  causal window by `window_reduce` -- the semantics of
+  `window(..., boundary="clip")`: within one sequence, clipped at its start.
+  `run_preprocess` streams it, one window in memory at a time, and writes one
+  output per frame, placed and stamped as that frame. The window settings and
+  the reducer enter the recipe; a preprocessor without a window keeps its
+  recipe. Preview it with `p.windowed(ds).transform(p)`; `transform(p)` alone
+  refuses a windowed preprocessor.
+
 ## [0.9.0] - 2026-10-29
 
 ### Upgrading from 0.8

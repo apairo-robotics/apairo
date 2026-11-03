@@ -96,6 +96,8 @@ TartanKittiDataset.run_preprocess(GICPPoses(), "/data/tartan/seq_001")
 | `input_keys` | `list[str]` | Dataset channels required as input |
 | `timestamps_from` | `str \| None` | The channel whose clock the output shares, recorded as provenance in `.apairo`. The runner writes the output's `timestamps.txt` from the input samples' timestamps either way, so the output carries its own clock. |
 | `sources` | `list[str] \| None` | Provenance recorded in `.apairo` for reference. |
+| `window_size` | `int` | `FramePreprocessor` only. Frames per temporal window, the current one included (default `1`: no window). See [temporal windows](#temporal-windows). |
+| `window_stride` | `int` | `FramePreprocessor` only. Gap, in frames, between two window members (default `1`). |
 
 ---
 
@@ -155,6 +157,62 @@ holds a single channel, so the runner looks at the inputs' clocks:
 
 "Identical" means the same timestamps, not merely the same number of frames: two
 channels of equal length on shifted clocks are refused too.
+
+---
+
+## Temporal windows
+
+A `FramePreprocessor` can see each frame together with the frames before it --
+accumulate the last 10 scans into a BEV grid, difference two consecutive
+labels. Set `window_size` (and `window_stride`), and give a `window_reduce`
+that collapses the window into the one sample `__call__` receives:
+
+```python
+from apairo_transform import StackByPose
+
+
+class BevAccumulated(FramePreprocessor):
+    output_key  = "bev_acc"
+    input_keys  = ["lidar", "pose"]
+    window_size = 10                     # this scan and the 9 before it
+
+    def __init__(self):
+        self.window_reduce = StackByPose()   # or override window_reduce(samples)
+
+    def __call__(self, sample):
+        return bev_grid(sample.data["lidar"])   # the accumulated cloud
+
+
+Rellis3DDataset.run_preprocess(BevAccumulated(), "/data/rellis")
+```
+
+The window is the one `ds.window(size, stride, reduce, boundary="clip")` builds:
+
+- **Causal.** The frame (the *anchor*) and the `window_size - 1` frames before
+  it, spaced `window_stride` apart, handed to `window_reduce` oldest -> newest
+  (`samples[-1]` is the anchor). There are no future or centred windows.
+- **Within one sequence.** Near a sequence start the window holds fewer frames;
+  it never reaches into the previous sequence of a root.
+- **One output per frame**, written where the anchor's would be and stamped
+  with its timestamp: `window_reduce` must return the anchor's timestamp.
+- **Streaming.** The run reads one window at a time, never the whole sequence;
+  each frame is read once per window it belongs to.
+- **Over the frames the run iterates.** With a split listing frames, a frame's
+  neighbours are the previous *selected* frames of its sequence.
+
+`window_size`, `window_stride` and the reducer (its class and scalar
+parameters, when it is not the preprocessor's own method) are part of the
+recipe, so `reuse=True` regenerates the output when they change. Inputs on one
+clock of an asynchronous dataset are grouped row for row first, then windowed.
+
+The lazy preview goes through the same window view -- `transform(p)` alone
+refuses a windowed preprocessor:
+
+```python
+p = BevAccumulated()
+preview = p.windowed(ds).transform(p)    # same windows as run_preprocess
+preview[42].data["bev_acc"]
+```
 
 ---
 

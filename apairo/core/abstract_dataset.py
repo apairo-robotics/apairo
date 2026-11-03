@@ -242,6 +242,10 @@ class AbstractDataset(ABC):
         A multi-output preprocessor (``output_keys``) publishes every key of
         its returned dict; ``output=`` cannot rename it.
 
+        A windowed preprocessor (``window_size > 1``) needs its neighbours:
+        register it on its window view, ``p.windowed(ds).transform(p)`` --
+        anywhere else it is rejected.
+
         A :class:`~apairo.core.preprocessor.SequencePreprocessor` is rejected:
         it needs the full sequence at once, materialization is the point.
 
@@ -293,6 +297,14 @@ class AbstractDataset(ABC):
                         f"{type(key_or_fn).__name__} (output_keys="
                         f"{key_or_fn.output_keys})."
                     )
+                if key_or_fn.window_size != 1 and not self._windows_for(key_or_fn):
+                    name = type(key_or_fn).__name__
+                    raise TypeError(
+                        f"{name} reads a window of {key_or_fn.window_size} "
+                        f"frames, which a per-sample transform cannot provide. "
+                        f"Preview it through its window view: "
+                        f"p.windowed(ds).transform(p)."
+                    )
                 drop_key = [output] if output is not None else key_or_fn.outputs
                 step = _PreprocessorStep(key_or_fn, output)
             elif not callable(key_or_fn):
@@ -325,6 +337,18 @@ class AbstractDataset(ABC):
             target._drop_keys.update(keys)
 
         return target
+
+    def _windows_for(self, preprocessor) -> bool:
+        """Whether this dataset already serves *preprocessor*'s windows: a
+        clipped window view of its size and stride."""
+        from apairo.core.window_view import WindowView
+
+        return (
+            isinstance(self, WindowView)
+            and self._size == preprocessor.window_size
+            and self._stride == preprocessor.window_stride
+            and self._boundary == "clip"
+        )
 
     def _branch(self) -> "AbstractDataset":
         """Independent branch of this dataset: a shallow copy sharing loaders
