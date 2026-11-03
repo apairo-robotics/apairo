@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from apairo.core.config import INCOMPLETE_MARKER
 from apairo.core.formats import Format, find_format, formats, get_format
 from apairo.core.preprocessor import (
     FramePreprocessor,
@@ -396,14 +397,17 @@ def run(
         dataset_cls: Dataset class whose ``derived_path()`` defines file placement.
         root_dir: Dataset root directory (passed to ``dataset_cls.__init__``).
         overwrite: If ``False`` (default) and the output channel already holds
-            data, raise :exc:`FileExistsError`.
+            data, raise :exc:`FileExistsError`. Replaces an output apairo wrote:
+            a registered one, or the partial output of a run that did not
+            finish (marked by a ``.apairo_incomplete`` file while a run writes
+            it). Data apairo did not write is never replaced.
         reuse: Recipe-addressed idempotency. When ``True``, an output already on
             disk whose registered recipe matches this preprocessor's declared
             config is left untouched (the run is a no-op); a *changed* recipe is
-            regenerated. The recipe hashes only declared attributes (never code),
-            so it catches a scalar-parameter change but not an edit to
-            ``__call__`` or an array-valued attribute -- use ``overwrite=True``
-            after changing the body.
+            regenerated, and so is a partial output. The recipe hashes only
+            declared attributes (never code), so it catches a scalar-parameter
+            change but not an edit to ``__call__`` or an array-valued attribute
+            -- use ``overwrite=True`` after changing the body.
         output_format: The format to write the output in, overriding the
             preprocessor's ``output_loader``.
 
@@ -447,6 +451,9 @@ def run(
     def holds_data(directory: Path) -> bool:
         return directory.is_dir() and any(directory.iterdir())
 
+    def incomplete(directory: Path) -> bool:
+        return (directory / INCOMPLETE_MARKER).is_file()
+
     def registered(key: str, registry: Path) -> dict | None:
         entry = registries[registry].get(key)
         return entry if isinstance(entry, dict) else None
@@ -455,7 +462,9 @@ def run(
     # changed recipe regenerates (the old output is stale). Without reuse, any
     # existing output still raises unless overwrite is set.
     if reuse and all(
-        holds_data(d) and (registered(key, r) or {}).get("recipe") == recipe
+        holds_data(d)
+        and not incomplete(d)
+        and (registered(key, r) or {}).get("recipe") == recipe
         for d, r, key in targets
     ):
         logger.info(
@@ -468,12 +477,18 @@ def run(
         if not holds_data(directory):
             continue
         if not (overwrite or reuse):
+            state = (
+                "is incomplete (a run writing it did not finish)"
+                if incomplete(directory)
+                else "already exists"
+            )
             raise FileExistsError(
-                f"Derived key '{key}' already exists (in {directory}). Pass "
+                f"Derived key '{key}' {state} (in {directory}). Pass "
                 f"overwrite=True to recompute, or reuse=True to skip when the "
                 f"recipe is unchanged."
             )
-        if registered(key, registry) is None:
+        # A run's own partial output carries its marker: apairo wrote it.
+        if registered(key, registry) is None and not incomplete(directory):
             raise FileExistsError(
                 f"{directory} holds data apairo did not write as '{key}': it is "
                 f"left alone. Delete it, or choose another output_key."
@@ -490,10 +505,26 @@ def run(
         "s" if n != 1 else "",
     )
 
-    if isinstance(preprocessor, FramePreprocessor):
-        _run_frame(preprocessor, dataset, outputs)
-    else:
-        _run_sequence(preprocessor, dataset, outputs)
+    # Every output directory is marked before the first file lands and unmarked
+    # once the output is registered, so a run that dies midway leaves output a rerun
+    # recognises as apairo's own (overwrite / reuse clean it), never as data
+    # apairo did not write.
+    directories = list(dict.fromkeys(d for d, _, _ in targets))
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / INCOMPLETE_MARKER).touch()
+    try:
+        if isinstance(preprocessor, FramePreprocessor):
+            _run_frame(preprocessor, dataset, outputs)
+        else:
+            _run_sequence(preprocessor, dataset, outputs)
+    except BaseException:
+        # Nothing written: leave no trace. Partial output keeps its marker.
+        for directory in directories:
+            if [p.name for p in directory.iterdir()] == [INCOMPLETE_MARKER]:
+                (directory / INCOMPLETE_MARKER).unlink()
+                directory.rmdir()
+        raise
 
     keys = preprocessor.outputs
     logger.info("Done  ->  '%s' registered in %s", "', '".join(keys), root_dir)
@@ -511,6 +542,11 @@ def run(
                 sources=preprocessor.sources,
                 recipe=recipe,
             )
+    # Written and registered: the output is complete.
+    for directory in directories:
+        (directory / INCOMPLETE_MARKER).unlink()
+        if not any(directory.iterdir()):
+            directory.rmdir()  # a sequence the run wrote nothing in
 
 
 def _run_frame(

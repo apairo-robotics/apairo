@@ -11,6 +11,9 @@ from apairo.core.formats import find_format, format_names, formats
 
 CONFIG_DIR = ".apairo"
 CHANNELS_FILE = "channels.yaml"
+# Present in a channel directory while a preprocess run writes it: what a run
+# that did not finish leaves is apairo's own partial output, never a channel.
+INCOMPLETE_MARKER = ".apairo_incomplete"
 CALIBRATION_FILE = "calibration.yaml"
 DATASET_FILE = "dataset.yaml"
 # The human-owned declaration, at the sequence root (NOT inside .apairo): how to

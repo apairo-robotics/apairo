@@ -7,6 +7,19 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+
+- **`run_preprocess` recognises the partial output of a run that did not
+  finish.** A run marks each output directory with `.apairo_incomplete` before
+  writing and removes the mark once the output is registered. A rerun with
+  `overwrite=True` or `reuse=True` replaces a marked directory; before, every
+  rerun refused it as "data apairo did not write" and it had to be deleted by
+  hand. A directory without the mark that apairo did not register is still
+  refused. `reuse=True` no longer skips as up to date a registered output whose
+  regeneration crashed under the same recipe. `init` and
+  `unregistered_channels` skip marked directories, so a partial output is never
+  registered as a raw channel.
+
 ## [0.9.0] - 2026-10-29
 
 ### Upgrading from 0.8

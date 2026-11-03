@@ -9,6 +9,7 @@ from apairo.core import AbstractDataset, AbstractLoader, FrameRef
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
+    INCOMPLETE_MARKER,
     config_exists,
     declaration_exists,
     declaration_path,
@@ -120,6 +121,16 @@ def _suffix_channel_entries(channel_dir: Path, loader: str) -> dict[str, dict]:
         suffix: {"loader": fmt.name, "directory": channel_dir.name, "suffix": suffix}
         for suffix in sorted(_suffix_names(channel_dir, fmt))
     }
+
+
+def _channel_candidate(channel_dir: Path) -> bool:
+    """A directory init may register: not hidden, and not the partial output
+    of a preprocess run that did not finish."""
+    return (
+        channel_dir.is_dir()
+        and not channel_dir.name.startswith(".")
+        and not (channel_dir / INCOMPLETE_MARKER).exists()
+    )
 
 
 class AsyncLayoutDataset(AbstractDataset):
@@ -435,7 +446,7 @@ class AsyncLayoutDataset(AbstractDataset):
             existing = read_config(directory).get("channels", {})
             added = 0
             for channel_dir in sorted(directory.iterdir()):
-                if not channel_dir.is_dir() or channel_dir.name.startswith("."):
+                if not _channel_candidate(channel_dir):
                     continue
                 if raw_keys is not None and channel_dir.name not in raw_keys:
                     continue
@@ -491,7 +502,7 @@ class AsyncLayoutDataset(AbstractDataset):
 
         channels: dict = {}
         for channel_dir in sorted(directory.iterdir()):
-            if not channel_dir.is_dir() or channel_dir.name.startswith("."):
+            if not _channel_candidate(channel_dir):
                 continue
             if raw_keys is not None and channel_dir.name not in raw_keys:
                 continue

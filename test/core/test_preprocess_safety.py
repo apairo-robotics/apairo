@@ -181,3 +181,102 @@ def test_a_stacked_format_is_not_used_for_a_split_run(tmp_path):
             val.loaders["mean_height"][i],
             val.loaders["lidar"][i][:, 2].mean(keepdims=True),
         )
+
+
+class _Boom(FramePreprocessor):
+    """Copies the lidar, and raises on frame ``fail_at`` (never, when None)."""
+
+    output_key = "copy"
+    input_keys = ["lidar"]
+    output_loader = "npys"
+
+    def __init__(self, fail_at: int | None = None, scale: float = 1.0):
+        self.fail_at = fail_at
+        self.scale = scale
+        self.calls = 0
+
+    def __call__(self, sample: Sample):
+        if self.calls == self.fail_at:
+            raise RuntimeError("crash mid-run")
+        self.calls += 1
+        return sample.data["lidar"] * self.scale
+
+
+def _crash(seq, **kwargs):
+    with pytest.raises(RuntimeError, match="crash mid-run"):
+        RawDataset.run_preprocess(_Boom(fail_at=2), seq, **kwargs)
+    assert len(list((seq / "copy").glob("*.npy"))) == 2  # partial output left
+
+
+def _assert_full_copy(seq):
+    ds = RawDataset(seq, keys=["lidar", "copy"])
+    for i in range(N):
+        np.testing.assert_array_equal(ds.loaders["copy"][i], ds.loaders["lidar"][i])
+
+
+def test_overwrite_cleans_apairo_s_own_partial_output(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    _crash(seq)
+    RawDataset.run_preprocess(_Boom(), seq, overwrite=True)
+    _assert_full_copy(seq)
+    assert sorted(p.name for p in (seq / "copy").iterdir()) == [
+        *(f"{i:06d}.npy" for i in range(N)),
+        "timestamps.txt",
+    ]
+
+
+def test_reuse_regenerates_apairo_s_own_partial_output(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    _crash(seq)
+    RawDataset.run_preprocess(_Boom(), seq, reuse=True)
+    _assert_full_copy(seq)
+
+
+def test_reuse_never_skips_a_crashed_regeneration(tmp_path):
+    """A registered output, overwritten under the same recipe by a run that
+    crashed, is partial: reuse must regenerate it, not call it up to date."""
+    seq = _seq(tmp_path / "seq")
+    RawDataset.run_preprocess(_Boom(), seq)
+    _crash(seq, overwrite=True)
+    RawDataset.run_preprocess(_Boom(), seq, reuse=True)
+    _assert_full_copy(seq)
+
+
+def test_a_partial_output_still_needs_overwrite_or_reuse(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    _crash(seq)
+    with pytest.raises(FileExistsError, match="incomplete"):
+        RawDataset.run_preprocess(_Boom(), seq)
+
+
+def test_foreign_data_stays_protected_after_a_crash(tmp_path):
+    """The partial-output marker is apairo's own: a directory without it is
+    still refused, overwrite or not."""
+    seq = _seq(tmp_path / "seq")
+    _crash(seq)
+    (seq / "notes").mkdir()
+    (seq / "notes" / "field_log.txt").write_text("kept by hand")
+    for kwargs in ({"overwrite": True}, {"reuse": True}):
+        with pytest.raises(FileExistsError, match="holds data apairo did not write"):
+            RawDataset.run_preprocess(
+                Convert("lidar", to="npys", output_key="notes"), seq, **kwargs
+            )
+    assert (seq / "notes" / "field_log.txt").read_text() == "kept by hand"
+
+
+def test_a_completed_run_leaves_no_marker(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    RawDataset.run_preprocess(_Boom(), seq)
+    assert not [p for p in (seq / "copy").iterdir() if p.name.startswith(".")]
+
+
+@pytest.mark.parametrize("mode", ["merge", "overwrite"])
+def test_init_never_registers_a_partial_output_as_raw(tmp_path, mode):
+    seq = _seq(tmp_path / "seq")
+    (seq / "extra").mkdir()  # something new, so merge has a channel to add
+    np.save(seq / "extra" / "000000.npy", np.zeros(2))
+    _crash(seq)
+    RawDataset.init(seq, **{mode: True})
+    assert "copy" not in read_config(seq)["channels"]
+    RawDataset.run_preprocess(_Boom(), seq, overwrite=True)
+    _assert_full_copy(seq)

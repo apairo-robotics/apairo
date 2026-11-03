@@ -19,6 +19,7 @@ import numpy as np
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
+    INCOMPLETE_MARKER,
     config_exists,
     read_calibration,
     read_config,
@@ -1048,6 +1049,8 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         found: dict[str, str] = {}
         for d in sorted(root_dir.glob(pattern)):
             if not d.is_dir() or d.name.startswith(".") or d.name in found:
+                continue
+            if (d / INCOMPLETE_MARKER).exists():  # a run that did not finish
                 continue
             if d.name in raw_dirs or d.name in declared:
                 continue
