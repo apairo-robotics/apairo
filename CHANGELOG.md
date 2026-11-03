@@ -13,10 +13,13 @@ All notable changes to apairo are documented here. The format is based on
   `window_size > 1` (and `window_stride`) receives each frame reduced from its
   causal window by `window_reduce` -- the semantics of
   `window(..., boundary="clip")`: within one sequence, clipped at its start.
-  `run_preprocess` streams it, one window in memory at a time, and writes one
-  output per frame, placed and stamped as that frame. The window settings and
-  the reducer enter the recipe; a preprocessor without a window keeps its
-  recipe. Preview it with `p.windowed(ds).transform(p)`; `transform(p)` alone
+  `run_preprocess` streams it from a sliding queue -- each frame read once,
+  only the window's span of frames in memory; `window_reduce` must not mutate
+  its inputs -- and writes one output per frame, placed and stamped as that
+  frame. It refuses a windowed run on a split, whose output would depend on
+  the split. The window settings and the reducer enter the recipe; a
+  preprocessor without a window keeps its recipe. Preview it with
+  `p.windowed(ds).transform(p)` (a split allowed); `transform(p)` alone
   refuses a windowed preprocessor.
 
 ## [0.9.0] - 2026-10-29

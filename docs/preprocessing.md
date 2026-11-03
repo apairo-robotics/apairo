@@ -195,18 +195,24 @@ The window is the one `ds.window(size, stride, reduce, boundary="clip")` builds:
   it never reaches into the previous sequence of a root.
 - **One output per frame**, written where the anchor's would be and stamped
   with its timestamp: `window_reduce` must return the anchor's timestamp.
-- **Streaming.** The run reads one window at a time, never the whole sequence;
-  each frame is read once per window it belongs to.
-- **Over the frames the run iterates.** With a split listing frames, a frame's
-  neighbours are the previous *selected* frames of its sequence.
+- **Streaming, each frame read once.** The run walks each sequence in order
+  and keeps only its last `(window_size - 1) * window_stride + 1` frames in a
+  queue, never the whole sequence. The same sample objects reach every window
+  they belong to, so `window_reduce` must not mutate its inputs.
+- **Whole sequences only.** A windowed run with a split is refused: the
+  neighbours would be the split's frames, and the persisted output would depend
+  on the split it was computed under. Run it on the whole root, then load the
+  output with any split.
 
 `window_size`, `window_stride` and the reducer (its class and scalar
 parameters, when it is not the preprocessor's own method) are part of the
 recipe, so `reuse=True` regenerates the output when they change. Inputs on one
 clock of an asynchronous dataset are grouped row for row first, then windowed.
 
-The lazy preview goes through the same window view -- `transform(p)` alone
-refuses a windowed preprocessor:
+The lazy preview builds the same windows with random access (the window view)
+-- `transform(p)` alone refuses a windowed preprocessor. It is allowed on a
+split, since a view persists nothing; its windows are then over the split's
+frames:
 
 ```python
 p = BevAccumulated()

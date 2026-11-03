@@ -3,13 +3,15 @@
 ``window_size > 1`` makes the runner read each frame through its causal window
 (``AbstractDataset.window(..., boundary="clip")``): one output per frame, placed
 and stamped as that frame, windows clipped at a sequence start and never
-crossing into another sequence. The lazy preview
+crossing into another sequence. The run builds them from a sliding queue,
+reading each frame once, and refuses a split. The lazy preview
 ``p.windowed(ds).transform(p)`` sees the same windows.
 """
 
 from __future__ import annotations
 
 import shutil
+import weakref
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +22,7 @@ from apairo.core.preprocessor import FramePreprocessor
 from apairo.core.sample import Sample
 from apairo.dataset import Rellis3DDataset
 from apairo.dataset.raw import RawDataset
-from apairo.preprocess.runner import _recipe_key
+from apairo.preprocess.runner import _group_same_clock, _recipe_key, _sliding_windows
 
 # Sequence name -> number of frames. Frame i of a sequence holds BASE[name] + i,
 # so a value names its frame and its sequence.
@@ -119,18 +121,19 @@ def test_window_holds_past_frames_clipped_per_sequence(tmp_path, stride):
         ]
 
 
+class _Pair(_Window):
+    input_keys = ["lidar", "trav"]
+
+    def window_reduce(self, samples):
+        reduced = _members(samples)
+        reduced.data["trav"] = np.array([float(s.data["trav"][0]) for s in samples])
+        return reduced
+
+    def __call__(self, sample):
+        return sample.data["trav"] - sample.data["lidar"]
+
+
 def test_same_clock_inputs_are_windowed_per_sequence(tmp_path):
-    class _Pair(_Window):
-        input_keys = ["lidar", "trav"]
-
-        def window_reduce(self, samples):
-            reduced = _members(samples)
-            reduced.data["trav"] = np.array([float(s.data["trav"][0]) for s in samples])
-            return reduced
-
-        def __call__(self, sample):
-            return sample.data["trav"] - sample.data["lidar"]
-
     root = _root(tmp_path / "root", trav=True)
     RawDataset.run_preprocess(_Pair(), root)
     for name, n in LENGTHS.items():
@@ -309,23 +312,114 @@ def rellis(tmp_path):
     return root
 
 
-@pytest.mark.parametrize("split", [None, "val", "train"])
-def test_profiled_dataset_windows_match_the_lazy_view(rellis, split):
-    kwargs = {"split": split} if split else {}
-    ds = Rellis3DDataset(rellis, keys=["lidar"], **kwargs)
+def test_profiled_dataset_windows_match_the_lazy_view(rellis):
+    ds = Rellis3DDataset(rellis, keys=["lidar"])
     z = [ds[i].data["lidar"][:, 2].mean() for i in range(len(ds))]
     seq = ds.frame_sequence_ids
     p = _MeanZ()
     lazy = p.windowed(ds).transform(p)
 
-    Rellis3DDataset.run_preprocess(p, rellis, **kwargs)
-    written = Rellis3DDataset(rellis, keys=["lidar", "win_z"], **kwargs)
+    Rellis3DDataset.run_preprocess(p, rellis)
+    written = Rellis3DDataset(rellis, keys=["lidar", "win_z"])
     assert len(written) == len(ds) == len(lazy)
     for i in range(len(ds)):
-        # The window over the frames the run iterates, never across a sequence.
+        # Never across the seam between the two sequences.
         rows = [r for r in (i - 2, i - 1, i) if r >= 0 and seq[r] == seq[i]]
         np.testing.assert_allclose(
             written[i].data["win_z"], np.array([z[r] for r in rows], np.float32)
         )
         np.testing.assert_array_equal(written[i].data["win_z"], lazy[i].data["win_z"])
         assert written.frame_stems[i] == ds.frame_stems[i]
+
+
+@pytest.mark.parametrize("split", ["val", "train"])
+def test_a_windowed_run_is_refused_on_a_split(rellis, split):
+    with pytest.raises(ValueError, match="depend on the split"):
+        Rellis3DDataset.run_preprocess(_MeanZ(), rellis, split=split)
+    assert not any(rellis.rglob("win_z"))
+    # A lazy view persists nothing: allowed, windows over the split's frames.
+    ds = Rellis3DDataset(rellis, keys=["lidar"], split=split)
+    p = _MeanZ()
+    view = p.windowed(ds).transform(p)
+    assert [len(view[i].data["win_z"]) for i in range(len(view))] == [
+        min(i, 2) + 1 for i in range(len(ds))
+    ]
+
+
+# ------------------------------------------------------------ sliding queue
+
+
+class _Spy(RawDataset):
+    """Counts loads per frame and the loaded samples still alive."""
+
+    loads: dict[int, int]
+    live = 0
+    peak = 0
+
+    def __getitem__(self, idx):
+        sample = super().__getitem__(idx)
+        type(self).loads[idx] = type(self).loads.get(idx, 0) + 1
+        type(self).live += 1
+        type(self).peak = max(type(self).peak, type(self).live)
+        weakref.finalize(sample, _Spy._release)
+        return sample
+
+    @staticmethod
+    def _release():
+        _Spy.live -= 1
+
+
+@pytest.mark.parametrize(("size", "stride"), [(2, 1), (3, 1), (2, 2), (10, 1)])
+def test_a_run_reads_each_frame_once_and_keeps_only_the_queue(tmp_path, size, stride):
+    p = _Window()
+    p.window_size, p.window_stride = size, stride
+    root = _root(tmp_path / "root")
+    _Spy.loads, _Spy.live, _Spy.peak = {}, 0, 0
+    _Spy.run_preprocess(p, root)
+    n = sum(LENGTHS.values())
+    assert _Spy.loads == {i: 1 for i in range(n)}
+    assert _Spy.peak <= (size - 1) * stride + 1
+    for name, length in LENGTHS.items():
+        assert _outputs(root / name) == [
+            _expected(name, i, size, stride) for i in range(length)
+        ]
+
+
+def _byte_equal(a: Sample, b: Sample) -> None:
+    assert a.timestamp == b.timestamp
+    assert sorted(a.data) == sorted(b.data)
+    for key in a.data:
+        x, y = np.asarray(a.data[key]), np.asarray(b.data[key])
+        assert x.dtype == y.dtype and x.shape == y.shape
+        assert x.tobytes() == y.tobytes()
+
+
+COMBOS = [(1, 1), (2, 1), (3, 2), (4, 3), (5, 2), (10, 1)]
+
+
+@pytest.mark.parametrize(("size", "stride"), COMBOS)
+def test_the_queue_builds_the_lazy_windows(tmp_path, size, stride):
+    p = _Window()
+    p.window_size, p.window_stride = size, stride
+    root = _root(tmp_path / "root", trav=True)
+    single = RawDataset(root, keys=["lidar"])
+    # Two inputs on one clock: the runner's row-zipping view, windowed.
+    pair = _group_same_clock(RawDataset(root, keys=["lidar", "trav"]), _Pair())
+    for ds in (single, pair):
+        queued = list(_sliding_windows(p, ds))
+        lazy = p.windowed(ds)
+        assert len(queued) == len(lazy) == len(ds)
+        for i, sample in enumerate(queued):
+            _byte_equal(sample, lazy[i])
+
+
+@pytest.mark.parametrize(("size", "stride"), COMBOS)
+def test_the_queue_builds_the_lazy_windows_on_a_profiled_root(rellis, size, stride):
+    p = _MeanZ()
+    p.window_size, p.window_stride = size, stride
+    ds = Rellis3DDataset(rellis, keys=["lidar"])
+    queued = list(_sliding_windows(p, ds))
+    lazy = p.windowed(ds)
+    assert len(queued) == len(lazy) == len(ds)
+    for i, sample in enumerate(queued):
+        _byte_equal(sample, lazy[i])

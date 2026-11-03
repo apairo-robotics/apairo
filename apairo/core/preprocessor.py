@@ -149,11 +149,14 @@ class FramePreprocessor(Preprocessor):
     :meth:`~apairo.core.abstract_dataset.AbstractDataset.window` with
     ``boundary="clip"``. :meth:`window_reduce` collapses the window into one
     sample, then ``__call__`` runs on it as usual. There is still one output
-    per frame, placed and stamped as that (anchor) frame, and the run streams:
-    only one window is in memory at a time. The window is taken over the
-    frames the run iterates, so with a split listing frames the neighbours are
-    the previous *selected* frames. ``window_size`` and ``window_stride`` enter
-    the recipe. Preview lazily with ``p.windowed(ds).transform(p)``.
+    per frame, placed and stamped as that (anchor) frame. ``run_preprocess``
+    streams: it reads each frame once and keeps only the last
+    ``(window_size - 1) * window_stride + 1`` frames of the sequence. It
+    refuses a split, where the neighbours would be the split's frames and the
+    persisted output would depend on the split. ``window_size``,
+    ``window_stride`` and the reducer enter the recipe. Preview lazily with
+    ``p.windowed(ds).transform(p)`` -- allowed on a split, since a view
+    persists nothing: its windows are over the split's frames.
 
     Example::
 
@@ -189,6 +192,8 @@ class FramePreprocessor(Preprocessor):
         ending at the anchor frame, oldest -> newest (``samples[-1]`` is the
         anchor), clipped at the start of its sequence. The returned sample must
         carry the anchor's timestamp: the output belongs to the anchor frame.
+        It must not mutate *samples*: ``run_preprocess`` hands the same sample
+        objects to every window they belong to.
 
         Override this method, or assign a reducer callable to the instance
         (``self.window_reduce = StackByPose()`` from ``apairo_transform``).
@@ -206,8 +211,10 @@ class FramePreprocessor(Preprocessor):
         reduce=window_reduce, boundary="clip")`` -- one reduced sample per frame
         of *dataset*, index for index.
 
-        ``run_preprocess`` reads through this view; the lazy preview is
-        ``p.windowed(ds).transform(p)``, so both see the same windows.
+        This is the lazy, random-access path: ``p.windowed(ds).transform(p)``
+        previews the preprocessor, on any view of *ds*, a split included (its
+        windows are then over the split's frames). ``run_preprocess`` builds
+        the same windows from a sliding queue, reading each frame once.
         """
         if self.window_size == 1:
             return dataset

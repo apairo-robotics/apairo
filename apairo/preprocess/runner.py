@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 import shutil
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -426,10 +427,11 @@ def run(
     and the output is numbered and stamped by that clock.
 
     A :class:`~apairo.core.preprocessor.FramePreprocessor` with
-    ``window_size > 1`` reads each frame through its causal window
-    (:meth:`~apairo.core.preprocessor.FramePreprocessor.windowed`): one window
-    in memory at a time, never across a sequence, one output per frame placed
-    and stamped as that frame.
+    ``window_size > 1`` reads each frame through its causal window -- the
+    windows of :meth:`~apairo.core.preprocessor.FramePreprocessor.windowed`,
+    built from a sliding queue so each frame is read once: never across a
+    sequence, one output per frame placed and stamped as that frame. Such a
+    run is refused on a split (see :class:`ValueError` below).
 
     The output is written in *output_format* when given, else in the
     preprocessor's ``output_loader``, else in its input channel's format when
@@ -460,8 +462,9 @@ def run(
         TypeError: If ``preprocessor`` is neither ``FramePreprocessor`` nor
             ``SequencePreprocessor``.
         ValueError: If a multi-input preprocessor's inputs are on different
-            clocks of an asynchronous dataset, or the output format is read-only
-            or cannot hold the output.
+            clocks of an asynchronous dataset, the output format is read-only
+            or cannot hold the output, or a windowed preprocessor is run on a
+            split (its output would depend on the split).
     """
     root_dir = Path(root_dir)
     if not isinstance(preprocessor, (FramePreprocessor, SequencePreprocessor)):
@@ -471,6 +474,18 @@ def run(
         )
     requested = output_format or getattr(preprocessor, "output_loader", None)
     dataset = dataset_cls(root_dir, keys=preprocessor.input_keys, **dataset_kwargs)
+    window = getattr(preprocessor, "window_size", 1)
+    if window != 1 and (
+        getattr(dataset, "_frame_filter", None) is not None
+        or dataset_kwargs.get("split") is not None
+    ):
+        raise ValueError(
+            f"{type(preprocessor).__name__} reads a window of "
+            f"{window} frames: on a split its neighbours would "
+            f"be the split's frames, so a persisted output would depend on the "
+            f"split it was computed under. Run it on whole sequences (no split); "
+            f"to look at a split, preview lazily with p.windowed(ds).transform(p)."
+        )
     outputs = _OutputFormats(
         preprocessor,
         requested,
@@ -538,7 +553,9 @@ def run(
     )
 
     if isinstance(preprocessor, FramePreprocessor):
-        _run_frame(preprocessor, dataset, preprocessor.windowed(dataset), outputs)
+        _run_frame(
+            preprocessor, dataset, _sliding_windows(preprocessor, dataset), outputs
+        )
     else:
         _run_sequence(preprocessor, dataset, outputs)
 
@@ -560,19 +577,65 @@ def run(
             )
 
 
+def _sliding_windows(preprocessor: FramePreprocessor, dataset):
+    """The reduced window of every frame of *dataset*, in order, each frame
+    read exactly once.
+
+    The same windows as ``preprocessor.windowed(dataset)`` -- the frame and the
+    ``window_size - 1`` frames before it spaced ``window_stride`` apart, oldest
+    -> newest, clipped at the start of its sequence -- built from a queue of
+    the last ``(window_size - 1) * window_stride + 1`` frames, emptied when the
+    sequence changes. The queued samples are handed to ``window_reduce`` as
+    they are, so a reducer must not mutate its inputs. A preprocessor without
+    a window gets *dataset* itself.
+    """
+    if preprocessor.window_size == 1:
+        return dataset
+    from apairo.core.preprocessor import _AnchorStamped
+
+    size, stride = preprocessor.window_size, preprocessor.window_stride
+    if not isinstance(size, int) or size < 1:
+        raise ValueError(f"window_size must be a positive integer, got {size!r}")
+    if not isinstance(stride, int) or stride < 1:
+        raise ValueError(f"window_stride must be a positive integer, got {stride!r}")
+    reduce = _AnchorStamped(preprocessor.window_reduce)
+    seq = getattr(dataset, "frame_sequence_ids", None)  # None -> one sequence
+
+    class _Windows:
+        def __len__(self) -> int:
+            return len(dataset)
+
+        def __iter__(self):
+            queue: deque = deque(maxlen=(size - 1) * stride + 1)
+            current = object()
+            for idx in range(len(dataset)):
+                if seq is not None and seq[idx] != current:
+                    queue.clear()
+                    current = seq[idx]
+                if len(queue) == queue.maxlen:
+                    queue.popleft()  # before the load: never maxlen + 1 alive
+                queue.append(dataset[idx])
+                # Newest is queue[-1]; members every stride back, oldest first.
+                members = list(queue)[::-1][::stride][::-1]
+                yield reduce(members)
+                del members  # only the queue keeps samples alive
+
+    return _Windows()
+
+
 def _run_frame(
     preprocessor: FramePreprocessor, dataset, frames, outputs: _OutputFormats
 ) -> None:
     """One call per frame. A per-frame format gets each output as it comes; a
     stacked one gets each sequence's outputs stacked, once the run is over.
 
-    *frames* serves the samples -- *dataset* itself, or its window view, which
-    holds one sample per frame of *dataset*, index for index -- while
+    *frames* serves the samples -- *dataset* itself, or its reduced windows
+    (:func:`_sliding_windows`), one per frame of *dataset*, in order -- while
     *dataset* places the outputs."""
     n = len(dataset)
     if len(frames) != n:
         raise RuntimeError(
-            f"{preprocessor.__class__.__name__}: the windowed view holds "
+            f"{preprocessor.__class__.__name__}: the windows hold "
             f"{len(frames)} frames, the dataset {n}; outputs could not be placed."
         )
     seq_timestamps: dict[Path, list] = {}
