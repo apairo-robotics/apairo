@@ -332,8 +332,22 @@ def test_profiled_dataset_windows_match_the_lazy_view(rellis):
         assert written.frame_stems[i] == ds.frame_stems[i]
 
 
-@pytest.mark.parametrize("split", ["val", "train"])
-def test_a_windowed_run_is_refused_on_a_split(rellis, split):
+def _lst_line(seq: str, stem: str) -> str:
+    return (
+        f"{seq}/os1_cloud_node_kitti_bin/{stem}.bin "
+        f"{seq}/os1_cloud_node_semantickitti_label_id/{stem}.label\n"
+    )
+
+
+@pytest.mark.parametrize("split", ["val", "test", "mixed"])
+def test_a_windowed_run_is_refused_on_frames_within_a_sequence(rellis, split):
+    if split == "mixed":
+        # Every frame of 00000, but only the first of 00001.
+        lines = [_lst_line("00000", f"{i:06d}") for i in range(5)]
+        (rellis / "pt_test.lst").write_text(
+            "".join(lines) + _lst_line("00001", "000000")
+        )
+        split = "test"
     with pytest.raises(ValueError, match="depend on the split"):
         Rellis3DDataset.run_preprocess(_MeanZ(), rellis, split=split)
     assert not any(rellis.rglob("win_z"))
@@ -341,9 +355,39 @@ def test_a_windowed_run_is_refused_on_a_split(rellis, split):
     ds = Rellis3DDataset(rellis, keys=["lidar"], split=split)
     p = _MeanZ()
     view = p.windowed(ds).transform(p)
+    seq = ds.frame_sequence_ids
     assert [len(view[i].data["win_z"]) for i in range(len(view))] == [
-        min(i, 2) + 1 for i in range(len(ds))
+        sum(1 for r in (i - 2, i - 1, i) if r >= 0 and seq[r] == seq[i])
+        for i in range(len(ds))
     ]
+
+
+def _win_files(root: Path) -> dict[str, bytes]:
+    return {
+        str(f.relative_to(root)): f.read_bytes()
+        for d in root.rglob("win_z")
+        for f in sorted(d.iterdir())
+    }
+
+
+@pytest.mark.parametrize("split", ["train", "whole_00001"])
+def test_a_split_of_whole_sequences_equals_the_full_run(rellis, tmp_path, split):
+    full = tmp_path / "full"
+    shutil.copytree(rellis, full)
+    if split == "whole_00001":
+        lines = [_lst_line("00001", f"{i:06d}") for i in range(5)]
+        (rellis / "pt_test.lst").write_text("".join(lines))
+        split, seq = "test", "00001"
+    else:
+        seq = "00000"  # pt_train.lst lists every frame of 00000
+
+    Rellis3DDataset.run_preprocess(_MeanZ(), rellis, split=split)
+    Rellis3DDataset.run_preprocess(_MeanZ(), full)
+    part, whole = _win_files(rellis), _win_files(full)
+    assert part and all(seq in Path(name).parts for name in part)
+    assert part == {k: v for k, v in whole.items() if seq in Path(k).parts}
+    written = Rellis3DDataset(rellis, keys=["lidar", "win_z"], split=split)
+    assert len(written) == 5
 
 
 # ------------------------------------------------------------ sliding queue

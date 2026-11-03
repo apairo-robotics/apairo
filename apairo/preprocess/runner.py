@@ -369,6 +369,30 @@ class _SameClockFrames:
         return self.sequences[seq_idx].derived_path(row, key, ext)
 
 
+def _selects_within_sequences(dataset: Any) -> bool:
+    """Whether *dataset* holds only some of the frames of a sequence it covers.
+
+    A dataset selects frames through its frame filter (a split listing
+    frames); without one, or when the filter keeps every frame of each
+    sequence it reaches, every sequence is whole. Counted against the
+    sequence's frames before the filter; a dataset that cannot tell counts as
+    selecting within sequences.
+    """
+    if getattr(dataset, "_frame_filter", None) is None:
+        return False
+    try:
+        full = dataset._full_anchor_rows()
+    except (AttributeError, RuntimeError):
+        return True
+    names, counts = np.unique(
+        np.asarray(dataset.frame_sequence_ids, dtype=str), return_counts=True
+    )
+    return any(
+        int(count) != len(full.get(name, ()))
+        for name, count in zip(names, counts, strict=True)
+    )
+
+
 def _group_same_clock(dataset: Any, preprocessor: Preprocessor) -> Any:
     """Zip a multi-input preprocessor's inputs when they share one clock.
 
@@ -431,7 +455,8 @@ def run(
     windows of :meth:`~apairo.core.preprocessor.FramePreprocessor.windowed`,
     built from a sliding queue so each frame is read once: never across a
     sequence, one output per frame placed and stamped as that frame. Such a
-    run is refused on a split (see :class:`ValueError` below).
+    run is refused when it selects frames within sequences (see
+    :class:`ValueError` below); a split of whole sequences is fine.
 
     The output is written in *output_format* when given, else in the
     preprocessor's ``output_loader``, else in its input channel's format when
@@ -464,7 +489,8 @@ def run(
         ValueError: If a multi-input preprocessor's inputs are on different
             clocks of an asynchronous dataset, the output format is read-only
             or cannot hold the output, or a windowed preprocessor is run on a
-            split (its output would depend on the split).
+            selection of frames within sequences (its output would depend on
+            the split).
     """
     root_dir = Path(root_dir)
     if not isinstance(preprocessor, (FramePreprocessor, SequencePreprocessor)):
@@ -475,16 +501,15 @@ def run(
     requested = output_format or getattr(preprocessor, "output_loader", None)
     dataset = dataset_cls(root_dir, keys=preprocessor.input_keys, **dataset_kwargs)
     window = getattr(preprocessor, "window_size", 1)
-    if window != 1 and (
-        getattr(dataset, "_frame_filter", None) is not None
-        or dataset_kwargs.get("split") is not None
-    ):
+    if window != 1 and _selects_within_sequences(dataset):
         raise ValueError(
-            f"{type(preprocessor).__name__} reads a window of "
-            f"{window} frames: on a split its neighbours would "
-            f"be the split's frames, so a persisted output would depend on the "
-            f"split it was computed under. Run it on whole sequences (no split); "
-            f"to look at a split, preview lazily with p.windowed(ds).transform(p)."
+            f"{type(preprocessor).__name__} reads a window of {window} frames, "
+            f"and this run selects frames within sequences (a split listing "
+            f"frames): the neighbours would be the selected frames, so a "
+            f"persisted output would depend on the split it was computed under. "
+            f"Run it on whole sequences -- the whole root, or a split of whole "
+            f"sequences; to look at this split, preview lazily with "
+            f"p.windowed(ds).transform(p)."
         )
     outputs = _OutputFormats(
         preprocessor,

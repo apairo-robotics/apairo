@@ -199,10 +199,12 @@ The window is the one `ds.window(size, stride, reduce, boundary="clip")` builds:
   and keeps only its last `(window_size - 1) * window_stride + 1` frames in a
   queue, never the whole sequence. The same sample objects reach every window
   they belong to, so `window_reduce` must not mutate its inputs.
-- **Whole sequences only.** A windowed run with a split is refused: the
-  neighbours would be the split's frames, and the persisted output would depend
-  on the split it was computed under. Run it on the whole root, then load the
-  output with any split.
+- **Whole sequences only.** A windowed run that selects frames within a
+  sequence (a split listing frames) is refused: the neighbours would be the
+  selected frames, and the persisted output would depend on the split it was
+  computed under. A split of whole sequences runs -- windows never cross a
+  sequence, so its outputs are those of the whole root. Otherwise run on the
+  whole root, then load the output with any split.
 
 `window_size`, `window_stride` and the reducer (its class and scalar
 parameters, when it is not the preprocessor's own method) are part of the

@@ -152,8 +152,10 @@ class FramePreprocessor(Preprocessor):
     per frame, placed and stamped as that (anchor) frame. ``run_preprocess``
     streams: it reads each frame once and keeps only the last
     ``(window_size - 1) * window_stride + 1`` frames of the sequence. It
-    refuses a split, where the neighbours would be the split's frames and the
-    persisted output would depend on the split. ``window_size``,
+    refuses a run that selects frames within sequences (a split listing
+    frames), where the neighbours would be the selected frames and the
+    persisted output would depend on the split; a split of whole sequences
+    runs, its windows being those of the whole root. ``window_size``,
     ``window_stride`` and the reducer enter the recipe. Preview lazily with
     ``p.windowed(ds).transform(p)`` -- allowed on a split, since a view
     persists nothing: its windows are over the split's frames.
