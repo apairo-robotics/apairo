@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from apairo.core._ops import records
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
@@ -1418,6 +1419,7 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 result[i] = path.stem
         return result
 
+    @records("filter_split")
     def filter_split(self, name: str) -> AbstractDataset:
         """Return a FilteredView restricted to the named predefined split.
 

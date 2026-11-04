@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from apairo.core.filtered_view import FilteredView
     from apairo.core.synchronized_view import ChannelStrategy
 from . import abstract_loader
+from ._ops import Op, records
 from .config import Calibration, read_calibration
 from .sample import Sample
 from .utils.exceptions import KeysDuplicateError, KeysEmptyError
@@ -131,6 +132,9 @@ class AbstractDataset(ABC):
     # Lazily created by transform(); read via getattr with a default everywhere.
     _pipeline: list[Callable[[Sample], Sample]]
     _drop_keys: set[str]
+    # The call that produced this dataset (see apairo.core._ops); None on a
+    # dataset built directly, which the chain treats as a source.
+    _op: Op | None = None
 
     def _set_keys(self, keys: list[_Key]) -> None:
         if len(keys) == 0:
@@ -362,6 +366,7 @@ class AbstractDataset(ABC):
             sample.data.pop(key, None)
         return sample
 
+    @records("select")
     def select(self, keys: list[str]) -> "AbstractDataset":
         """Return a view of this dataset restricted to *keys*.
 
@@ -378,6 +383,7 @@ class AbstractDataset(ABC):
 
         return ChannelView(self, keys)
 
+    @records("cache")
     def cache(self) -> "AbstractDataset":
         """Materialise all samples into RAM and return a cached dataset.
 
@@ -440,6 +446,7 @@ class AbstractDataset(ABC):
 
         return export_dataset(self, dest, overwrite=overwrite, link=link)
 
+    @records("concat")
     def concat(self, *others: "AbstractDataset") -> "AbstractDataset":
         """Concatenate this dataset with *others* along the frame axis.
 
@@ -459,6 +466,7 @@ class AbstractDataset(ABC):
 
         return ConcatDataset([self, *others])
 
+    @records("repeat")
     def repeat(self, n: int) -> "AbstractDataset":
         """Repeat this dataset *n* times along the frame axis.
 
@@ -480,6 +488,7 @@ class AbstractDataset(ABC):
             raise ValueError(f"n must be a positive integer, got {n!r}")
         return ConcatDataset([self] * n)
 
+    @records("join")
     def join(
         self,
         *others: "AbstractDataset",
@@ -505,6 +514,7 @@ class AbstractDataset(ABC):
 
         return ZipDataset(self, *others, on_collision=on_collision)
 
+    @records("filter_sequences")
     def filter_sequences(self, seq_ids) -> "FilteredView":
         """Return a FilteredView restricted to frames from *seq_ids*.
 
@@ -518,6 +528,7 @@ class AbstractDataset(ABC):
         ids = self.frame_sequence_ids
         return self.filter(np.where(np.isin(ids, seq_ids))[0])
 
+    @records("filter")
     def filter(
         self,
         key_or_fn_or_indices,
@@ -628,6 +639,7 @@ class AbstractDataset(ABC):
 
         return WindowView(self, size, stride, reduce, boundary)
 
+    @records("synchronize")
     def synchronize(
         self,
         reference: "str | np.ndarray | None" = None,

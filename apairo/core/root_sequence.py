@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from apairo.core._ops import records
 from apairo.core.abstract_dataset import FrameRef
 from apairo.core.config import Calibration, read_calibration
 
@@ -184,6 +185,7 @@ class RootSequenceMixin(_MixinBase):
                 return SequenceView(seq, range(len(seq)), seq_id)
         raise KeyError(f"Sequence '{seq_id}' not found. Available: {self.sequence_ids}")
 
+    @records("synchronize")
     def synchronize(self, reference=None, method="previous", tolerance=None):
         """Resample onto a reference clock -- see :meth:`AbstractDataset.synchronize`.
 
