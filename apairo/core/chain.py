@@ -1,4 +1,4 @@
-"""The chain behind a dataset, as a recipe: prune it, replay it.
+"""The chain behind a dataset, as a recipe: prune it, replay it, save it.
 
 A dataset built in notebook style records how it was made: each method that
 returns a new dataset stores the call on its result (:mod:`apairo.core._ops`)
@@ -24,9 +24,9 @@ The result is a :class:`InferenceView`, a dataset like any other, with a
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -38,12 +38,16 @@ from apairo.core.abstract_dataset import (
 from apairo.core.sample import Sample
 from apairo.core.transform import Compose
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 __all__ = [
     "Chain",
     "InferenceView",
     "Summary",
     "SummaryEntry",
     "step_io",
+    "load_chain",
 ]
 
 # Frame filters: curation of the original data, replayed there by index.
@@ -645,8 +649,8 @@ def _provides(node: _Node) -> Channels:
 class Chain:
     """A pruned recipe, ready to run on its original data or another source.
 
-    Obtained from :attr:`InferenceView.chain`. Holds no data: :meth:`on`
-    runs it on a source.
+    Obtained from :attr:`InferenceView.chain` or :func:`load_chain`. Holds no
+    data: :meth:`on` runs it on a source.
     """
 
     def __init__(self, final: _Node, outputs: list[str], summary: Summary) -> None:
@@ -752,8 +756,21 @@ class Chain:
         inner = _build(self._final, {id(src): source}, deploy=True, memo={})
         return InferenceView(inner, self._outputs, self)
 
+    def save(self, path: str | Path) -> Path:
+        """Write the chain as a JSON declaration (see :mod:`apairo.core.chain_io`)."""
+        from apairo.core.chain_io import save_chain
+
+        return save_chain(self, path)
+
     def __repr__(self) -> str:
         return f"Chain(outputs={self._outputs}, sources={self.sources})"
+
+
+def load_chain(path: str | Path, *, trusted: Iterable[str] = ()) -> Chain:
+    """Read a chain written by :meth:`Chain.save` -- see :mod:`apairo.core.chain_io`."""
+    from apairo.core.chain_io import load_chain as _load
+
+    return _load(path, trusted=trusted)
 
 
 def inference(
@@ -798,7 +815,7 @@ class InferenceView(AbstractDataset):
 
     A full dataset: index it, iterate it, hand it to a ``DataLoader``. Its
     samples hold the requested outputs only. :meth:`on` runs the same chain
-    on another source.
+    on another source; :meth:`save` writes it beside a model checkpoint.
     """
 
     def __init__(
@@ -855,6 +872,10 @@ class InferenceView(AbstractDataset):
     def on(self, source: AbstractDataset) -> InferenceView:
         """The same chain on another source -- see :meth:`Chain.on`."""
         return self._chain.on(source)
+
+    def save(self, path: str | Path) -> Path:
+        """Write the chain as a declaration -- see :meth:`Chain.save`."""
+        return self._chain.save(path)
 
     def __len__(self) -> int:
         return len(self._inner)

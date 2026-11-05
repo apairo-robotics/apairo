@@ -397,6 +397,21 @@ def test_inference_of_an_inference_view(train):
     assert _values(view) == _values(train.inference("pred"))
 
 
+# -------------------------------------------------------------------- save
+
+
+def test_save_and_load_give_the_same_outputs(train, tmp_path):
+    from apairo.core.chain import load_chain
+
+    deployed = train.inference("pred")
+    path = deployed.save(tmp_path / "chain.json")
+    chain = load_chain(path, trusted=["test"])
+    assert _values(chain.on(_stream())) == _values(deployed.on(_stream()))
+    assert [e.item for e in chain.summary.removed] == [
+        e.item for e in deployed.summary.removed
+    ]
+
+
 def test_a_pickled_cache_does_not_carry_its_parent(train):
     cached = train.cache()
     assert cached._op is not None

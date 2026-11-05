@@ -635,8 +635,8 @@ class AbstractDataset(ABC):
                 interpolator) instead of flagging it.
 
         Returns:
-            :class:`~apairo.core.chain.InferenceView`, with ``.summary`` and
-            ``.on(source)``.
+            :class:`~apairo.core.chain.InferenceView`, with ``.summary``,
+            ``.on(source)`` and ``.save(path)``.
 
         Raises:
             ValueError: If an output is not produced by the chain, or if
