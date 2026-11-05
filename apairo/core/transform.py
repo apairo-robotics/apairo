@@ -19,6 +19,12 @@ class Compose:
     def __init__(self, transforms: Iterable[Callable]) -> None:
         self._transforms = list(transforms)
 
+    @property
+    def transforms(self) -> list[Callable]:
+        """The parts, in order -- read by :meth:`AbstractDataset.inference`,
+        which removes the training-only ones."""
+        return list(self._transforms)
+
     def __call__(self, x: Any) -> Any:
         for fn in self._transforms:
             x = fn(x)

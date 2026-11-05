@@ -14,6 +14,7 @@ import numpy as np
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from apairo.core.chain import InferenceView
     from apairo.core.filtered_view import FilteredView
     from apairo.core.synchronized_view import ChannelStrategy
 from . import abstract_loader
@@ -595,6 +596,57 @@ class AbstractDataset(ABC):
 
         return FilteredView(self, indices)
 
+    def inference(
+        self, outputs: "str | list[str]", causal: bool = False
+    ) -> "InferenceView":
+        """The chain of this dataset as deployed: what *outputs* need, no more.
+
+        Reads back how the dataset was built (every dataset method records its
+        call, every dataset keeps its transform steps) and returns a new
+        dataset running that chain without:
+
+        - steps that do not lead to *outputs* -- pruned from what each step
+          reads and writes (``transform(key, fn, output=...)`` and
+          preprocessors declare it; a sample-level function can declare
+          ``input_keys`` / ``output_keys``, otherwise it is opaque and kept);
+        - steps marked ``inference = False`` -- augmentations;
+        - ``cache()`` and ``repeat()``, which change speed or epoch length.
+
+        Frame filters (``filter``, ``filter_sequences``, ``filter_split``) are
+        kept, so a validation split stays a validation split::
+
+            train = RawDataset(root, keys=["lidar", "pose", "trav_gt"])
+            train = train.synchronize(reference="lidar")
+            train = train.transform("lidar", RangeFilter(max=40.0))
+            train = train.transform("lidar", RandomRotation(axis="z"))
+            train = train.transform(TravModel(ckpt))   # writes trav_pred
+
+            val = train.filter_sequences(val_ids).inference(["trav_pred", "trav_gt"])
+            print(val.summary)       # kept / removed / flagged, step by step
+            infer = train.inference(["trav_pred"]).on(other_recording)
+
+        The result holds only *outputs* in its samples. It is a snapshot:
+        steps added to ``self`` afterwards do not reach it.
+
+        Args:
+            outputs: The channel(s) the deployed chain must produce.
+            causal: Refuse a chain that needs future events (a
+                ``synchronize`` strategy other than ``"previous"``, an
+                interpolator) instead of flagging it.
+
+        Returns:
+            :class:`~apairo.core.chain.InferenceView`, with ``.summary`` and
+            ``.on(source)``.
+
+        Raises:
+            ValueError: If an output is not produced by the chain, or if
+                *causal* and the chain is not.
+        """
+        from apairo.core.chain import inference
+
+        return inference(self, outputs, causal=causal)
+
+    @records("window")
     def window(
         self,
         size: int,
