@@ -290,6 +290,19 @@ ds_val   = apairo.Rellis3DDataset(root, keys=["lidar", "labels"]).split("val")
 
 ---
 
+## Inference — the training chain, deployed
+
+```python
+deployed = train.inference(["trav_pred"])   # prunes what the output does not need, drops augmentations
+print(deployed.summary)                     # kept / removed / flagged (non-causal sync, opaque steps)
+deployed.on(other_recording)                # the same chain on another source
+deployed.save("trav_chain.json")            # a JSON declaration beside the checkpoint
+```
+
+See [Inference & Deployment](https://apairo-robotics.github.io/apairo/inference/).
+
+---
+
 ## Extending apairo
 
 Add a new synchronous dataset with a YAML profile and a minimal subclass.

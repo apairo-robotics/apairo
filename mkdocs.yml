@@ -94,6 +94,7 @@ nav:
     - Views & Caching: views.md
     - Combining Datasets: combining.md
     - Preprocessing: preprocessing.md
+    - Inference & Deployment: inference.md
   - Command Line: cli.md
   - Examples:
     - Multi-dataset training: examples/cross_dataset_concat.md

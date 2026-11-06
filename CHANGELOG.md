@@ -18,6 +18,30 @@ All notable changes to apairo are documented here. The format is based on
 - Pass `in_place=False` to adopt the 0.11 behaviour now, or `in_place=True`
   to keep modifying the dataset. Either silences the warning below.
 
+### Added
+
+- **`inference(outputs)`: the chain of a dataset, as deployed.** Every
+  dataset method that returns a new dataset now records the call that built
+  it, so the chain can be read back from the final dataset. `inference()`
+  returns an `InferenceView` that keeps what the outputs need (from what each
+  step reads and writes), removes steps marked `inference = False`
+  (augmentations) and drops `cache()` and `repeat()`. Frame filters stay.
+  `view.summary` lists what was kept and removed, and flags non-causal
+  synchronization, opaque sample-level steps, stateful steps and joins with a
+  second source; `causal=True` refuses a non-causal chain. The view is a
+  snapshot: the training chain is not modified. See
+  `docs/inference.md`.
+- **`.on(source)`** replays the chain on another source with the same channel
+  names: each operation is called again, the source's steps are carried
+  over, filters, caches and repeats are dropped.
+  `chain.channels_needed()` names what the source must provide.
+- **`.save(path)` and `load_chain(path, trusted=...)`**: the chain as a JSON
+  declaration (class paths and the values that rebuild them), not a pickle.
+  Loading imports from apairo, its satellites and the packages named in
+  `trusted=` only. A step that cannot be declared (a lambda, a C object, a
+  model's weights without `get_config()`) is refused by name.
+- `Compose.transforms` exposes the parts of a `Compose`.
+
 ### Deprecated
 
 - **`transform()` without `in_place`.** It still modifies the dataset and
