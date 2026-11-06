@@ -65,6 +65,18 @@ These are the properties every change must preserve:
    deprecation path. The strongest review signal we have: *existing
    tests should pass unchanged*. If you had to edit an existing test,
    explain why in the PR.
+8. **One operation, one implementation.** An operation is written once;
+   the dataset method that receives it (`transform`, `run_preprocess`,
+   `window`) decides how it runs: lazily, on disk, over a window.
+   Composing existing pieces is fine (`Compose`); a second implementation
+   of the same operation, or a second method giving different results,
+   is not. Check the API before adding one. See `IDEAS.md`, *One
+   operation, one implementation*.
+9. **Methods return, they do not modify.** A method returns a new dataset
+   and leaves the one it is called on unchanged, so `ds = ds.op(...)`
+   reads the way it runs, and a dataset already built never changes
+   behind your back. `transform()` is the last exception and is
+   migrating: its in-place default is deprecated and flips in 0.11.
 
 Two known, deliberate deviations (do not "fix" them without discussion):
 `SynchronizedView` reads parent loaders directly and bypasses parent

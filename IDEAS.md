@@ -464,3 +464,210 @@ declares, derived channels included: it is the profile-free loader for a
 directory per channel. Candidates: `DirectoryDataset`, `ChannelDataset`,
 `DeclaredDataset`. A rename waits for 1.0 and keeps the old name as a
 deprecated alias for a release, as `process()` was kept for `__call__`.
+
+## One operation, one implementation
+
+The rule, written down on 2026-11-06, and the check to run before adding a
+feature:
+
+> **An operation is written once. The dataset method decides how it runs.**
+
+An operation is the *what*: a callable on a channel's value, on a sample, a
+reducer of a window of samples, an operation over a whole sequence. The
+dataset method is the *when and where*:
+
+| Method | Runs the operation |
+|---|---|
+| `transform` | lazily, at access time |
+| `cache` | once, into RAM |
+| `run_preprocess` | once, onto disk |
+| `inference` (planned, below) | online, on a replayed or live stream |
+
+Every need should be met (no gap) and met one way only (no overlap).
+Composing is not duplicating: `Compose([f, g])` is built from two steps, so
+it is not a second way to run them. Two implementations of one operation, or
+two methods giving different results for one intent, are.
+
+Overlaps found when the rule was first applied:
+
+- **`transform()` modified the dataset, every other method returned a new
+  one.** `a = ds.transform(f); b = ds.transform(g)` gave `a is b`; a view saw
+  steps added to its parent afterwards (`synchronize` excepted); re-running a
+  notebook cell stacked a step twice. **Decided:** `in_place` unset warns
+  from 0.10, its default becomes `False` in 0.11 (see CHANGELOG). Open:
+  whether `in_place=True` survives after that, since it is a second way.
+- **`AccumulateFrames` and `window(reduce=StackByPose())`** give the same
+  cloud; the first keeps state and breaks under shuffling or several
+  `DataLoader` workers. **Decided:** `AccumulateFrames` deprecated in
+  `apairo_transform` 0.3.
+- **`Compose` and chaining.** **Decided: both stay**, with distinct roles:
+  chaining builds a dataset, `Compose` names an operation made of parts and
+  works on a bare array. Its parts are a list, so a chain walker can see
+  through it, which a hand-written function does not allow.
+- **`split()` and `filter_split()`.** The first re-instantiates the dataset
+  and drops its transforms, the second keeps them. To look at.
+- **`VoxelDownsample` (`apairo_transform`) and `VoxelisePointCloud`
+  (`apairo_preprocess`)**: one operation, implemented once per mode. See
+  *Preprocess and transform* below.
+- **The two `Pipeline` classes of `apairo_visu`** take `(pts, labels)` steps,
+  a second step protocol beside the core's `Sample -> Sample`.
+- **`synchronize` ignores its parent's transforms**, a deviation
+  `CONTRIBUTING.md` documents and asks to discuss before changing. Under
+  invariant 9 it should apply them or refuse a parent that has some. Open.
+
+## `.inference()`: replay the training chain for deployment
+
+`.inference()`, `.on()`, `.save()` and `load_chain()` landed in the core on
+2026-11-06 (`docs/inference.md`), with `BagDataset` in `apairo_extractor`
+(it reuses the extraction's conversion and stamping, so a bag read in place
+equals the bag extracted) and `LiveSource` / `ChainNode` in `apairo_ros2`.
+Not yet run in a live ROS 2 system; `/tf_static` calibration not read. The order of work is in `ROADMAP.md` (I1–I10). A robot running a
+model re-runs most of the chain it was trained on. Rewriting that chain by
+hand in a ROS node is how training and deployment drift apart. The aim: the
+chain written once, in notebook style, then run on a recorded bag and on a
+live stream.
+
+```python
+train = RawDataset(root, keys=["lidar", "pose", "trav_gt"])
+train = train.synchronize(reference="lidar", method={"pose": Se3Interp()})
+train = train.window(size=3, reduce=StackByPose())
+train = train.transform("lidar", RangeFilter(max=40.0))
+train = train.transform("lidar", RandomRotation(axis="z"))   # augmentation
+train = train.transform(TravModel(ckpt))                          # writes trav_pred
+
+val = train.filter_sequences(val_ids).inference(outputs=["trav_pred", "trav_gt"])
+infer = train.inference(outputs=["trav_pred"])
+
+infer.on(BagDataset("run_42.mcap", topics={"lidar": "/os/points", "pose": "/odom"}))
+infer.save("trav_chain.json")                  # beside the checkpoint
+load_chain("trav_chain.json").on(LiveSource(node, topics={...}))   # in the ROS node
+```
+
+`.inference(outputs=...)` returns a frozen copy of the chain with two kinds
+of step removed, and a summary of what it kept, removed, and flags:
+
+- **Steps that do not lead to `outputs`** (labelling, projections along the
+  trajectory) are pruned by dependency, with no tag. A `_ChannelStep` knows
+  its key and output; preprocessors declare `input_keys` / `output_keys`. A
+  sample-level function that declares nothing is opaque: kept, and flagged.
+- **Steps that lead to `outputs` but only make sense in training**
+  (augmentations) declare it on their class, `inference = False`, read by
+  duck typing so the core imports no satellite. One mechanism only:
+  deterministic training-only steps are already pruned by dependency.
+
+Then the source changes and the chain does not:
+
+- **`.on(source)`** replays the frozen chain on another root with the same
+  channel names. Steps registered on the root itself live in the root's
+  `_pipeline`: `.on()` must carry them over to the new source, not only swap
+  the root object. `graph.describe` in `apairo_visu` already walks the chain.
+- **`BagDataset`** reads a rosbag (`.mcap`, `.db3`) as an apairo dataset,
+  close to `StreamDataset`, whose docstring already names ROS messages.
+  Replaying a bag through the chain is the parity test for the live node.
+- **`LiveSource`** is an incremental stream fed by ROS 2 subscriptions:
+  samples are pushed (one callback per reference message), not indexed. The
+  calibration comes from `/tf_static`. **Decided (2026-11-06): it lives in a
+  satellite, `apairo_ros2`.** ROS 2 matters too much in robotics to stay a
+  side module, and `rclpy` comes from a ROS distribution, not from PyPI, so
+  an extra (`apairo[ros2]`) cannot install it. The core stays numpy-only.
+
+What changes between a dataset and a stream, flagged in the summary:
+
+- **Causality.** `synchronize` with `"previous"` is causal; `"next"`,
+  `"nearest"` and interpolators need the next event: added latency, or
+  refused under `causal=True`. `window` is causal by construction and becomes
+  a ring buffer. A `SequencePreprocessor` never runs online: its result is
+  loaded as an artifact.
+- **`.cache()` cuts the chain.** A cached dataset keeps no parent, so
+  `.inference()` cannot see what came before it. `CachedDataset` must keep
+  the recipe without the data. Prerequisite, since notebooks cache a lot.
+- **`.join()`** must be resolvable online: a static prior (a map) is
+  loaded; a prior computed offline from the whole sequence cannot be, and
+  is refused at launch.
+- **Steps with state** behave differently on a stream (Spark gives the same
+  warning for Structured Streaming). `AccumulateFrames` is deprecated for
+  that reason.
+
+**How the chain is read back (as built).** Every dataset method that returns
+a new dataset records its call on the result (`_op`: method name, input
+datasets, arguments); every dataset keeps its steps (`_pipeline`). The chain
+is that recipe, not the object graph: views compute indices on their data,
+and `synchronize` on a root returns per-sequence views that do not keep the
+root, so the objects alone cannot be replayed on another source. Replaying
+calls each method again; on the original data, filters reuse their indices.
+A cache keeps its parent through `_op`, which is what I5 asked for.
+
+**The saved chain is not a pickle.** A pickle runs code when it is loaded
+and breaks when a class is renamed. The chain is saved as a declaration:
+the class path and parameters of each step, the source's channel names, the
+apairo and satellite versions (LeRobot saves its preprocessor as JSON beside
+the checkpoint). A step that cannot be declared (a lambda, a closure) makes
+`.save()` refuse and name it. Model weights stay with the model.
+
+Optimising the deployed chain, safest first. Each rewrite reopens the gap
+between training and deployment, so each passes the bag parity test: profile
+the same Python; fuse steps once the chain is known (consecutive masks,
+consecutive rigid transforms); export torch versions of the transforms with
+the model (ONNX, TensorRT); swap in existing ROS nodes (`CropBox`,
+`VoxelGrid`) one operation at a time, since their edge cases differ. Autoware
+re-implements CenterPoint's voxelisation in C++/CUDA, the riskiest level (to
+check).
+
+Prior art. Each piece exists, none combines them with time synchronisation,
+causality and a ROS target (a quick search, not a survey):
+
+| Piece | Done by |
+|---|---|
+| Two pipelines written apart (the drift avoided here) | mmdetection3d `train_pipeline` / `test_pipeline` |
+| A mode switch (`inference = False`) | OpenPCDet per-mode config, Keras augmentation layers |
+| Pruning by requested outputs (`outputs=`) | Kedro `to_outputs`, Hamilton `final_vars`, Polars projection pushdown |
+| Preprocessing saved with the model (`.save()`) | tf.Transform, LeRobot processors |
+| Same code, another source (`.on()`) | Spark `read` → `readStream` |
+
+## Preprocess and transform: one concept or two?
+
+Open, and large: it changes what `apairo_preprocess` is. Logged, not started.
+
+**`FramePreprocessor` overlaps `transform()`.** Everything it declares
+beyond a transform with `output=` can be derived from the chain:
+
+| Attribute | Derivable? |
+|---|---|
+| `output_key` | yes, it is `output=` |
+| `input_keys` | yes for a per-channel step (its key); declared for a sample-level one |
+| `output_loader` | already defaults to the input channel's format |
+| `timestamps_from` | yes, the input's clock |
+| `sources` | yes, and better: the whole chain that produced the channel |
+
+Any channel of a chain could then be written to disk by a dataset method,
+as `cache` writes it to RAM, with no preprocessor class:
+
+```python
+ds = ds.transform("lidar", VoxelDownsample(0.1), output="lidar_vox")
+ds.run_preprocess("lidar_vox")        # name to choose
+```
+
+The provenance written to `.apairo` would come from the same dependency walk
+`.inference()` uses to prune: one mechanism, two uses. The declarations
+become optional metadata any step may carry.
+
+**`SequencePreprocessor` is another kind of operation.** It reads the whole
+sequence at once: labels from future poses, normalisation statistics, a
+global map. It is scikit-learn's `fit`, tf.Transform's *analyze* phase. It
+never runs lazily sample by sample, nor online; its result is a channel or a
+static artifact that inference loads.
+
+| Operation \ mode | `transform` | `cache` | disk | `inference` |
+|---|---|---|---|---|
+| on a value | yes | yes | yes | yes |
+| on a sample | yes | yes | yes | if causal |
+| on a past window | yes (`window`) | yes | yes | yes (ring buffer) |
+| on a whole sequence | no | yes | yes | no (artifact loaded) |
+
+If adopted: "preprocess" stops being a parallel paradigm and becomes the
+disk mode plus whole-sequence operations; `VoxelisePointCloud` and
+`VoxelDownsample` merge; `FramePreprocessor` stays a deprecated alias for a
+release, as `process()` did for `__call__`. To decide: whether to go this
+way; the name of the disk method; whether `apairo_preprocess` stays as a
+dependency boundary (scipy, CSF, deep models) or merges into
+`apairo_transform`, given the preference for fewer repositories.
