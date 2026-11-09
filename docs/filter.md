@@ -53,10 +53,10 @@ ds.filter(np.load("cache/valid_indices.npy"))
 `filter()` returns a `FilteredView` which is itself an `AbstractDataset`. Transforms registered on the parent are applied first, then any transforms registered on the view:
 
 ```python
-ds.transform("lidar", Normalize())           # step 1 — on the full dataset
+ds = ds.transform("lidar", Normalize())      # step 1 — on the full dataset
 
 view = ds.filter("trav_gt", lambda gt: ...)  # step 2 — restrict frames
-view.transform("lidar", Voxelize())          # step 3 — only on kept frames
+view = view.transform("lidar", Voxelize())   # step 3 — only on kept frames
 
 train = DataLoader(view, batch_size=4)
 ```

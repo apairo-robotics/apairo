@@ -7,6 +7,66 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-09
+
+### Upgrading from 0.9
+
+- **Assign the result of `transform()`: `ds = ds.transform(...)`.** In 0.11
+  `transform()` will return a new dataset and leave the one it is called on
+  unchanged. Assigning already works in 0.9, where the method returns the
+  dataset itself, and gives the same result after the change. Code that
+  ignores the return value, or keeps two names for one dataset
+  (`a = ds.transform(f)` then `ds.transform(g)`), will behave differently.
+- Pass `in_place=False` to adopt the 0.11 behaviour now, or `in_place=True`
+  to keep modifying the dataset. Either silences the warning below.
+
+### Added
+
+- **`inference(outputs)`: the chain of a dataset, as deployed.** Every
+  dataset method that returns a new dataset now records the call that built
+  it, so the chain can be read back from the final dataset. `inference()`
+  returns an `InferenceView` that keeps what the outputs need (from what each
+  step reads and writes), removes steps marked `inference = False`
+  (augmentations) and drops `cache()` and `repeat()`. Frame filters stay.
+  `view.summary` lists what was kept and removed, and flags non-causal
+  synchronization, opaque sample-level steps, stateful steps and joins with a
+  second source; `causal=True` refuses a non-causal chain. The view is a
+  snapshot: the training chain is not modified. See
+  `docs/inference.md`.
+- **`.on(source)`** replays the chain on another source with the same channel
+  names: each operation is called again, the source's steps are carried
+  over, filters, caches and repeats are dropped.
+  `chain.channels_needed()` names what the source must provide.
+- **`.save(path)` and `load_chain(path, trusted=...)`**: the chain as a JSON
+  declaration (class paths and the values that rebuild them), not a pickle.
+  Loading imports from apairo, its satellites and the packages named in
+  `trusted=` only. A step that cannot be declared (a lambda, a C object, a
+  model's weights without `get_config()`) is refused by name.
+- `Compose.transforms` exposes the parts of a `Compose`.
+- **The ecosystem as extras**: `apairo[ros]`, `apairo[transform]`,
+  `apairo[preprocess]` and `apairo[visu]` install `apairo-ros`,
+  `apairo-transform`, `apairo-preprocess` and `apairo-visu` (with its browser
+  studio), now on PyPI. They are install shortcuts: apairo never imports them.
+  `apairo-ros` is the former `apairo_extractor`, renamed before its first
+  release; its command is `apairo ros extract`, and `apairo extractor` stays.
+
+### Deprecated
+
+- **`transform()` without `in_place`.** It still modifies the dataset and
+  returns it, and now emits a `FutureWarning`: the default becomes
+  `in_place=False` in 0.11, as `synchronize`, `window`, `filter`, `select`
+  and `cache` already return a new dataset.
+
+### Fixed
+
+- `docs/transform.md`: the chained snippets were not valid Python (a line
+  starting with `.transform(` outside parentheses), and the `output` section
+  claimed that two steps reading `lidar_f` were independent branches, while
+  the first, without `output`, replaced `lidar_f` for the second.
+- The lazy preview of a preprocess (`docs/preprocessing.md`) registered the
+  preprocessor on `ds` before `ds.run_preprocess(p)`; it now uses
+  `in_place=False`.
+
 ## [0.9.0] - 2026-10-29
 
 ### Upgrading from 0.8
@@ -1031,7 +1091,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/apairo-robotics/apairo/compare/v0.6.2...v0.7.0

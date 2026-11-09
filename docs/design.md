@@ -73,7 +73,7 @@ execution context** — not by concept:
 - **`apairo_preprocess`** — a collection of heavy offline preprocessors
   (ground segmentation, odometry, learned models). Runs once on a data
   server; its dependencies never contaminate training environments.
-- **`apairo_extractor`** — rosbags in, apairo layouts out.
+- **`apairo_ros`** — rosbags in, apairo layouts out; bags read in place.
 - **`apairo_visu`** — visualization via rerun.
 
 The contracts crossing these boundaries are deliberately tiny: a

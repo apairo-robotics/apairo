@@ -78,7 +78,7 @@ it is `apairo_transform`'s job, not the core's:
 
 ```python
 from apairo_transform import TransformPoints
-ds.transform("lidar", TransformPoints(T))
+ds = ds.transform("lidar", TransformPoints(T))
 ```
 
 ### Camera intrinsics

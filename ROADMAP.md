@@ -1,6 +1,7 @@
 # Roadmap
 
-The committed plan for apairo up to the 0.9.0 release and the JOSS submission.
+The committed plan for apairo: the 0.9.0 release and the JOSS submission, then
+the road to `.inference()`.
 It is fixed: items change only by an explicit edit to this file, dated in the
 log at the bottom.
 
@@ -36,13 +37,23 @@ about a day, **M** a few days, **L** a week or more.
 | U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ in 0.9.0 |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | after 0.9.0 | structure checked, real sequence owed |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ in 0.9.0 |
-| U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
-| D1 | One docs site for the ecosystem, built from the satellites | M | W47 (16 Nov) | planned |
-| D2 | Executed examples for `apairo_transform` | S | W48 (23 Nov) | planned |
-| D3 | A screen recording of `apairo studio` | S | W48 (23 Nov) | planned |
+| U5 | Satellites on PyPI, then `apairo[ros]` and the like | M | after 0.9.0 | ✅ `apairo-transform` 0.3.0, `apairo-visu` 0.1.0, `apairo-ros` 0.1.0 and `apairo-preprocess` 0.2.0 on PyPI; extras in 0.10.0 |
+| D1 | One docs site for the ecosystem, built from the satellites | M | December | planned |
+| D2 | Executed examples for `apairo_transform` | S | December | planned |
+| D3 | A screen recording of `apairo studio` | S | December | planned |
 | D4 | Studio live on a Hugging Face Space | M | after JOSS | planned |
 | D5 | Real-data results for `apairo_preprocess` | M | after JOSS | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
+| I1 | `transform()` without `in_place` is deprecated | S | 0.10 | ✅ released in 0.10.0 |
+| I2 | `AccumulateFrames` deprecated for `window` + `StackByPose` | S | `apairo_transform` 0.3 | ✅ released in `apairo_transform` 0.3.0 |
+| I3 | The satellites assign the result of `transform()` | S | before 0.10 | ✅ done (`apairo_rr`, archived, keeps its commit local) |
+| I4 | `transform()` returns a new dataset by default | S | 0.11 | planned |
+| I5 | `cache()` keeps the recipe | M | 0.10 | ✅ released in 0.10.0 |
+| I6 | Steps declare what they read and write; `inference = False` | M | 0.10 | ✅ released in 0.10.0 |
+| I7 | `.inference(outputs=...)` | L | 0.10 | ✅ released in 0.10.0 |
+| I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | ✅ released in 0.10.0; `BagDataset` in `apairo-ros` 0.1.0 |
+| I9 | `.save()` and `load_chain()`, a declared chain | M | 0.10 | ✅ released in 0.10.0 |
+| I10 | `apairo_ros.live`: the chain in a live ROS 2 node | L | November | in progress (`apairo_ros` branch `feat/live`, draft PR #2; untested under ROS 2) |
 
 ---
 
@@ -322,15 +333,15 @@ again on top of them.
   finds the KITTI datasets themselves.
 - **Placement.** Core docs and `apairo_extractor`.
 
-### U5. Satellites on PyPI, then `apairo[extractor]` and the like
+### U5. Satellites on PyPI, then `apairo[ros]` and the like
 
-- **Goal.** `pip install apairo[extractor]` (and `transform`, `preprocess`,
+- **Goal.** `pip install apairo[ros]` (and `transform`, `preprocess`,
   `visu`) installs the satellite.
 - **Why.** It is how a newcomer expects to find the rest of the ecosystem,
   and it matches the dataset extras.
-- **Scope.** Publish `apairo-extractor`, `apairo-transform`,
-  `apairo-preprocess` and `apairo-visu` on PyPI (all four names were free on
-  2026-10-19). `apairo-rr` is deprecated and is not published. Replace
+- **Scope.** Publish `apairo-ros` (the extractor, renamed on 2026-11-09),
+  `apairo-transform`, `apairo-preprocess` and `apairo-visu` on PyPI (all
+  four names were free). `apairo-rr` is deprecated and is not published. Replace
   `apairo_preprocess`'s `git+https` dependency on `apairo_transform`, which
   PyPI refuses. Then add the extras to apairo, each with a compatible version
   range that is updated at every release; whether `apairo[visu]` also brings
@@ -362,7 +373,7 @@ D1–D3 follow 0.9.0; D4 and D5 follow the JOSS submission.
   its install line, its `apairo <command>`, its examples and its API.
 - **Why.** U2 names the satellites on the installation page, but their
   documentation lives in four READMEs, outside the site and its search.
-- **Scope.** `docs.yml` checks out `apairo_extractor`, `apairo_transform`,
+- **Scope.** `docs.yml` checks out `apairo_ros`, `apairo_transform`,
   `apairo_preprocess` and `apairo_visu` beside the core and installs them.
   `mkdocstrings` documents their public API; `pymdownx.snippets` includes
   their `examples/*.py` as they are. A satellite change reaches the site at
@@ -454,6 +465,150 @@ on the submitted repository. `apairo-robotics/apairo` was created on
 
 ---
 
+## Toward `.inference()`: one chain from training to the robot
+
+The theme: the chain a model is trained on, written once in notebook style,
+runs unchanged on a recorded bag and in a live ROS 2 node. Today a robot
+re-implements its preprocessing by hand, and training and deployment drift
+apart. The design, the prior art and the open questions are in `IDEAS.md`,
+"`.inference()`" and "One operation, one implementation". I1 to I4 make the
+chain trustworthy, I5 and I6 make it readable by a program, I7 to I10 build
+the feature. Revised 2026-11-06: the feature is built first, in November,
+and the rest of the month goes to application cases on real recordings,
+which test it before the JOSS submission.
+
+### I1. `transform()` without `in_place` is deprecated
+
+- **Goal.** Users write `ds = ds.transform(...)` before the default changes.
+- **Why.** `transform()` is the only method that modifies the dataset it is
+  called on. A chain `.inference()` freezes must not change afterwards,
+  which in-place registration allows.
+- **Scope.** `in_place` defaults to `None`: same behaviour as `True`, plus a
+  `FutureWarning` at the call that names the fix. Docs, README, examples and
+  docstrings assign the result; the lazy preprocess preview and the Tartan
+  example pass `in_place=False`. CONTRIBUTING gains invariants 8 and 9.
+  **Out:** changing the default (I4).
+- **Done when.** Existing tests pass unchanged; new tests cover unset, `True`
+  and `False`; no warning comes from inside the library.
+- **Placement.** Core. **Depends on.** Nothing.
+
+### I2. `AccumulateFrames` deprecated for `window` + `StackByPose`
+
+- **Goal.** One way to accumulate scans: the stateless one.
+- **Why.** `AccumulateFrames` keeps a buffer that depends on read order: it
+  breaks under shuffling and with several `DataLoader` workers, and it is
+  the kind of step that behaves differently on a stream.
+  `window(reduce=StackByPose())` gives the same cloud (tested) and becomes a
+  ring buffer online.
+- **Scope.** A `DeprecationWarning` naming the replacement, docstrings and
+  README pointing to `StackByPose`, `Compose` given its own role in the
+  README. **Out:** removing the class (after one release).
+- **Done when.** The warning is tested; the suite passes against the core of
+  I1.
+- **Placement.** `apairo_transform` 0.3. **Depends on.** Nothing.
+
+### I3. The satellites assign the result of `transform()`
+
+- **Goal.** No satellite emits the I1 warning.
+- **Scope.** `apairo_visu` (29 calls), `apairo_rr` (10), `apairo_preprocess`
+  (3), `apairo_huggingface` (1), counted on 2026-11-06, docs included.
+  `apairo_experiments` follows when next used.
+- **Done when.** Each suite passes with `-W error::FutureWarning` against
+  the I1 core.
+- **Placement.** Each satellite. **Depends on.** I1.
+
+### I4. `transform()` returns a new dataset by default
+
+- **Goal.** `in_place` defaults to `False`; the warning goes.
+- **Scope.** The 17 core tests that rely on modification pass `in_place=True`
+  or assign. Whether `in_place=True` itself is deprecated is decided here
+  (it is a second way, see `IDEAS.md`).
+- **Done when.** Core and satellites green; the CHANGELOG says what changes
+  for code that ignored the return value.
+- **Placement.** Core 0.11. **Depends on.** I1, I3, one release in between.
+
+### I5. `cache()` keeps the recipe
+
+- **Goal.** A cached dataset still knows the chain that produced it.
+- **Why.** `CachedDataset` keeps no parent, so everything before a `.cache()`
+  is invisible to `.inference()`; notebooks cache a lot.
+- **Scope.** Keep the parent's recipe (views and steps) without its data, so
+  the chain can be walked and replayed. **Out:** re-running the cache.
+- **Done when.** `apairo_visu`'s `graph.describe` shows the steps before a
+  cache; pickling a cached dataset does not grow by the parent's data.
+- **Placement.** Core. **Depends on.** Nothing.
+
+### I6. Steps declare what they read and write; `inference = False`
+
+- **Goal.** A program can tell, for each step, its input and output channels,
+  and whether it only belongs in training.
+- **Scope.** `_ChannelStep` and preprocessors already know; a sample-level
+  step may declare `input_keys` / `output_keys`, or stays opaque. The
+  augmentations of `apairo_transform` set `inference = False`, read by duck
+  typing (the core imports no satellite). `Compose` exposes its parts.
+- **Done when.** A chain walker lists, per step, its channels or "opaque",
+  on the `IDEAS.md` example chain.
+- **Placement.** Core and `apairo_transform`. **Depends on.** Nothing.
+
+### I7. `.inference(outputs=...)`
+
+- **Goal.** A frozen copy of the chain that computes `outputs` only, without
+  augmentations, and says what it kept, removed and flags.
+- **Scope.** Pruning by dependency; removal of `inference = False` steps;
+  the summary (kept / removed / opaque / non-causal); `causal=True` refuses
+  a non-causal `synchronize` and a `join` that cannot be resolved online.
+  **Out:** any new source (I8).
+- **Done when.** On the `IDEAS.md` example, `val` and `infer` give the same
+  `trav_pred` as `train` without its augmentation, and the summary lists
+  each removed step with its reason.
+- **Placement.** Core. **Depends on.** I5, I6. Not I4: `.inference()`
+  takes its own snapshot, so later in-place steps cannot reach it.
+
+### I8. `BagDataset` and `.on(source)`: the bag parity test
+
+- **Goal.** Replay a frozen chain on a recorded rosbag with the same channel
+  names.
+- **Why.** It is the parity test every later deployment step relies on, and
+  it needs no ROS install.
+- **Scope.** `BagDataset` reads `.mcap` and `.db3` (with `rosbags`, which
+  the extractor already uses); `.on(source)` swaps the chain's root and
+  carries over the steps registered on it. **Out:** live topics (I10).
+  Placement of `BagDataset` to decide: `apairo_ros2`, or reused from
+  `apairo_extractor`.
+- **Done when.** A chain built on an extracted dataset gives the same output
+  on the bag it was extracted from.
+- **Depends on.** I7.
+
+### I9. `.save()` and `load_chain()`, a declared chain
+
+- **Goal.** Ship the chain beside the model checkpoint and load it in the
+  node.
+- **Scope.** A declaration, not a pickle: each step's class path and
+  parameters, the channel names, the package versions. A step that cannot
+  be declared (lambda, closure) makes `.save()` refuse and name it.
+- **Done when.** `load_chain(path).on(bag)` matches I8's output in a fresh
+  process.
+- **Placement.** Core. **Depends on.** I8.
+
+### I10. `apairo_ros.live`: the chain in a live ROS 2 node
+
+- **Goal.** `load_chain(path).on(LiveSource(node, topics={...}))` runs in a
+  ROS 2 node and publishes the outputs.
+- **Why.** ROS 2 is where robots run. A satellite, decided 2026-11-06:
+  `rclpy` comes from a ROS distribution, not PyPI, so an extra cannot bring
+  it, and the core stays numpy-only.
+- **Scope.** `LiveSource` (subscriptions pushing samples, calibration from
+  `/tf_static`), a node wrapper, a launch example. **Out:** C++ or CUDA
+  rewrites of steps (see `IDEAS.md`, optimising, each under the parity test).
+- **Done when.** The node replays a bag (`ros2 bag play`) and its outputs
+  match I8's.
+- **Placement.** `apairo_ros.live`, beside the extraction and `BagDataset`,
+  so live and offline share one message conversion (first built as a
+  separate `apairo_ros2` repository, folded in on 2026-11-09). **Depends
+  on.** I9.
+
+---
+
 ## After 0.9 (not scheduled)
 
 Ordered by expected value. Each needs its own entry above before it is
@@ -480,7 +635,7 @@ scheduled.
   writers.
 - **nuScenes-mini guide.** The canonical multi-rate driving dataset; its
   calibration lives in JSON tables.
-- **Satellites.** `apairo_extractor` writes `cameras:` from the bags'
+- **Satellites.** `apairo_ros` writes `cameras:` from the bags'
   `camera_info` topics.
 
 ## 1.0 criteria
@@ -691,3 +846,44 @@ The public API and the `.apairo` format are declared stable at 1.0
   `CITATION.cff` names it. `apairo_preprocess` merged
   `feature/output-format-from-input` (`ac9a901`), and the organisation site
   shows 0.9.0 (`aa37cea`).
+- **2026-11-03**: I1–I10 added, toward `.inference()`: the training chain
+  replayed on a bag, then in a live ROS 2 node. `apairo_ros2` is decided as
+  a satellite. I1 committed on `feat/transform-returns-new`; I3 in
+  `apairo_visu`, `apairo_rr`, `apairo_preprocess` and `apairo_huggingface`,
+  whose suites pass with `-W error::FutureWarning`.
+- **2026-11-04**: plan revised. `.inference()` lands before the JOSS
+  submission instead of after 0.11: I4 is no longer a dependency, since the
+  view takes its own snapshot. D1–D3 move to December; the rest of November
+  goes to application cases. I2 and I6 in `apairo_transform`; I5 in the
+  core (a cache keeps its parent through the recorded call).
+- **2026-11-05**: I7, `.on()` from I8, and I9 on `feat/transform-returns-new`,
+  with 43 tests and a check on `mini_tartan` (chain saved, reloaded and
+  replayed on a stream of the same files: identical outputs on all 7
+  frames).
+- **2026-11-06**: the rest of the chain to the robot. I8: `BagDataset` in
+  `apairo_extractor`, branch `feat/bag-dataset` (placement decided there: it
+  reuses the extraction's conversion and stamping), with a test where a
+  chain trained on an extracted bag replays on the bag itself with identical
+  outputs, ROS 1 and ROS 2. I10: `apairo_ros2`, a new repository with
+  `LiveSource` (one message at a time, causal chains only) and `ChainNode`
+  (rclpy subscriptions); tested against the offline chain and on a fake node
+  fed a real bag's messages, not yet in a running ROS 2 system.
+  `/tf_static` calibration is left.
+- **2026-11-09**: U5 started. `apairo_transform` 0.3.0 and `apairo_visu`
+  0.1.0 get PyPI metadata, a CI (Python 3.11 to 3.13, the wheel installed in
+  a fresh environment) and a tag-triggered `publish.yml`, as the core has.
+  `apairo_extractor` becomes `apairo_ros` (distribution `apairo-ros`,
+  module `apairo_ros`, commands unchanged) before its first release: the
+  package already reads bags in place (`BagDataset`), and the live path of
+  I10 joins it once verified under ROS 2, so offline and live share one
+  message conversion. `apairo_ros2` is private until then.
+- **2026-11-09**: 0.10.0 prepared: `.inference()`, `.on()`, `save()` and
+  `load_chain()` (I5–I9), the `transform()` deprecation (I1), and the
+  ecosystem extras `apairo[ros]`, `apairo[transform]`, `apairo[preprocess]`
+  and `apairo[visu]` now that the four satellites are on PyPI (U5). Each
+  extra pins its satellite's release line. Left for November: I10 under a
+  running ROS 2, and the application cases.
+- **2026-11-09**: everything ROS goes in `apairo_ros`: the live path of
+  I10 moves from the `apairo_ros2` repository to `apairo_ros.live` (branch
+  `feat/live`, draft PR #2), and `apairo_ros2` is removed. `load_chain`
+  trusts `apairo_ros` instead of `apairo_ros2`.

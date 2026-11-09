@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from apairo.core._ops import records
 from apairo.core.abstract_dataset import AbstractDataset
 
 if TYPE_CHECKING:
@@ -81,6 +82,7 @@ class FilteredView(AbstractDataset):
         """Provenance of a view frame -- the parent's, at the remapped index."""
         return self._parent.frame_info(int(self._indices[idx]))
 
+    @records("filter_split")
     def filter_split(self, name: str) -> FilteredView:
         """Return a FilteredView restricted to the named predefined split."""
         from apairo.core.profiled_dataset import ProfiledDataset, _apply_lst_filter

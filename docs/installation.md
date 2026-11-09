@@ -45,40 +45,45 @@ pip install apairo[kuka]            # KUKA LBR Med F/T and IMU logs (kuka_ft_imu
 ## Ecosystem
 
 apairo reads datasets. The tools around it are separate packages, maintained
-in the same organisation. apairo never imports them. None is on PyPI yet, so
-each one installs from GitHub, and each brings apairo from PyPI if it is
-missing. A tool that has a command adds it to the `apairo` CLI, and
-`apairo --help` lists the installed ones under "ecosystem commands".
+in the same organisation and published on PyPI. apairo never imports them. A
+tool that has a command adds it to the `apairo` CLI, and `apairo --help` lists
+the installed ones under "ecosystem commands".
 
 | Package | What it does | Command |
 |---|---|---|
-| [`apairo_extractor`](https://github.com/apairo-robotics/apairo_extractor) | ROS bags to an apairo dataset, with its `.apairo` sidecars, from an interactive TUI or flags | `apairo extractor` |
+| [`apairo_ros`](https://github.com/apairo-robotics/apairo_ros) | ROS bags to an apairo dataset, with its `.apairo` sidecars, from an interactive TUI or flags; or read in place (`BagDataset`) | `apairo ros` |
 | [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) | Ready-made [transforms](transform.md) and augmentations, and the interpolators for [`synchronize()`](synchronization.md#interpolating-continuous-channels) | — |
 | [`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) | Ready-made [preprocessors](preprocessing.md): lidar odometry, ground segmentation, lidar–camera projection, traversability ground truth | — |
 | [`apairo_visu`](https://github.com/apairo-robotics/apairo_visu) | Viewers, each behind its own extra | `apairo visu`, `apairo studio`, `apairo rerun` |
 
+Each one installs as an extra of apairo, or on its own:
+
 ```bash
-pip install "git+https://github.com/apairo-robotics/apairo_extractor"
-pip install "git+https://github.com/apairo-robotics/apairo_transform"
-pip install "git+https://github.com/apairo-robotics/apairo_preprocess"   # brings apairo_transform
+pip install "apairo[ros]"          # = pip install apairo-ros
+pip install "apairo[transform]"    # = pip install apairo-transform
+pip install "apairo[preprocess]"   # = pip install apairo-preprocess (brings apairo-transform)
+pip install "apairo[visu]"         # = pip install "apairo-visu[studio]"
+pip install "apairo[ros,transform,visu]"
 ```
+
+An extra pins the satellite to the release line known to work with this
+version of apairo.
 
 `apairo_visu` installs nothing heavy by itself: pick the viewer you want with
 its extra, or several at once (`[studio,rerun]`).
 
 ```bash
 # apairo visu: Open3D lidar viewer with labels
-pip install "apairo-visu[open3d] @ git+https://github.com/apairo-robotics/apairo_visu"
+pip install "apairo-visu[open3d]"
 
 # apairo studio: the pipeline graph of a dataset, in the browser
-pip install "apairo-visu[studio] @ git+https://github.com/apairo-robotics/apairo_visu"
+pip install "apairo-visu[studio]"
 
 # apairo rerun: lidar, cameras and labels in the Rerun viewer
-pip install "apairo-visu[rerun] @ git+https://github.com/apairo-robotics/apairo_visu"
+pip install "apairo-visu[rerun]"
 ```
 
-Each tool's README holds its full documentation. There is no
-`apairo[extractor]` extra yet: it will come once the tools are on PyPI.
+Each tool's README holds its full documentation.
 
 ## From source
 

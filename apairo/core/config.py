@@ -77,7 +77,7 @@ _CHANNEL_KINDS: frozenset[str] = frozenset({"raw", "preprocess"})
 # run_preprocess into .apairo/channels.yaml and record what apairo *did*, not
 # how to read the tree.
 _DECLARATION_REFUSED: frozenset[str] = frozenset({"sources", "recipe"})
-# `source` is provenance: the stream the transform was read from (apairo_extractor
+# `source` is provenance: the stream the transform was read from (apairo_ros
 # records the TF topic).
 _TRANSFORM_FIELDS: frozenset[str] = frozenset(
     {"parent", "child", "static", "format", "source"}

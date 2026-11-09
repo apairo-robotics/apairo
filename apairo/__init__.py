@@ -6,6 +6,7 @@ from importlib.metadata import version as _pkg_version
 
 from apairo.core.abstract_dataset import FrameRef
 from apairo.core.cached_dataset import CachedDataset
+from apairo.core.chain import Chain, InferenceView, load_chain
 from apairo.core.channel_view import ChannelView
 from apairo.core.config import (
     register_channel,
@@ -64,6 +65,9 @@ __all__ = [
     "FilteredView",
     "ChannelView",
     "CachedDataset",
+    "InferenceView",
+    "Chain",
+    "load_chain",
     "SynchronizedView",
     "WindowView",
     "Interpolator",

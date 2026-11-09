@@ -36,12 +36,13 @@ Optional extras:
 pip install apairo[vision]   # Image loading (Pillow)
 pip install apairo[zarr]     # Zarr channels
 pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-kitti, tum, euroc, kuka
+pip install apairo[ros]      # The ecosystem: also transform, preprocess, visu
 ```
 
 Requires Python ≥ 3.11.
 
-The extractor, transforms, preprocessors and viewers are separate packages,
-installed from GitHub: see [Ecosystem](https://apairo-robotics.github.io/apairo/installation/#ecosystem)
+ROS bags, transforms, preprocessors and viewers are separate packages on
+PyPI, also installed by those extras: see [Ecosystem](https://apairo-robotics.github.io/apairo/installation/#ecosystem)
 for what each does and its install line.
 
 ---
@@ -73,7 +74,7 @@ sample = ds[0]
 channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`,
 or a [plugin's](https://apairo-robotics.github.io/apairo/datasets/format-plugins/)) — entirely from
 `.apairo/channels.yaml`, so it loads any such dataset, including the output of
-[apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), with no
+[apairo_ros](https://github.com/apairo-robotics/apairo_ros), with no
 code change.
 
 ---
@@ -152,7 +153,7 @@ ds = Rellis3DDataset(root, keys=["lidar", "labels"])
 ds.run_preprocess(TravLabel())
 
 # 2. Cache an expensive derived channel — computed once, served from RAM
-ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
 ds_prior = ds.select(["ground_prior"]).cache()
 
 # 3. Build train split — filter, join cached prior, apply augmentation
@@ -203,7 +204,7 @@ Apply callables at access time — no disk writes.
 
 ```python
 # Per-channel
-ds.transform("lidar", RangeFilter(max=50.0))
+ds = ds.transform("lidar", RangeFilter(max=50.0))
 
 # Sample-level — consistent mask across aligned channels
 def sync_filter(sample):
@@ -212,7 +213,7 @@ def sync_filter(sample):
     sample.data["labels"] = sample.data["labels"][mask]
     return sample
 
-ds.transform(sync_filter)
+ds = ds.transform(sync_filter)
 ```
 
 See [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) for a collection of ready-made transforms.
@@ -240,7 +241,7 @@ view = ds.filter(np.load("cache/valid.npy"))
 
 ```python
 ds = Rellis3DDataset(root, keys=["lidar"])
-ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
 
 # Compute once, store in RAM
 ds_prior = ds.select(["ground_prior"]).cache()
@@ -290,6 +291,19 @@ ds_val   = apairo.Rellis3DDataset(root, keys=["lidar", "labels"]).split("val")
 
 ---
 
+## Inference — the training chain, deployed
+
+```python
+deployed = train.inference(["trav_pred"])   # prunes what the output does not need, drops augmentations
+print(deployed.summary)                     # kept / removed / flagged (non-causal sync, opaque steps)
+deployed.on(other_recording)                # the same chain on another source
+deployed.save("trav_chain.json")            # a JSON declaration beside the checkpoint
+```
+
+See [Inference & Deployment](https://apairo-robotics.github.io/apairo/inference/).
+
+---
+
 ## Extending apairo
 
 Add a new synchronous dataset with a YAML profile and a minimal subclass.
@@ -299,7 +313,7 @@ See [documentation](https://apairo-robotics.github.io/apairo/) for the full guid
 
 ## Contributing
 
-apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](https://github.com/apairo-robotics/apairo/blob/main/CONTRIBUTING.md).
+apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_ros](https://github.com/apairo-robotics/apairo_ros), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](https://github.com/apairo-robotics/apairo/blob/main/CONTRIBUTING.md).
 
 ---
 

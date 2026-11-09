@@ -4,6 +4,7 @@ import copy
 import logging
 from pathlib import Path
 
+from apairo.core._ops import records
 from apairo.core.abstract_dataset import AbstractDataset
 from apairo.core.sample import Sample
 
@@ -30,7 +31,7 @@ class CachedDataset(AbstractDataset):
     Example::
 
         # Cache only the expensive channel — transforms applied before storing
-        ds.transform("lidar", expensive_ground_prior, output="ground_prior")
+        ds = ds.transform("lidar", expensive_ground_prior, output="ground_prior")
         ds_prior = ds.select(["ground_prior"]).cache()
 
         # Reuse across different training runs — no re-read, no re-compute
@@ -79,6 +80,13 @@ class CachedDataset(AbstractDataset):
     def frame_channel_ids(self):
         return self._frame_channel_ids
 
+    def __getstate__(self) -> dict:
+        # _op keeps the parent so inference() can read the recipe behind the
+        # cache; a pickled copy (a DataLoader worker) serves from RAM only.
+        state = self.__dict__.copy()
+        state.pop("_op", None)
+        return state
+
     def __len__(self) -> int:
         return len(self._cache)
 
@@ -90,6 +98,7 @@ class CachedDataset(AbstractDataset):
             data={k: copy.copy(v) for k, v in s.data.items()}, timestamp=s.timestamp
         )
 
+    @records("cache")
     def cache(self) -> AbstractDataset:
         logger.warning(
             "cache() called on an already-cached dataset — "

@@ -49,6 +49,7 @@ sample = ds[0]
 - **Derived key loading** -- preprocessed outputs live alongside raw data, registered in a `.apairo` sidecar and loaded transparently
 - **Preprocessing framework** -- `FramePreprocessor` and `SequencePreprocessor` run pipelines and persist results automatically ([`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) for ready-made preprocessors)
 - **At-access transforms** -- `dataset.transform(key, fn)` and `Compose` apply callables at read time without writing to disk ([`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) for ready-made transforms)
+- **One chain from training to deployment** -- `ds.inference(outputs)` keeps what a model's outputs need and drops augmentations, `.on(source)` replays it on another recording, `.save()` writes it as a JSON declaration beside the checkpoint
 - **PyTorch-ready** -- every apairo dataset implements the map-style protocol (`__getitem__` / `__len__`), so `DataLoader` accepts it straight; samples are `numpy.ndarray`, and apairo never imports torch
 - **Sequence-level splits** -- `split_sequences()` avoids temporal leakage across train/val/test
 
@@ -64,6 +65,7 @@ sample = ds[0]
 | [Views & Caching](views.md) | `select()` and `cache()`: channel projection, in-memory materialisation |
 | [Combining Datasets](combining.md) | `concat()` and `join()`: datasets stacked along frames or merged along channels |
 | [Preprocessing](preprocessing.md) | `FramePreprocessor` and `SequencePreprocessor`: derived channels written to disk |
+| [Inference & Deployment](inference.md) | `inference()`, `on()`, `save()`: the training chain without its augmentations, replayed on another source and saved beside the model |
 
 ---
 

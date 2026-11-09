@@ -220,6 +220,38 @@ tensor = DERIVED_LOADERS["npy"](Path("/data/output/000000.npy"))
 
 ---
 
+## Inference
+
+### InferenceView
+
+::: apairo.core.chain.InferenceView
+
+---
+
+### Chain
+
+::: apairo.core.chain.Chain
+
+---
+
+### Summary
+
+::: apairo.core.chain.Summary
+
+---
+
+### load_chain
+
+::: apairo.core.chain.load_chain
+
+---
+
+### step_io
+
+::: apairo.core.chain.step_io
+
+---
+
 ## Preprocessing
 
 ### FramePreprocessor

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from apairo.core._ops import records
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
@@ -1418,13 +1419,14 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
                 result[i] = path.stem
         return result
 
+    @records("filter_split")
     def filter_split(self, name: str) -> AbstractDataset:
         """Return a FilteredView restricted to the named predefined split.
 
         Applies the split without re-instantiating the dataset — registered
         transforms are preserved.  Replaces :meth:`split` for use mid-chain::
 
-            ds.transform("lidar", RobotFilter())
+            ds = ds.transform("lidar", RobotFilter())
             ds_train = ds.filter_split("train")  # transforms kept
 
         Works for both LST-based splits (SemanticKITTI/Rellis) and directory-layer

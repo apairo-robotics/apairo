@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apairo"
-version = "0.9.0"
+version = "0.10.0"
 description = "Unified Python loader for robotics sensor datasets -- one API across synchronous and asynchronous layouts"
 readme = "README.md"
 authors = [
@@ -53,6 +53,15 @@ semantic-kitti = []         # SemanticKITTI: clouds and labels
 tum = ["Pillow"]            # TUM RGB-D: colour and depth images
 euroc = ["Pillow"]          # EuRoC MAV: camera images
 kuka = []                   # KUKA LBR Med F/T and IMU logs: CSV tables
+# The ecosystem, as install shortcuts only: apairo never imports these
+# packages (its CLI finds their commands once installed). Each range is the
+# satellite's release line known to work with this apairo; it moves at every
+# release. `visu` brings the browser studio, the light viewer; the Rerun and
+# Open3D backends stay extras of apairo-visu itself.
+ros = ["apairo-ros>=0.1,<0.2"]
+transform = ["apairo-transform>=0.3,<0.4"]
+preprocess = ["apairo-preprocess>=0.2,<0.3"]
+visu = ["apairo-visu[studio]>=0.1,<0.2"]
 # Bounded deliberately, so the lint/type/zarr verdict never turns on an
 # install date.  zarr stays a range because it drops old Pythons faster than
 # we do -- 3.11 tops out at 3.1.x while 3.12+ gets 3.3.x; the suite is
