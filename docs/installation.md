@@ -52,14 +52,14 @@ missing. A tool that has a command adds it to the `apairo` CLI, and
 
 | Package | What it does | Command |
 |---|---|---|
-| [`apairo_extractor`](https://github.com/apairo-robotics/apairo_extractor) | ROS bags to an apairo dataset, with its `.apairo` sidecars, from an interactive TUI or flags | `apairo extractor` |
+| [`apairo_ros`](https://github.com/apairo-robotics/apairo_ros) | ROS bags to an apairo dataset, with its `.apairo` sidecars, from an interactive TUI or flags; or read in place (`BagDataset`) | `apairo ros` |
 | [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) | Ready-made [transforms](transform.md) and augmentations, and the interpolators for [`synchronize()`](synchronization.md#interpolating-continuous-channels) | — |
 | [`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) | Ready-made [preprocessors](preprocessing.md): lidar odometry, ground segmentation, lidar–camera projection, traversability ground truth | — |
 | [`apairo_visu`](https://github.com/apairo-robotics/apairo_visu) | Viewers, each behind its own extra | `apairo visu`, `apairo studio`, `apairo rerun` |
 
 ```bash
-pip install "git+https://github.com/apairo-robotics/apairo_extractor"
-pip install "git+https://github.com/apairo-robotics/apairo_transform"
+pip install apairo-ros
+pip install apairo-transform
 pip install "git+https://github.com/apairo-robotics/apairo_preprocess"   # brings apairo_transform
 ```
 

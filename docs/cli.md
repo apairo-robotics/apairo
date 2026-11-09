@@ -32,13 +32,13 @@ the commands with no arguments.
 
 ## A typical session
 
-From ROS bags to a dataset you can look at, in the terminal. `extractor`,
+From ROS bags to a dataset you can look at, in the terminal. `ros`,
 `studio` and `rerun` come from the [ecosystem](#ecosystem-commands); the
 others ship with apairo.
 
 ```bash
-apairo extractor -i bags/ -l                            # the bags and their topics
-apairo extractor -i bags/ -o dataset/ -t /lidar /imu /tf
+apairo ros extract -i bags/ -l                          # the bags and their topics
+apairo ros extract -i bags/ -o dataset/ -t /lidar /imu /tf
 cd dataset/
 apairo status                                           # channels, rates, spans, issues
 apairo check                                            # exit 1 if loading would refuse something
@@ -63,12 +63,12 @@ full reference.
 
 | Command | Package | What it does | Example |
 |---|---|---|---|
-| `apairo extractor` | `apairo_extractor` | ROS bags to an apairo dataset; with no argument, an interactive TUI | `apairo extractor -i bags/ -o dataset/ -t /lidar /tf` |
+| `apairo ros extract` | `apairo_ros` | ROS bags to an apairo dataset; with no argument, an interactive TUI | `apairo ros extract -i bags/ -o dataset/ -t /lidar /tf` |
 | `apairo studio` | `apairo_visu[studio]` | The pipeline graph and the samples of a dataset, in the browser | `apairo studio dataset/ --sync lidar` |
 | `apairo rerun` | `apairo_visu[rerun]` | Point clouds, images and labels replayed together in Rerun; `--save` writes a `.rrd` | `apairo rerun dataset/ --lidar lidar --camera image` |
 | `apairo visu` | `apairo_visu[open3d]` | Open3D viewer for GOOSE, Rellis-3D and SemanticKITTI, with their labels | `apairo visu --dataset goose --root /data/goose` |
 
-`apairo extractor` is also installed as `apairo-extractor`.
+`apairo ros extract` is also `apairo extractor`, its name before the package became `apairo_ros`, and `apairo-extractor`.
 
 This is plugin discovery, not a dependency: `apairo` never imports its tools, it
 just dispatches to whatever is installed (so there is no circular dependency
@@ -77,7 +77,7 @@ exposes one like this:
 
 ```toml
 [project.entry-points."apairo.cli_plugins"]
-extractor = "apairo_extractor.cli:main"
+extractor = "apairo_ros.cli:main"
 ```
 
 ---

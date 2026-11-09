@@ -78,7 +78,7 @@ channels:
 | `timestamps_from` | no | The channel whose timestamps this one shares (provenance). |
 | `sources` | no | Channels this one was derived from (provenance). |
 | `frame` | no | Coordinate frame the data is expressed in. Descriptive only — apairo never applies transforms. |
-| `transform` | no | Declares the channel *is* a transform stream: `{parent, child, [static], [format], [source]}`. `source` records where it was read from (`apairo_extractor` writes the TF topic). Descriptive only. |
+| `transform` | no | Declares the channel *is* a transform stream: `{parent, child, [static], [format], [source]}`. `source` records where it was read from (`apairo_ros` writes the TF topic). Descriptive only. |
 | `alias` | no | Public name the channel loads under (the directory keeps its real name). Must be unique and must not shadow a real channel directory. |
 | `directory` | no | On-disk directory the channel's files live in, when different from its key: another channel's directory (colocation), or a **nested relative path** (`per_object_gt/pcd` — an annotation tool's export). Resolved from the sequence directory; `..`, absolute paths and drive anchors are rejected. Defaults to the key. |
 | `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). Formats with suffixed variants only (`npys`, or a plugin's); `check` reports it elsewhere. The sub-channel reads its directory's clock, and its latency. |

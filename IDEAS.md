@@ -267,7 +267,7 @@ per physical camera; image channels reach it via their `frame` field in
 
 Remaining, outside this repo:
 
-- **apairo_extractor**: write `cameras:` entries from the rosbags'
+- **apairo_ros**: write `cameras:` entries from the rosbags'
   `camera_info` topics (near-verbatim -- the schema mirrors the message).
 - **apairo_transform**: the projection/undistortion ops consuming
   `ds.calibration.get_intrinsics(...)` (e.g. `ProjectPoints`), including the
@@ -360,7 +360,7 @@ would grow HDF5-shaped corners.
 - **TFRecord / RLDS** (Open X-Embodiment) needs TensorFlow, and **WebDataset**
   tar shards are sequential by design; neither offers the random access apairo
   is built on. Those datasets are reachable through their LeRobot conversions.
-- **Message logs** (rosbag, MCAP) stay with `apairo_extractor`.
+- **Message logs** (rosbag, MCAP) stay with `apairo_ros`.
 
 ### Writes
 

@@ -37,7 +37,7 @@ about a day, **M** a few days, **L** a week or more.
 | U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ in 0.9.0 |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | after 0.9.0 | structure checked, real sequence owed |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ in 0.9.0 |
-| U5 | Satellites on PyPI, then `apairo[extractor]` and the like | M | after 0.9.0 | planned |
+| U5 | Satellites on PyPI, then `apairo[ros]` and the like | M | after 0.9.0 | in progress (`apairo-transform` 0.3.0, `apairo-visu` 0.1.0, `apairo-ros` 0.1.0 ready to tag; `apairo-preprocess` after `apairo-transform`) |
 | D1 | One docs site for the ecosystem, built from the satellites | M | December | planned |
 | D2 | Executed examples for `apairo_transform` | S | December | planned |
 | D3 | A screen recording of `apairo studio` | S | December | planned |
@@ -51,9 +51,9 @@ about a day, **M** a few days, **L** a week or more.
 | I5 | `cache()` keeps the recipe | M | 0.10 | in progress (same branch) |
 | I6 | Steps declare what they read and write; `inference = False` | M | 0.10 | in progress (same branch) |
 | I7 | `.inference(outputs=...)` | L | 0.10 | in progress (same branch) |
-| I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | in progress (`BagDataset` in `apairo_extractor`, branch `feat/bag-dataset`) |
+| I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | in progress (`BagDataset` in `apairo_ros`, the renamed `apairo_extractor`) |
 | I9 | `.save()` and `load_chain()`, a declared chain | M | 0.10 | in progress (same branch) |
-| I10 | `apairo_ros2`: the chain in a live ROS 2 node | L | November | in progress (new repo, not on GitHub yet, untested under ROS 2) |
+| I10 | `apairo_ros2`: the chain in a live ROS 2 node | L | November | in progress (private repo, untested under ROS 2; joins `apairo_ros` once verified) |
 
 ---
 
@@ -333,15 +333,15 @@ again on top of them.
   finds the KITTI datasets themselves.
 - **Placement.** Core docs and `apairo_extractor`.
 
-### U5. Satellites on PyPI, then `apairo[extractor]` and the like
+### U5. Satellites on PyPI, then `apairo[ros]` and the like
 
-- **Goal.** `pip install apairo[extractor]` (and `transform`, `preprocess`,
+- **Goal.** `pip install apairo[ros]` (and `transform`, `preprocess`,
   `visu`) installs the satellite.
 - **Why.** It is how a newcomer expects to find the rest of the ecosystem,
   and it matches the dataset extras.
-- **Scope.** Publish `apairo-extractor`, `apairo-transform`,
-  `apairo-preprocess` and `apairo-visu` on PyPI (all four names were free on
-  2026-10-19). `apairo-rr` is deprecated and is not published. Replace
+- **Scope.** Publish `apairo-ros` (the extractor, renamed on 2026-11-09),
+  `apairo-transform`, `apairo-preprocess` and `apairo-visu` on PyPI (all
+  four names were free). `apairo-rr` is deprecated and is not published. Replace
   `apairo_preprocess`'s `git+https` dependency on `apairo_transform`, which
   PyPI refuses. Then add the extras to apairo, each with a compatible version
   range that is updated at every release; whether `apairo[visu]` also brings
@@ -373,7 +373,7 @@ D1–D3 follow 0.9.0; D4 and D5 follow the JOSS submission.
   its install line, its `apairo <command>`, its examples and its API.
 - **Why.** U2 names the satellites on the installation page, but their
   documentation lives in four READMEs, outside the site and its search.
-- **Scope.** `docs.yml` checks out `apairo_extractor`, `apairo_transform`,
+- **Scope.** `docs.yml` checks out `apairo_ros`, `apairo_transform`,
   `apairo_preprocess` and `apairo_visu` beside the core and installs them.
   `mkdocstrings` documents their public API; `pymdownx.snippets` includes
   their `examples/*.py` as they are. A satellite change reaches the site at
@@ -571,7 +571,7 @@ which test it before the JOSS submission.
 - **Why.** It is the parity test every later deployment step relies on, and
   it needs no ROS install.
 - **Scope.** `BagDataset` reads `.mcap` and `.db3` (with `rosbags`, which
-  `apairo_extractor` already uses); `.on(source)` swaps the chain's root and
+  the extractor already uses); `.on(source)` swaps the chain's root and
   carries over the steps registered on it. **Out:** live topics (I10).
   Placement of `BagDataset` to decide: `apairo_ros2`, or reused from
   `apairo_extractor`.
@@ -632,7 +632,7 @@ scheduled.
   writers.
 - **nuScenes-mini guide.** The canonical multi-rate driving dataset; its
   calibration lives in JSON tables.
-- **Satellites.** `apairo_extractor` writes `cameras:` from the bags'
+- **Satellites.** `apairo_ros` writes `cameras:` from the bags'
   `camera_info` topics.
 
 ## 1.0 criteria
@@ -866,3 +866,11 @@ The public API and the `.apairo` format are declared stable at 1.0
   (rclpy subscriptions); tested against the offline chain and on a fake node
   fed a real bag's messages, not yet in a running ROS 2 system.
   `/tf_static` calibration is left.
+- **2026-11-09**: U5 started. `apairo_transform` 0.3.0 and `apairo_visu`
+  0.1.0 get PyPI metadata, a CI (Python 3.11 to 3.13, the wheel installed in
+  a fresh environment) and a tag-triggered `publish.yml`, as the core has.
+  `apairo_extractor` becomes `apairo_ros` (distribution `apairo-ros`,
+  module `apairo_ros`, commands unchanged) before its first release: the
+  package already reads bags in place (`BagDataset`), and the live path of
+  I10 joins it once verified under ROS 2, so offline and live share one
+  message conversion. `apairo_ros2` is private until then.

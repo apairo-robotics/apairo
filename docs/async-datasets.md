@@ -111,7 +111,7 @@ Preprocessed channels
 `RawDataset` takes its channels — and each channel's storage format — entirely
 from `.apairo/channels.yaml`. There is no code to write per dataset: whatever
 the sidecar declares is what loads. This makes it the loader for
-[apairo_extractor](https://github.com/apairo-robotics/apairo_extractor) output,
+[apairo_ros](https://github.com/apairo-robotics/apairo_ros) output,
 which writes that sidecar at extraction time.
 
 ```python

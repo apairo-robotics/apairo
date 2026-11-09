@@ -73,7 +73,7 @@ sample = ds[0]
 channels — and their format (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`,
 or a [plugin's](https://apairo-robotics.github.io/apairo/datasets/format-plugins/)) — entirely from
 `.apairo/channels.yaml`, so it loads any such dataset, including the output of
-[apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), with no
+[apairo_ros](https://github.com/apairo-robotics/apairo_ros), with no
 code change.
 
 ---
@@ -312,7 +312,7 @@ See [documentation](https://apairo-robotics.github.io/apairo/) for the full guid
 
 ## Contributing
 
-apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_extractor](https://github.com/apairo-robotics/apairo_extractor), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](https://github.com/apairo-robotics/apairo/blob/main/CONTRIBUTING.md).
+apairo is one repository of a small ecosystem ([apairo_transform](https://github.com/apairo-robotics/apairo_transform), [apairo_preprocess](https://github.com/apairo-robotics/apairo_preprocess), [apairo_ros](https://github.com/apairo-robotics/apairo_ros), [apairo_visu](https://github.com/apairo-robotics/apairo_visu)). Where a change belongs, the design invariants, and the dev workflow are documented in [CONTRIBUTING.md](https://github.com/apairo-robotics/apairo/blob/main/CONTRIBUTING.md).
 
 ---
 

@@ -1303,7 +1303,7 @@ def _add_common(p: argparse.ArgumentParser) -> None:
 
 def _discover_plugins() -> dict:
     """Ecosystem subcommands registered under the ``apairo.cli_plugins`` entry
-    point group (e.g. ``apairo extractor`` from ``apairo_extractor``).
+    point group (e.g. ``apairo extractor`` from ``apairo_ros``).
 
     Discovery is by installed metadata only -- apairo never imports or depends
     on its tools; it dispatches to whatever is installed.

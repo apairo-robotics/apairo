@@ -185,7 +185,7 @@ the outputs did not change.
 
 ## On a bag, on the robot
 
-- **A recording**: `BagDataset` (in `apairo_extractor`) reads a rosbag in
+- **A recording**: `BagDataset` (in `apairo_ros`) reads a rosbag in
   place, converted and stamped as an extraction would. A chain trained on
   extracted data replays on the bag it was extracted from with the same
   outputs: `deployed.on(BagDataset("run_42", topics=[...]))`.

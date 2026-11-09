@@ -17,7 +17,7 @@ mechanics of getting a change merged.
 | [`apairo`](https://github.com/apairo-robotics/apairo) | Core: dataset model, views, loaders, preprocess/persistence machinery, contracts | numpy, PyYAML only |
 | [`apairo_transform`](https://github.com/apairo-robotics/apairo_transform) | Collection of runtime ops (transforms, augmentations, interpolators) | numpy only |
 | [`apairo_preprocess`](https://github.com/apairo-robotics/apairo_preprocess) | Collection of heavy offline preprocessors (CSF, odometry, segmentation models) | scipy, CSF, optional deep models |
-| [`apairo_extractor`](https://github.com/apairo-robotics/apairo_extractor) | Rosbag → apairo layouts, CLI/TUI | rosbags |
+| [`apairo_ros`](https://github.com/apairo-robotics/apairo_ros) | ROS: bags → apairo layouts (CLI/TUI), bags read in place (`BagDataset`) | rosbags |
 | [`apairo_visu`](https://github.com/apairo-robotics/apairo_visu) | Visualization bridge | rerun |
 
 Practical consequences:
