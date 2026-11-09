@@ -887,3 +887,7 @@ The public API and the `.apairo` format are declared stable at 1.0
   I10 moves from the `apairo_ros2` repository to `apairo_ros.live` (branch
   `feat/live`, draft PR #2), and `apairo_ros2` is removed. `load_chain`
   trusts `apairo_ros` instead of `apairo_ros2`.
+- **2026-11-09**: 0.10.0 released (tag `v0.10.0` on `main`, `151dbc4`), with
+  `apairo-preprocess` 0.2.0 the same evening; `apairo[ros,transform,preprocess,visu]`
+  installs from PyPI. Zenodo archived it as `10.5281/zenodo.24092237`, and
+  the concept DOI resolves to it.
