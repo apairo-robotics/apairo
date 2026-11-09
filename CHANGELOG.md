@@ -7,6 +7,8 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-09
+
 ### Upgrading from 0.9
 
 - **Assign the result of `transform()`: `ds = ds.transform(...)`.** In 0.11
@@ -41,6 +43,12 @@ All notable changes to apairo are documented here. The format is based on
   `trusted=` only. A step that cannot be declared (a lambda, a C object, a
   model's weights without `get_config()`) is refused by name.
 - `Compose.transforms` exposes the parts of a `Compose`.
+- **The ecosystem as extras**: `apairo[ros]`, `apairo[transform]`,
+  `apairo[preprocess]` and `apairo[visu]` install `apairo-ros`,
+  `apairo-transform`, `apairo-preprocess` and `apairo-visu` (with its browser
+  studio), now on PyPI. They are install shortcuts: apairo never imports them.
+  `apairo-ros` is the former `apairo_extractor`, renamed before its first
+  release; its command is `apairo ros extract`, and `apairo extractor` stays.
 
 ### Deprecated
 
@@ -1083,7 +1091,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/apairo-robotics/apairo/compare/v0.6.2...v0.7.0

@@ -37,22 +37,22 @@ about a day, **M** a few days, **L** a week or more.
 | U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ in 0.9.0 |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | after 0.9.0 | structure checked, real sequence owed |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ in 0.9.0 |
-| U5 | Satellites on PyPI, then `apairo[ros]` and the like | M | after 0.9.0 | in progress (`apairo-transform` 0.3.0, `apairo-visu` 0.1.0, `apairo-ros` 0.1.0 ready to tag; `apairo-preprocess` after `apairo-transform`) |
+| U5 | Satellites on PyPI, then `apairo[ros]` and the like | M | after 0.9.0 | ✅ `apairo-transform` 0.3.0, `apairo-visu` 0.1.0, `apairo-ros` 0.1.0 and `apairo-preprocess` 0.2.0 on PyPI; extras in 0.10.0 |
 | D1 | One docs site for the ecosystem, built from the satellites | M | December | planned |
 | D2 | Executed examples for `apairo_transform` | S | December | planned |
 | D3 | A screen recording of `apairo studio` | S | December | planned |
 | D4 | Studio live on a Hugging Face Space | M | after JOSS | planned |
 | D5 | Real-data results for `apairo_preprocess` | M | after JOSS | planned |
 | J | JOSS track (in `apairo_paper`) | — | W47–W49 | planned |
-| I1 | `transform()` without `in_place` is deprecated | S | 0.10 | in progress (branch `feat/transform-returns-new`) |
-| I2 | `AccumulateFrames` deprecated for `window` + `StackByPose` | S | `apairo_transform` 0.3 | in progress (same branch name) |
-| I3 | The satellites assign the result of `transform()` | S | before 0.10 | in progress (visu, preprocess, rr on `feat/transform-returns-new`; huggingface on `feature/fomo`) |
+| I1 | `transform()` without `in_place` is deprecated | S | 0.10 | ✅ released in 0.10.0 |
+| I2 | `AccumulateFrames` deprecated for `window` + `StackByPose` | S | `apairo_transform` 0.3 | ✅ released in `apairo_transform` 0.3.0 |
+| I3 | The satellites assign the result of `transform()` | S | before 0.10 | ✅ done (`apairo_rr`, archived, keeps its commit local) |
 | I4 | `transform()` returns a new dataset by default | S | 0.11 | planned |
-| I5 | `cache()` keeps the recipe | M | 0.10 | in progress (same branch) |
-| I6 | Steps declare what they read and write; `inference = False` | M | 0.10 | in progress (same branch) |
-| I7 | `.inference(outputs=...)` | L | 0.10 | in progress (same branch) |
-| I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | in progress (`BagDataset` in `apairo_ros`, the renamed `apairo_extractor`) |
-| I9 | `.save()` and `load_chain()`, a declared chain | M | 0.10 | in progress (same branch) |
+| I5 | `cache()` keeps the recipe | M | 0.10 | ✅ released in 0.10.0 |
+| I6 | Steps declare what they read and write; `inference = False` | M | 0.10 | ✅ released in 0.10.0 |
+| I7 | `.inference(outputs=...)` | L | 0.10 | ✅ released in 0.10.0 |
+| I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | ✅ released in 0.10.0; `BagDataset` in `apairo-ros` 0.1.0 |
+| I9 | `.save()` and `load_chain()`, a declared chain | M | 0.10 | ✅ released in 0.10.0 |
 | I10 | `apairo_ros2`: the chain in a live ROS 2 node | L | November | in progress (private repo, untested under ROS 2; joins `apairo_ros` once verified) |
 
 ---
@@ -874,3 +874,9 @@ The public API and the `.apairo` format are declared stable at 1.0
   package already reads bags in place (`BagDataset`), and the live path of
   I10 joins it once verified under ROS 2, so offline and live share one
   message conversion. `apairo_ros2` is private until then.
+- **2026-11-09**: 0.10.0 prepared: `.inference()`, `.on()`, `save()` and
+  `load_chain()` (I5–I9), the `transform()` deprecation (I1), and the
+  ecosystem extras `apairo[ros]`, `apairo[transform]`, `apairo[preprocess]`
+  and `apairo[visu]` now that the four satellites are on PyPI (U5). Each
+  extra pins its satellite's release line. Left for November: I10 under a
+  running ROS 2, and the application cases.

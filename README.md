@@ -36,12 +36,13 @@ Optional extras:
 pip install apairo[vision]   # Image loading (Pillow)
 pip install apairo[zarr]     # Zarr channels
 pip install apairo[tartan]   # A standard dataset: also rellis, goose, semantic-kitti, tum, euroc, kuka
+pip install apairo[ros]      # The ecosystem: also transform, preprocess, visu
 ```
 
 Requires Python ≥ 3.11.
 
-The extractor, transforms, preprocessors and viewers are separate packages,
-installed from GitHub: see [Ecosystem](https://apairo-robotics.github.io/apairo/installation/#ecosystem)
+ROS bags, transforms, preprocessors and viewers are separate packages on
+PyPI, also installed by those extras: see [Ecosystem](https://apairo-robotics.github.io/apairo/installation/#ecosystem)
 for what each does and its install line.
 
 ---
