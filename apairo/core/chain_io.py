@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 FORMAT = "apairo-chain"
 VERSION = 1
-TRUSTED = ("apairo", "apairo_transform", "apairo_preprocess", "apairo_ros2")
+TRUSTED = ("apairo", "apairo_transform", "apairo_preprocess", "apairo_ros")
 _TAG = "__apairo__"
 _HEAPTYPE = 1 << 9  # Py_TPFLAGS_HEAPTYPE: a class defined in Python
 

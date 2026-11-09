@@ -53,7 +53,7 @@ about a day, **M** a few days, **L** a week or more.
 | I7 | `.inference(outputs=...)` | L | 0.10 | ✅ released in 0.10.0 |
 | I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | ✅ released in 0.10.0; `BagDataset` in `apairo-ros` 0.1.0 |
 | I9 | `.save()` and `load_chain()`, a declared chain | M | 0.10 | ✅ released in 0.10.0 |
-| I10 | `apairo_ros2`: the chain in a live ROS 2 node | L | November | in progress (private repo, untested under ROS 2; joins `apairo_ros` once verified) |
+| I10 | `apairo_ros.live`: the chain in a live ROS 2 node | L | November | in progress (`apairo_ros` branch `feat/live`, draft PR #2; untested under ROS 2) |
 
 ---
 
@@ -590,7 +590,7 @@ which test it before the JOSS submission.
   process.
 - **Placement.** Core. **Depends on.** I8.
 
-### I10. `apairo_ros2`: the chain in a live ROS 2 node
+### I10. `apairo_ros.live`: the chain in a live ROS 2 node
 
 - **Goal.** `load_chain(path).on(LiveSource(node, topics={...}))` runs in a
   ROS 2 node and publishes the outputs.
@@ -602,7 +602,10 @@ which test it before the JOSS submission.
   rewrites of steps (see `IDEAS.md`, optimising, each under the parity test).
 - **Done when.** The node replays a bag (`ros2 bag play`) and its outputs
   match I8's.
-- **Placement.** New repository `apairo_ros2`. **Depends on.** I9.
+- **Placement.** `apairo_ros.live`, beside the extraction and `BagDataset`,
+  so live and offline share one message conversion (first built as a
+  separate `apairo_ros2` repository, folded in on 2026-11-09). **Depends
+  on.** I9.
 
 ---
 
@@ -880,3 +883,7 @@ The public API and the `.apairo` format are declared stable at 1.0
   and `apairo[visu]` now that the four satellites are on PyPI (U5). Each
   extra pins its satellite's release line. Left for November: I10 under a
   running ROS 2, and the application cases.
+- **2026-11-09**: everything ROS goes in `apairo_ros`: the live path of
+  I10 moves from the `apairo_ros2` repository to `apairo_ros.live` (branch
+  `feat/live`, draft PR #2), and `apairo_ros2` is removed. `load_chain`
+  trusts `apairo_ros` instead of `apairo_ros2`.

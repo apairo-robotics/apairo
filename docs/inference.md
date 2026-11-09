@@ -189,9 +189,10 @@ the outputs did not change.
   place, converted and stamped as an extraction would. A chain trained on
   extracted data replays on the bag it was extracted from with the same
   outputs: `deployed.on(BagDataset("run_42", topics=[...]))`.
-- **A live robot**: `apairo_ros2` feeds a saved chain one message at a time
-  (`LiveSource`) and wires it to the subscriptions of a ROS 2 node
-  (`ChainNode`). It runs causal chains only.
+- **A live robot**: `apairo_ros.live` feeds a saved chain one message at a
+  time (`LiveSource`) and wires it to the subscriptions of a ROS 2 node
+  (`ChainNode`). It runs causal chains only. It is on the `feat/live` branch
+  of `apairo_ros`, released once tested in a running ROS 2 system.
 
 ## Limits
 
