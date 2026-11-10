@@ -27,6 +27,34 @@ ChannelStrategy = (
 )
 
 
+def _caller_depth() -> int:
+    """Stack level of the first frame outside apairo, for a warning raised in
+    :func:`warn_steps_not_synchronized` to point at the user's call."""
+    import sys
+
+    package = str(Path(__file__).resolve().parent.parent)
+    depth = 1
+    frame: Any = sys._getframe(1)
+    while frame is not None and frame.f_code.co_filename.startswith(package):
+        frame = frame.f_back
+        depth += 1
+    return depth
+
+
+def warn_steps_not_synchronized(steps: list | None) -> None:
+    """Warn that transform steps registered before ``synchronize()`` are not
+    applied to the synchronized view, which reads the stored channels."""
+    if steps:
+        warnings.warn(
+            f"synchronize() reads the stored channels of the dataset it is "
+            f"called on: the {len(steps)} transform step(s) registered on it "
+            f"before are not applied to the synchronized view. Register them "
+            f"after: ds.synchronize(...).transform(...).",
+            UserWarning,
+            stacklevel=_caller_depth(),
+        )
+
+
 class SynchronizedView(AbstractDataset):
     """A synchronous view over an asynchronous dataset.
 
@@ -105,12 +133,26 @@ class SynchronizedView(AbstractDataset):
         tolerance: float | None = None,
     ) -> None:
         parent_ts = getattr(parent, "timestamps", None)
+        name = parent.__class__.__name__
         if not isinstance(parent_ts, dict) or not parent_ts:
+            if parent.is_synchronous:
+                raise ValueError(
+                    f"synchronize() requires an asynchronous dataset with "
+                    f"per-channel timestamps; this {name} is already synchronous."
+                )
             raise ValueError(
-                f"synchronize() requires an asynchronous dataset with "
-                f"per-channel timestamps; {parent.__class__.__name__} is "
-                f"already synchronous."
+                f"synchronize() needs each channel's clock, and this {name} "
+                f"(a view over an asynchronous dataset) does not carry them. "
+                f"Call synchronize() on the dataset itself, then filter or "
+                f"select the result."
             )
+        if not isinstance(getattr(parent, "loaders", None), dict):
+            raise ValueError(
+                f"synchronize() reads each channel's frames by row, and this "
+                f"{name} does not expose them. Synchronize each dataset before "
+                f"combining them: a.synchronize(...).concat(b.synchronize(...))."
+            )
+        warn_steps_not_synchronized(getattr(parent, "_pipeline", None))
 
         keys = list(parent.keys)
         strategies = self._resolve_strategies(method, keys)

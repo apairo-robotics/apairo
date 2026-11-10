@@ -790,6 +790,12 @@ class AbstractDataset(ABC):
 
     def __getitem__(self, idx: int) -> "Sample":
         # Integers only: profiled datasets also take a (sequence, index) tuple.
+        if isinstance(idx, slice):
+            raise TypeError(
+                f"A dataset is indexed by one frame at a time, not by a slice. "
+                f"For a range of frames use a view: "
+                f"ds.filter(range({idx.start or 0}, {idx.stop if idx.stop is not None else 'len(ds)'}))."
+            )
         if isinstance(idx, (int, np.integer)) and idx < 0:
             idx = from_end(idx, len(self))
         return self._apply_transforms(self._load(idx))

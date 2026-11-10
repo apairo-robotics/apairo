@@ -222,6 +222,8 @@ def test_synchronized_view_mixed_parent_keeps_probe():
     # Direct view over a parent spanning several sequences: a composite frame
     # has no single sequence, so the availability probe must stay negative.
     class Mixed(AbstractDataset):
+        loaders: dict = {"a": [np.zeros(1), np.zeros(1)]}
+
         def __init__(self):
             self._set_keys(["a"])
 

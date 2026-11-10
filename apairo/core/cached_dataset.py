@@ -68,17 +68,29 @@ class CachedDataset(AbstractDataset):
     def root_dir(self) -> Path | None:
         return self._root_dir
 
+    def _snapshot(self, name: str):
+        """A provenance array snapshotted from the parent, or ``AttributeError``
+        when the parent had none -- the base class's contract, so
+        ``getattr(ds, name, None)`` stays an availability probe."""
+        value = getattr(self, f"_{name}")
+        if value is None:
+            raise AttributeError(
+                f"This cached dataset exposes no {name}: the dataset it was "
+                f"cached from had none."
+            )
+        return value
+
     @property
     def frame_sequence_ids(self):
-        return self._frame_sequence_ids
+        return self._snapshot("frame_sequence_ids")
 
     @property
     def frame_stems(self):
-        return self._frame_stems
+        return self._snapshot("frame_stems")
 
     @property
     def frame_channel_ids(self):
-        return self._frame_channel_ids
+        return self._snapshot("frame_channel_ids")
 
     def __getstate__(self) -> dict:
         # _op keeps the parent so inference() can read the recipe behind the
