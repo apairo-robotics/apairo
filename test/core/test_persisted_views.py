@@ -369,6 +369,7 @@ def test_an_index_file_outside_the_sequence_is_refused(tmp_path):
     with pytest.raises(ValueError):
         RawDataset(seq).load_view("v")
 
+
 def _registry_entry(seq, name):
     return yaml.safe_load((seq / ".apairo" / "views.yaml").read_text())["views"][name]
 

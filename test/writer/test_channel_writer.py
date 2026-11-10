@@ -142,6 +142,7 @@ def test_a_bin_channel_takes_n_by_4_points_only(tmp_path):
             np.zeros((8, 3), np.float32), stem="000000"
         )
 
+
 # ─────────────────────── any per-frame format that writes ────────────────────
 
 

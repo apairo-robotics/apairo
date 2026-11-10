@@ -944,10 +944,13 @@ def _load_refusal(path: Path, declare: Path | None) -> str | None:
     yet writes one: such a directory is not opened here (the checks above read
     it as loading would)."""
     profiled = _profiled_status_class(path)
-    sequences = [path] if _is_sequence(path) else _sequence_dirs(path)
-    if not config_exists(path if profiled is not None else sequences[0]) or not all(
-        config_exists(d) for d in ([] if profiled is not None else sequences)
-    ):
+    if profiled is not None:
+        initialised = config_exists(path)
+    else:
+        # No sequence found here: a directory read only through --declare.
+        sequences = [path] if _is_sequence(path) else _sequence_dirs(path)
+        initialised = bool(sequences) and all(config_exists(d) for d in sequences)
+    if not initialised:
         return None
     try:
         with warnings.catch_warnings():
