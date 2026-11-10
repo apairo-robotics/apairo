@@ -11,7 +11,10 @@ from apairo.dataset.semantic_kitti import SemanticKittiDataset
 
 
 def _tree(root, lidar_ids, label_ids, seq="00"):
-    lidar, labels = root / "sequences" / seq / "velodyne", root / "sequences" / seq / "labels"
+    lidar, labels = (
+        root / "sequences" / seq / "velodyne",
+        root / "sequences" / seq / "labels",
+    )
     lidar.mkdir(parents=True)
     labels.mkdir(parents=True)
     for i in lidar_ids:
@@ -22,7 +25,9 @@ def _tree(root, lidar_ids, label_ids, seq="00"):
 
 
 def test_matching_frames_load(tmp_path):
-    ds = SemanticKittiDataset(_tree(tmp_path, [0, 1, 2], [0, 1, 2]), keys=["lidar", "labels"])
+    ds = SemanticKittiDataset(
+        _tree(tmp_path, [0, 1, 2], [0, 1, 2]), keys=["lidar", "labels"]
+    )
     assert [int(ds[i].data["labels"][0]) for i in range(3)] == [0, 1, 2]
 
 

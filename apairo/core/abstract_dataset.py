@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
+    Any,
     ClassVar,
     Literal,
     NamedTuple,
@@ -539,13 +540,16 @@ class AbstractDataset(ABC):
 
         Three forms:
 
-        **Pre-computed indices** -- ``filter(indices)``
+        **Pre-computed indices or mask** -- ``filter(indices)``
 
         Pass a previously saved index array directly — no sweep::
 
             np.save("valid.npy", view.indices)
             # later:
             view = ds.filter(np.load("valid.npy"))
+
+        A boolean array is a mask, one entry per frame: ``True`` keeps the
+        frame (``ds.filter(scores > 0.5)``).
 
         **Sample-level** -- ``filter(fn)``
 
@@ -559,9 +563,11 @@ class AbstractDataset(ABC):
 
         ``fn`` receives *key*'s value and returns ``True`` to keep the frame. The
         predicate evaluates the channel's **stored data, before access-time
-        transforms** -- filtering operates on channels, not on transformed views.
-        To filter on a *derived* version of a channel, materialize it first
-        (``transform(key, fn, output="derived")``) and filter on that channel::
+        transforms** -- filtering operates on channels, not on transformed
+        views -- and it does so on a filtered or selected view as on the
+        dataset itself. To filter on a *derived* version of a channel, publish
+        it under its own name (``transform(key, fn, output="derived")``) and
+        filter on that channel, which is then computed for each frame::
 
             ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
 
@@ -588,13 +594,31 @@ class AbstractDataset(ABC):
                     ".synchronize() first, or use the sample-level form "
                     "filter(fn)."
                 )
-            loaders = getattr(self, "loaders", None)
-            if loaders and key in loaders:
-                indices = [i for i in range(len(self)) if fn(loaders[key][i])]
-            else:
-                indices = [i for i in range(len(self)) if fn(self._load(i).data[key])]
+            indices = [i for i in range(len(self)) if fn(self._stored_channel(key, i))]
 
         return FilteredView(self, indices)
+
+    def _stored_channel(self, key: str, idx: int) -> Any:
+        """Channel *key* of frame *idx* as it is stored, before the transforms
+        registered on this dataset -- what ``filter(key, fn)`` evaluates.
+
+        A channel that is not stored but published by a transform
+        (``output=``) is computed. Views that only select frames or channels
+        delegate to their parent, so the answer does not depend on the view.
+        """
+        loaders = getattr(self, "loaders", None)
+        if loaders and key in loaders:
+            return loaders[key][idx]
+        data = self._load(idx).data
+        if key in data:
+            return data[key]
+        data = self[idx].data
+        if key not in data:
+            raise KeyError(
+                f"filter(): no channel {key!r} in this dataset (it holds "
+                f"{sorted(data)})."
+            )
+        return data[key]
 
     def inference(
         self, outputs: "str | list[str]", causal: bool = False

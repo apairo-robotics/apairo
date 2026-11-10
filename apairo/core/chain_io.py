@@ -46,8 +46,16 @@ TRUSTED = ("apairo", "apairo_transform", "apairo_preprocess", "apairo_ros")
 # The dataset methods a chain may replay: those decorated with @records.
 OPS = frozenset(
     {
-        "select", "cache", "concat", "repeat", "join", "window", "synchronize",
-        "filter", "filter_sequences", "filter_split",
+        "select",
+        "cache",
+        "concat",
+        "repeat",
+        "join",
+        "window",
+        "synchronize",
+        "filter",
+        "filter_sequences",
+        "filter_split",
     }
 )
 _TAG = "__apairo__"
@@ -261,7 +269,9 @@ def _import(path: str, trusted: tuple[str, ...]) -> Any:
         for part in qualname.split("."):
             obj = getattr(obj, part)
     except AttributeError:
-        raise ChainDeclarationError(f"The chain names {path}, which does not exist.") from None
+        raise ChainDeclarationError(
+            f"The chain names {path}, which does not exist."
+        ) from None
     # The module prefix is not enough: `trusted.module:os.system` starts in a
     # trusted module and ends anywhere. The object itself must be a class or a
     # Python function *defined* at that path, which is what save() writes.
@@ -318,7 +328,7 @@ def _decode(value: Any, trusted: tuple[str, ...]) -> Any:
             raise ChainDeclarationError(f"{value['path']} is not a class.")
         if "config" in value:
             return cls(**_decode(value["config"], trusted))
-        obj = cls.__new__(cls)
+        obj: Any = cls.__new__(cls)
         for k, v in value["state"].items():
             if k.startswith("__"):
                 raise ChainDeclarationError(

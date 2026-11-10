@@ -249,7 +249,9 @@ def test_a_path_through_a_trusted_module_is_refused(deployed, tmp_path, target):
         _first_step(doc)[0] = {"__apairo__": "function", "path": target}
 
     path = _doc_with(deployed, tmp_path, edit)
-    with pytest.raises(ChainDeclarationError, match="not a class or a function|does not exist"):
+    with pytest.raises(
+        ChainDeclarationError, match="not a class or a function|does not exist"
+    ):
         load_chain(path, trusted=["test"])
 
 
@@ -281,5 +283,7 @@ def test_only_recorded_operations_are_replayed(deployed, tmp_path):
     def edit(doc):
         next(n for n in doc["nodes"] if n["op"] is not None)["op"] = "export"
 
-    with pytest.raises(ChainDeclarationError, match="'export'.*not one a chain records"):
+    with pytest.raises(
+        ChainDeclarationError, match="'export'.*not one a chain records"
+    ):
         load_chain(_doc_with(deployed, tmp_path, edit), trusted=["test"])

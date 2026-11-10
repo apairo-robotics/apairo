@@ -20,7 +20,9 @@ def _channel(root, name, stamps):
 def test_an_unsorted_timestamps_file_is_refused(tmp_path):
     _channel(tmp_path, "lidar", [0.0, 0.1, 0.2])
     _channel(tmp_path, "pose", [0.0, 0.9, 0.1])  # frame 2 goes back in time
-    with pytest.raises(ValueError, match=r"'pose'.*not non-decreasing.*frame 2 is at 0\.1"):
+    with pytest.raises(
+        ValueError, match=r"'pose'.*not non-decreasing.*frame 2 is at 0\.1"
+    ):
         RawDataset(tmp_path, keys=["lidar", "pose"])
 
 

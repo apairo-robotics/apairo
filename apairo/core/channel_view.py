@@ -37,6 +37,14 @@ class ChannelView(AbstractDataset):
     def __len__(self) -> int:
         return len(self._parent)
 
+    def _stored_channel(self, key: str, idx: int):
+        """The parent's: selecting channels does not change what one holds."""
+        if key not in self._keys:
+            raise KeyError(
+                f"filter(): channel {key!r} is not in this view (it keeps {self._keys})."
+            )
+        return self._parent._stored_channel(key, idx)
+
     @property
     def is_synchronous(self) -> bool:
         return self._parent.is_synchronous

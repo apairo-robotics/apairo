@@ -269,12 +269,17 @@ def _check_same_frames(frames: dict[str, list[tuple[str, str]]], root: Path) -> 
         a, b = ref, names
         if not {s for _, s in a} & {s for _, s in b}:
             # No name in common: set each channel's constant suffix aside.
-            sa, sb = _common_suffix([s for _, s in a]), _common_suffix([s for _, s in b])
+            sa, sb = (
+                _common_suffix([s for _, s in a]),
+                _common_suffix([s for _, s in b]),
+            )
             a = [(q, s[: len(s) - len(sa)]) for q, s in a]
             b = [(q, s[: len(s) - len(sb)]) for q, s in b]
             if a == b or not {s for _, s in a} & {s for _, s in b}:
                 continue
-        i = next(i for i, (x, y) in enumerate(zip(ref, names, strict=True)) if a[i] != b[i])
+        i = next(
+            i for i, (x, y) in enumerate(zip(ref, names, strict=True)) if a[i] != b[i]
+        )
         raise ValueError(
             f"Channels '{ref_key}' and '{key}' of '{root}' hold the same number "
             f"of frames but not the same frames: frame {i} is "
