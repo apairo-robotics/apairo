@@ -7,6 +7,60 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-10
+
+The audit of 0.10.0 continued over what the review had not read: the
+loaders, the writers, `config.py`, `export`, persisted views and the command
+line. It found more ways of reading or deleting the wrong thing quietly.
+
+### Security
+
+- **Deleting stays inside the dataset.** `remove_channel(..., data=True)`
+  (`apairo channel remove --purge`) built the paths it deletes from names read
+  in `channels.yaml`, unchecked: on a downloaded dataset, a channel called
+  `../other` deleted a directory outside it. Names are validated and the
+  resolved path must stay inside the dataset.
+- **A plugin cannot take a built-in command's name.** An installed package
+  declaring a CLI plugin called `status`, `init` or `export` replaced
+  apairo's command.
+
+### Upgrading from 0.10.1
+
+- **Frames named by plain integers are read in numeric order.** Per-frame
+  files were listed by name, so `0.npy` ... `11.npy` were read as 0, 1, 10,
+  11, 2, ... and paired with the timestamps 0 ... 11: every frame got another
+  frame's time. `npy`, `bin` and `pcd` were affected. Zero-padded names are
+  unchanged. If you wrote a `timestamps.txt` to match the old order of
+  unpadded names, rewrite it in frame order.
+- `export(dest, overwrite=True)` refuses a destination that is the dataset
+  being exported, holds it, or lies inside it. The first two deleted the
+  source.
+- An ascii PCD whose payload does not hold the points its header declares,
+  and a binary PCD without `POINTS` or `WIDTH`, are refused. They read as a
+  short or an empty cloud.
+- A `timestamps.txt` with several columns is refused: a clock file holds one
+  time per line.
+- `TarImageWriter` takes `uint8` images only. It cast everything to `uint8`
+  before encoding it as JPEG: a 16-bit depth wrapped modulo 256.
+- A frame of a `bin` channel written through `ChannelWriter` must be
+  `(N, 4)`.
+
+### Fixed
+
+- A stacked `npy` channel whose directory holds several arrays, with no
+  `array_file`, warns which one it loads. It loaded whichever sorts first.
+- `TarImageLoader` keeps the values of 32-bit and float images. It converted
+  them to 8-bit RGB: a depth of 60000 became 255.
+- `load_view()` validates the index file of a persisted view: a negative
+  index read a frame counted from the end.
+- `apairo check` and `apairo status` report a `channels.yaml` that is not
+  YAML or not a mapping of channel entries, instead of crashing. Loading over
+  one raises `ConfigError`, naming the file.
+- `ChannelWriter` writes `timestamps.txt` in the order the loader reads the
+  frames.
+- A channel named like a format (`npy`, `img`) and without a clock gets the
+  message that says how to declare one, not a `KeyError`.
+
 ## [0.10.1] - 2026-11-10
 
 A code review of 0.10.0 found one security flaw and four ways of getting
@@ -1153,7 +1207,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/apairo-robotics/apairo/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...v0.9.0

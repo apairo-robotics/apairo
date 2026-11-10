@@ -900,3 +900,14 @@ The public API and the `.apairo` format are declared stable at 1.0
   fixed: an interrupted preprocess blocking the next run, sidecars written
   without atomicity or lock, and misleading refusals. Not read by the
   review: `cli.py`, most of `config.py`, the csv, pcd, zarr and tar loaders.
+- **2026-11-10**: 0.10.2 prepared: the audit went on over what the review
+  had left (loaders, writers, formats, `config.py`, `export`, persisted
+  views, the command line). Found and fixed: per-frame files listed by name,
+  so unpadded integer names were paired with the wrong timestamps;
+  `remove_channel(data=True)` and `export(overwrite=True)` able to delete
+  outside the dataset or the source itself; truncated PCDs, 32-bit images in
+  a tar and several stacked arrays read without a word; a view's index file
+  trusted as written; a CLI plugin able to replace a built-in command;
+  `check` crashing on the malformed sidecars it should report. Read less
+  closely: the display code of `apairo status` and the `verify_*` checks,
+  exercised by malformed inputs rather than line by line.
