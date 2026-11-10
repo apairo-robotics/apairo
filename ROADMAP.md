@@ -911,3 +911,9 @@ The public API and the `.apairo` format are declared stable at 1.0
   `check` crashing on the malformed sidecars it should report. Read less
   closely: the display code of `apairo status` and the `verify_*` checks,
   exercised by malformed inputs rather than line by line.
+- **2026-11-10**: 0.10.3 prepared: `apairo status`, `apairo check` and the
+  `verify_*` functions read line by line, then run against thirteen datasets
+  loading refuses. `check` answered OK for one (an unsorted clock) and
+  crashed, with `status`, on seven. `check` now ends by opening an
+  initialised dataset, so it cannot say OK for one that does not load. The
+  audit of the core is complete: every module has been read.
