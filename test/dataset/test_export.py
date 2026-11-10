@@ -296,3 +296,19 @@ def test_export_cli_collision_returns_1(root, tmp_path):
     dest = tmp_path / "out"
     assert _run(["export", str(root), str(dest), "--keys", "lidar"]) == 0
     assert _run(["export", str(root), str(dest), "--keys", "lidar"]) == 1
+
+
+# ------------------------------------- the destination may not be the source
+
+
+@pytest.mark.parametrize("where", ["itself", "its parent", "inside it"])
+def test_export_refuses_a_destination_that_overlaps_the_source(root, where):
+    ds = RawDataset(root)
+    before = sorted(p.relative_to(root) for p in root.rglob("*") if p.is_file())
+    dest = {"itself": root, "its parent": root.parent, "inside it": root / "subset"}[
+        where
+    ]
+    with pytest.raises(ValueError, match="is, or contains|is inside the dataset"):
+        ds.export(dest, overwrite=True)
+    after = sorted(p.relative_to(root) for p in root.rglob("*") if p.is_file())
+    assert after == before  # nothing of the source was removed

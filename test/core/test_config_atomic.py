@@ -56,3 +56,59 @@ def test_a_held_lock_times_out_and_a_stale_one_is_taken_over(tmp_path, monkeypat
     monkeypatch.setattr(config, "_LOCK_STALE_S", 0.0)
     with config_lock(tmp_path, timeout=1.0):
         pass
+
+
+# ----------------------------------------------- removing a channel's data
+
+
+def _dataset(tmp_path, channels):
+    root = tmp_path / "ds"
+    root.mkdir()
+    write_config(root, {"version": 1, "channels": channels})
+    return root
+
+
+@pytest.mark.parametrize("name", ["../victim", "/abs/victim", "a/../../victim"])
+def test_removing_data_never_leaves_the_dataset(tmp_path, name):
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "keep.npy").write_bytes(b"x")
+    root = _dataset(tmp_path, {name: {"kind": "raw", "loader": "npys"}})
+    with pytest.raises(ValueError, match="relative path|outside the dataset"):
+        config.remove_channel(root, name, data=True)
+    assert (victim / "keep.npy").exists()
+    assert name in read_config(root)["channels"]  # the refusal changed nothing
+
+
+def test_a_symlinked_channel_directory_is_not_followed_out(tmp_path):
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    (victim / "keep.npy").write_bytes(b"x")
+    root = _dataset(tmp_path, {"lidar": {"kind": "raw", "loader": "npys"}})
+    (root / "lidar").symlink_to(victim, target_is_directory=True)
+    with pytest.raises(ValueError, match="outside the dataset"):
+        config.remove_channel(root, "lidar", data=True)
+    assert (victim / "keep.npy").exists()
+
+
+def test_a_suffixed_channel_loses_only_its_own_files(tmp_path):
+    root = _dataset(
+        tmp_path,
+        {
+            "lidar": {"kind": "raw", "loader": "npys"},
+            "lidar_intensity": {
+                "kind": "raw",
+                "loader": "npys",
+                "directory": "lidar",
+                "suffix": "intensity",
+            },
+            "evil": {"kind": "raw", "loader": "npys", "directory": "..", "suffix": "x"},
+        },
+    )
+    (root / "lidar").mkdir()
+    for name in ("000000.npy", "000000_intensity.npy", "000000_intensity.png"):
+        (root / "lidar" / name).write_bytes(b"x")
+    config.remove_channel(root, "lidar_intensity", data=True)
+    assert sorted(p.name for p in (root / "lidar").iterdir()) == ["000000.npy"]
+    with pytest.raises(ValueError, match="relative path"):
+        config.remove_channel(root, "evil", data=True)

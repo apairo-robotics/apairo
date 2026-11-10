@@ -86,8 +86,22 @@ def export_dataset(
             "through the materializing export path (not in v1)."
         )
 
-    # 3. Destination.
+    # 3. Destination. It is cleared before the copy when overwrite is set, so it
+    #    may not be the source, hold it, or lie inside it: the first two would
+    #    delete the data being exported, the third would export into itself.
     dest = Path(dest).expanduser()
+    src_real, dest_real = root.resolve(), dest.resolve()
+    if dest_real == src_real or dest_real in src_real.parents:
+        raise ValueError(
+            f"export(): the destination '{dest}' is, or contains, the dataset "
+            f"being exported ('{root}'). Choose another directory."
+        )
+    if src_real in dest_real.parents:
+        raise ValueError(
+            f"export(): the destination '{dest}' is inside the dataset being "
+            f"exported ('{root}'): it would be read back as one of its "
+            f"sequences. Choose a directory outside it."
+        )
     if dest.exists() and any(dest.iterdir()):
         if not overwrite:
             raise FileExistsError(

@@ -45,6 +45,20 @@ def safe_config_name(name: str, *, label: str = "path") -> str:
     return name
 
 
+def _inside(root_dir: Path, name: str, *, label: str) -> Path:
+    """``root_dir / name`` resolved, refused unless it stays inside *root_dir*
+    -- by its spelling (:func:`safe_config_name`) and once symbolic links are
+    followed. For the paths apairo is about to delete."""
+    root = Path(root_dir).resolve()
+    target = (root / safe_config_name(name, label=label)).resolve()
+    if target != root and root not in target.parents:
+        raise ValueError(
+            f"{label}: '{name}' resolves to {target}, outside the dataset "
+            f"directory {root}."
+        )
+    return target
+
+
 # ── .apairo schema, version 1 ────────────────────────────────────────────────
 # The on-disk contract. Validation is tolerant: an unknown field is reported as a
 # warning and otherwise ignored, so a sidecar written by a newer apairo still
@@ -820,23 +834,39 @@ def remove_channel(root_dir: str | Path, channel: str, *, data: bool = False) ->
             f"Channel '{channel}' is not declared in '{root_dir}'. "
             f"Available: {sorted(channels)}."
         )
-    entry = channels.pop(channel)
+    entry = channels[channel]
+    directory = entry.get("directory") if isinstance(entry, dict) else None
+    suffix = entry.get("suffix") if isinstance(entry, dict) else None
+    if data:
+        # The names come from channels.yaml, which may have been downloaded
+        # with the dataset: nothing is deleted outside the dataset's own tree.
+        # Checked before the entry is dropped, so a refusal changes nothing.
+        target = _inside(
+            root_dir,
+            str(directory) if directory and suffix else channel,
+            label=f"channel '{channel}'",
+        )
+        if suffix:
+            safe_config_name(str(suffix), label=f"channel '{channel}' suffix")
+            if "/" in str(suffix) or "\\" in str(suffix):
+                raise ValueError(
+                    f"channel '{channel}': suffix {suffix!r} is not a plain name."
+                )
+    channels.pop(channel)
     write_config(root_dir, config)
     if data:
         import shutil
 
-        directory = entry.get("directory")
-        suffix = entry.get("suffix")
         if directory and suffix:
             # A suffixed sub-channel shares its directory with another channel
             # (e.g. velodyne_0_intensity <- velodyne_0/*_intensity.npy) -- only
             # its own files are removed, never the shared directory.
-            for f in (root_dir / directory).glob(f"*_{suffix}.npy"):
-                f.unlink()
-        else:
-            channel_dir = root_dir / channel
-            if channel_dir.is_dir():
-                shutil.rmtree(channel_dir)
+            if target.is_dir():
+                for f in target.iterdir():
+                    if f.is_file() and f.stem.endswith(f"_{suffix}"):
+                        f.unlink()
+        elif target.is_dir() and target != root_dir.resolve():
+            shutil.rmtree(target)
     return entry
 
 
