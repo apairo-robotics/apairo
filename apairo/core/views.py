@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import yaml
 
-from apairo.core.config import CONFIG_DIR, SCHEMA_VERSION
+from apairo.core.config import CONFIG_DIR, SCHEMA_VERSION, safe_config_name
 from apairo.core.interpolator import Interpolator
 
 if TYPE_CHECKING:
@@ -173,10 +173,13 @@ def persist_view(view: SynchronizedView, name: str, *, overwrite: bool = False) 
         },
         "created": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+    # Atomically, like the other sidecars: the registry lists every view.
     registry = _registry_path(seq_dir)
-    registry.write_text(
+    tmp = registry.with_name(f".{registry.name}.tmp")
+    tmp.write_text(
         yaml.safe_dump({"version": SCHEMA_VERSION, "views": views}, sort_keys=False)
     )
+    tmp.replace(registry)
     return target
 
 
@@ -247,9 +250,43 @@ def load_view(
         else:
             strategies[key] = spec  # matched: the indices are all it needs
 
-    with np.load(seq_dir / CONFIG_DIR / entry["file"]) as data:
-        ref_ts = np.asarray(data["reference_timestamps"], dtype=float)
-        index_map = {key: np.asarray(data[f"index_{i}"]) for i, key in enumerate(keys)}
+    # The index file is state, not data that was checked when it was written:
+    # it is validated like any other input before a frame is read through it.
+    index_file = (
+        seq_dir
+        / CONFIG_DIR
+        / safe_config_name(entry["file"], label=f"view '{name}' file")
+    )
+    try:
+        with np.load(index_file) as data:
+            ref_ts = np.asarray(data["reference_timestamps"], dtype=float)
+            index_map = {
+                key: np.asarray(data[f"index_{i}"]) for i, key in enumerate(keys)
+            }
+    except KeyError as exc:
+        raise ValueError(
+            f"View '{name}' cannot be loaded: its index file lacks {exc}."
+        ) from None
+    if ref_ts.ndim != 1 or len(ref_ts) != entry["frames"]:
+        raise ValueError(
+            f"View '{name}' cannot be loaded: its index file holds "
+            f"{ref_ts.shape} reference times for {entry['frames']} frame(s)."
+        )
+    for key, index in index_map.items():
+        width = 2 if isinstance(strategies[key], Interpolator) else 1
+        frames = len(dataset.loaders[key])
+        ok = (
+            np.issubdtype(index.dtype, np.integer)
+            and index.shape == ((len(ref_ts), 2) if width == 2 else (len(ref_ts),))
+            and (index.size == 0 or (index.min() >= 0 and index.max() < frames))
+        )
+        if not ok:
+            raise ValueError(
+                f"View '{name}' cannot be loaded: the indices of channel "
+                f"'{key}' in its index file are not {len(ref_ts)} row(s) of "
+                f"frame numbers below {frames}. Recompute it: "
+                f"synchronize(...).persist('{name}', overwrite=True)."
+            )
     reference = entry["reference"]
     return SynchronizedView._from_state(
         dataset,
