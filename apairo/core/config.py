@@ -369,12 +369,60 @@ def config_exists(root_dir: Path) -> bool:
     return _channels_path(root_dir).exists()
 
 
+class ConfigError(ValueError):
+    """A sidecar file (``channels.yaml``) that cannot be used as it is written:
+    not YAML, or not the mapping of channel entries the schema describes."""
+
+
+def _load_config(root_dir: Path) -> dict:
+    """``.apairo/channels.yaml`` as written, for :func:`verify_config`, which
+    reports each problem itself. An empty file reads as ``{}``."""
+    path = _channels_path(root_dir)
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f", line {mark.line + 1}" if mark is not None else ""
+        raise ConfigError(
+            f"{path} is not valid YAML{where}: {getattr(exc, 'problem', exc)}."
+        ) from None
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigError(
+            f"{path} must be a mapping (version, channels), not a "
+            f"{type(data).__name__}."
+        )
+    return data
+
+
 def read_config(root_dir: Path) -> dict:
     """Read ``.apairo/channels.yaml``. An empty or whitespace-only file (a
     truncated write, a stray touch) reads as ``{}`` -- callers get a dict, and
-    ``verify_config`` flags the missing ``version``/``channels`` fields."""
-    with open(_channels_path(root_dir)) as f:
-        return yaml.safe_load(f) or {}
+    ``verify_config`` flags the missing ``version``/``channels`` fields.
+
+    Raises:
+        ConfigError: The file is not YAML, is not a mapping, or holds a
+            ``channels`` field or a channel entry that is not a mapping --
+            named, so the line to fix is found. Every caller can then rely on
+            ``config["channels"]`` being ``{name: {field: value}}``.
+    """
+    config = _load_config(root_dir)
+    path = _channels_path(root_dir)
+    channels = config.get("channels", {})
+    if not isinstance(channels, dict):
+        raise ConfigError(
+            f"{path}: 'channels' must be a mapping of channel names to their "
+            f"entries, not a {type(channels).__name__}."
+        )
+    for name, entry in channels.items():
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                f"{path}: channel '{name}' must be a mapping of fields (for "
+                f"example {{loader: npys}}), not {entry!r}."
+            )
+    return config
 
 
 def _write_yaml(path: Path, data: dict) -> None:
@@ -1214,7 +1262,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
         return [".apairo/channels.yaml does not exist"]
 
     try:
-        config = read_config(root_dir)
+        config = _load_config(root_dir)
     except Exception as exc:
         return [f"Cannot parse channels.yaml: {exc}"]
 
@@ -1320,7 +1368,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
     # Aliases must be unique and must not shadow a real channel directory.
     seen_alias: dict[str, str] = {}
     for key, meta in channels.items():
-        alias = meta.get("alias")
+        alias = meta.get("alias") if isinstance(meta, dict) else None
         if not alias:
             continue
         if alias in channels and alias != key:  # a self-alias is a harmless no-op

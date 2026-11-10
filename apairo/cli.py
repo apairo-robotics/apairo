@@ -33,6 +33,7 @@ import numpy as np
 
 from apairo.core.config import (
     DECLARATION_FILE,
+    ConfigError,
     alias_conflict,
     channel_dependents,
     config_exists,
@@ -1566,7 +1567,13 @@ def main(argv: list[str] | None = None) -> None:
         "channel": cmd_channel_remove,  # only sub-action is `remove`
         "export": cmd_export,
     }[args.command]
-    sys.exit(handler(args))
+    try:
+        code = handler(args)
+    except ConfigError as exc:
+        # A sidecar that cannot be read as written: say which, not a traceback.
+        print(f"apairo {args.command}: {exc}", file=sys.stderr)
+        code = 1
+    sys.exit(code)
 
 
 if __name__ == "__main__":
