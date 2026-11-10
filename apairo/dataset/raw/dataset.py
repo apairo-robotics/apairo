@@ -45,11 +45,13 @@ import yaml
 from apairo.core.config import (
     CHANNELS_FILE,
     CONFIG_DIR,
+    ConfigError,
     config_exists,
     declaration_exists,
     declaration_path,
     inherited_declaration,
     read_config,
+    safe_config_name,
 )
 from apairo.core.configurable_dataset import ConfigurableDataset
 from apairo.core.root_sequence import RootSequenceMixin
@@ -68,11 +70,11 @@ _MANIFEST_FILE = "dataset.yaml"
 
 def _read_manifest(root: Path) -> dict:
     """Read ``<root>/.apairo/dataset.yaml`` if present, else ``{}``."""
-    path = root / CONFIG_DIR / _MANIFEST_FILE
-    if path.exists():
-        with open(path) as f:
-            return yaml.safe_load(f) or {}
-    return {}
+    # One reader for the manifest: a file that is not YAML or not a mapping is
+    # a ConfigError naming it, not an AttributeError further on.
+    from apairo.core.config import read_manifest
+
+    return read_manifest(root)
 
 
 def _is_dataset_root(path: Path) -> bool:
@@ -310,7 +312,21 @@ class RawDataset(RootSequenceMixin, AsyncLayoutDataset, ConfigurableDataset):
 
         # Sequence order: manifest order if given, else sorted discovery.
         if manifest.get("sequences"):
-            seq_dirs = [root / s for s in manifest["sequences"] if is_seq(root / s)]
+            listed = manifest["sequences"]
+            if not isinstance(listed, list) or not all(
+                isinstance(s, str) for s in listed
+            ):
+                raise ConfigError(
+                    f"{root / CONFIG_DIR / _MANIFEST_FILE}: 'sequences' must be a "
+                    f"list of directory names, got {listed!r}."
+                )
+            # Names from a file that may have come with the dataset: a sequence
+            # is a directory of this root, never a path out of it.
+            seq_dirs = [
+                root / safe_config_name(s, label="dataset.yaml sequence")
+                for s in listed
+                if is_seq(root / safe_config_name(s, label="dataset.yaml sequence"))
+            ]
         else:
             seq_dirs = sorted(
                 d

@@ -19,7 +19,7 @@ authors:
 repository-code: "https://github.com/apairo-robotics/apairo"
 url: "https://apairo-robotics.github.io/apairo/"
 license: MIT
-version: 0.10.2
+version: 0.10.3
 date-released: "2026-11-10"
 keywords:
   - robotics

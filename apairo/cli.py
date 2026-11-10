@@ -26,6 +26,7 @@ import argparse
 import json
 import re
 import sys
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,7 @@ from apairo.dataset.registry import (
     get_dataset,
     resolve_declaration,
 )
+from apairo.loader import load_timestamps
 
 # Datasets selectable with ``--as`` come from the registry: the profile-free
 # RawDataset, the standard datasets that ship with apairo, and any installed
@@ -79,13 +81,38 @@ _BAR = "-" * 52
 
 
 def _read_timestamps(channel_dir: Path):
+    """The clock in ``channel_dir/timestamps.txt``, or ``None`` when there is
+    none or it is not one loading reads (:func:`_timestamps_problem` says why)."""
     ts_path = channel_dir / "timestamps.txt"
     if not ts_path.exists():
         return None
     try:
-        return np.atleast_1d(np.loadtxt(ts_path))
+        return load_timestamps(ts_path)
     except Exception:
         return None
+
+
+def _timestamps_problem(channel_dir: Path) -> str | None:
+    """Why loading refuses ``channel_dir/timestamps.txt``, if it does: it does
+    not parse, holds several columns, a value that is not finite, or times
+    that go back."""
+    ts_path = channel_dir / "timestamps.txt"
+    if not ts_path.exists():
+        return None
+    try:
+        clock = load_timestamps(ts_path)
+    except Exception as exc:
+        if "columns" in str(exc):
+            return "holds several columns (a clock file lists one time per line)"
+        return f"cannot be read ({exc})"
+    if not np.all(np.isfinite(clock)):
+        return "holds a timestamp that is not a finite number"
+    if clock.size > 1 and np.any(np.diff(clock) < 0):
+        row = int(np.flatnonzero(np.diff(clock) < 0)[0]) + 1
+        return (
+            f"is not ascending (frame {row} is at {clock[row]}, after {clock[row - 1]})"
+        )
+    return None
 
 
 def _rate_span(ts):
@@ -174,13 +201,14 @@ def _clock_coverage_issues(
         cdir = seq_dir / str(meta.get("directory", ch))
         if not cdir.is_dir():
             continue
-        own = _read_timestamps(cdir)
-        if own is not None and not np.all(np.isfinite(own)):
+        problem = _timestamps_problem(cdir)
+        if problem is not None:
             issues.append(
-                f"channel '{ch}': {cdir.name}/timestamps.txt holds a timestamp that "
-                f"is not a finite number; loading refuses it"
+                f"channel '{ch}': {cdir.name}/timestamps.txt {problem}; loading "
+                f"refuses it"
             )
             continue
+        own = _read_timestamps(cdir)
         src = meta.get("timestamps_from")
         if own is not None:
             clock, where = own, f"{cdir.name}/timestamps.txt"
@@ -319,7 +347,10 @@ def _detected_channels(seq_dir: Path, declare: Path | None) -> dict:
     try:
         return bootstrap_channels(seq_dir, *declares)
     except ValueError:  # a broken declaration -- reported in issues
-        return bootstrap_channels(seq_dir)
+        try:
+            return bootstrap_channels(seq_dir)
+        except ValueError:  # the sequence's own declaration is the broken one
+            return {}
 
 
 def _seq_info(seq_dir: Path, declare: Path | None = None) -> dict:
@@ -672,7 +703,7 @@ def _print_channel_table(channels: dict, untracked: dict, t0_ref: float | None) 
         )
         if c["kind"] == "untracked":
             note = "<- run `apairo init`"
-        elif c.get("transform"):
+        elif isinstance(c.get("transform"), dict):
             tf = c["transform"]
             note = f"<- tf {tf.get('parent')}->{tf.get('child')}"
             if tf.get("static"):
@@ -882,7 +913,40 @@ def _check_issues(path: Path, declare: Path | None = None) -> list[str] | None:
     if status.get("kind") == "root":
         for d in _sequence_dirs(path):
             issues += [f"{d.name}: {i}" for i in verify_calibration(d)]
+    if not issues:
+        refusal = _load_refusal(path, declare)
+        if refusal is not None:
+            issues.append(refusal)
     return issues
+
+
+def _load_refusal(path: Path, declare: Path | None) -> str | None:
+    """Why opening the dataset fails, if it does.
+
+    The checks above read the sidecars and the clocks; this one asks the
+    question itself, so `check` never answers OK for a dataset that does not
+    open -- whatever refusal loading gains later. Only run when nothing else
+    was found: a known issue is clearer than the exception it leads to.
+
+    `check` writes nothing, and opening a directory that has no ``.apairo``
+    yet writes one: such a directory is not opened here (the checks above read
+    it as loading would)."""
+    profiled = _profiled_status_class(path)
+    sequences = [path] if _is_sequence(path) else _sequence_dirs(path)
+    if not config_exists(path if profiled is not None else sequences[0]) or not all(
+        config_exists(d) for d in ([] if profiled is not None else sequences)
+    ):
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if profiled is not None:
+                profiled(path)
+            else:
+                RawDataset(path, declare=str(declare) if declare else None)
+    except Exception as exc:
+        return f"loading refuses this dataset: {exc}"
+    return None
 
 
 def cmd_check(args: argparse.Namespace) -> int:

@@ -369,6 +369,41 @@ def config_exists(root_dir: Path) -> bool:
     return _channels_path(root_dir).exists()
 
 
+# The fields loading reads, and the YAML type each must have. A wrong type
+# (a list where a name is expected) used to surface as a TypeError far away.
+_TEXT_FIELDS = (
+    "loader",
+    "alias",
+    "directory",
+    "suffix",
+    "array_file",
+    "timestamps_from",
+    "kind",
+)
+_MAPPING_FIELDS = ("key", "order")
+
+
+def _field_type_issues(key: str, meta: dict) -> list[str]:
+    """What is wrong with the *types* of a channel entry's fields."""
+    issues = []
+    for name in _TEXT_FIELDS:
+        value = meta.get(name)
+        if value is not None and not isinstance(value, str):
+            issues.append(f"channel '{key}': '{name}' must be a name, got {value!r}")
+    for name in _MAPPING_FIELDS:
+        value = meta.get(name)
+        if value is not None and not isinstance(value, dict):
+            issues.append(f"channel '{key}': '{name}' must be a mapping, got {value!r}")
+    value = meta.get("sources")
+    if value is not None and not (
+        isinstance(value, list) and all(isinstance(v, str) for v in value)
+    ):
+        issues.append(
+            f"channel '{key}': 'sources' must be a list of names, got {value!r}"
+        )
+    return issues
+
+
 class ConfigError(ValueError):
     """A sidecar file (``channels.yaml``) that cannot be used as it is written:
     not YAML, or not the mapping of channel entries the schema describes."""
@@ -422,6 +457,9 @@ def read_config(root_dir: Path) -> dict:
                 f"{path}: channel '{name}' must be a mapping of fields (for "
                 f"example {{loader: npys}}), not {entry!r}."
             )
+        wrong = _field_type_issues(name, entry)
+        if wrong:
+            raise ConfigError(f"{path}: {'; '.join(wrong)}.")
     return config
 
 
@@ -560,6 +598,9 @@ def read_declaration(path: str | Path) -> dict[str, dict]:
     for key, meta in data["channels"].items():
         if not isinstance(meta, dict):
             raise ValueError(f"Declaration '{path}': channel '{key}' is not a mapping.")
+        wrong = _field_type_issues(key, meta)
+        if wrong:
+            raise ValueError(f"Declaration '{path}': {'; '.join(wrong)}.")
         if meta.get("kind") not in (None, "raw"):
             raise ValueError(
                 f"Declaration '{path}': channel '{key}' declares kind "
@@ -608,10 +649,21 @@ def read_manifest(root_dir: str | Path) -> dict:
     as opposed to ``channels.yaml`` which is the per-directory channel registry.
     """
     path = _apairo_dir(Path(root_dir)) / DATASET_FILE
-    if path.exists():
+    if not path.exists():
+        return {}
+    try:
         with open(path) as f:
-            return yaml.safe_load(f) or {}
-    return {}
+            data = yaml.safe_load(f) or {}
+    except yaml.YAMLError as exc:
+        raise ConfigError(
+            f"{path} is not valid YAML: {getattr(exc, 'problem', exc)}."
+        ) from None
+    if not isinstance(data, dict):
+        raise ConfigError(
+            f"{path} must be a mapping (class, name, sequences), not a "
+            f"{type(data).__name__}."
+        )
+    return data
 
 
 def write_manifest(root_dir: str | Path, manifest: dict) -> Path:
@@ -1103,16 +1155,33 @@ def read_calibration(root_dir: str | Path) -> Calibration:
     out = Calibration()
     if not path.exists():
         return out
-    with open(path) as f:
-        data = yaml.safe_load(f) or {}
-    for key, entry in (data.get("transforms") or {}).items():
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except yaml.YAMLError as exc:
+        raise ConfigError(
+            f"{path} is not valid YAML: {getattr(exc, 'problem', exc)}."
+        ) from None
+    if not isinstance(data, dict):
+        raise ConfigError(f"{path} must be a mapping, not a {type(data).__name__}.")
+    # A malformed entry is skipped, here and below: verify_calibration
+    # (`apairo check`) reports it, and the rest of the rig stays usable.
+    transforms = data.get("transforms")
+    for key, entry in (transforms if isinstance(transforms, dict) else {}).items():
         if isinstance(entry, dict) and "matrix" not in entry:
-            continue  # malformed -> skip; verify_calibration reports it
+            continue
         matrix = entry["matrix"] if isinstance(entry, dict) else entry
-        out[key] = np.asarray(matrix, dtype=np.float64)
-    for name, entry in (data.get("cameras") or {}).items():
-        if not isinstance(entry, dict) or "K" not in entry:
-            continue  # verify_calibration reports the malformed entry
+        if _is_4x4(matrix):
+            out[str(key)] = np.asarray(matrix, dtype=np.float64)
+    cameras = data.get("cameras")
+    for name, entry in (cameras if isinstance(cameras, dict) else {}).items():
+        if not isinstance(entry, dict) or not _is_shape(entry.get("K"), (3, 3)):
+            continue
+        if any(
+            entry.get(f) is not None and not _is_shape(entry[f], shape)
+            for f, shape in (("D", (-1,)), ("R", (3, 3)), ("P", (3, 4)))
+        ):
+            continue
         out.cameras[name] = CameraIntrinsics(
             K=np.asarray(entry["K"], dtype=np.float64),
             distortion=np.asarray(entry.get("D") or [], dtype=np.float64),
@@ -1288,6 +1357,11 @@ def verify_config(root_dir: str | Path) -> list[str]:
         if not isinstance(meta, dict):
             issues.append(f"Channel '{key}': entry is not a mapping")
             continue
+        wrong = _field_type_issues(key, meta)
+        if wrong:
+            # The checks below read these fields: report the types and move on.
+            issues += [w[0].upper() + w[1:] for w in wrong]
+            continue
 
         storage_dir = root_dir / str(meta.get("directory", key))
         if not storage_dir.is_dir():
@@ -1369,7 +1443,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
     seen_alias: dict[str, str] = {}
     for key, meta in channels.items():
         alias = meta.get("alias") if isinstance(meta, dict) else None
-        if not alias:
+        if not alias or not isinstance(alias, str):
             continue
         if alias in channels and alias != key:  # a self-alias is a harmless no-op
             issues.append(

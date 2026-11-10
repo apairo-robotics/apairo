@@ -7,6 +7,35 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-11-10
+
+The last part of the audit: the code of `apairo status` and `apairo check`,
+and the `verify_*` functions, read line by line and run against datasets
+loading refuses.
+
+### Fixed
+
+- **`apairo check` no longer answers OK for a dataset that does not load.**
+  It did for a `timestamps.txt` that is not ascending, which loading has
+  refused since 0.10.1. It now reports a clock file that does not parse,
+  holds several columns, a value that is not finite, or times that go back.
+  And when it finds nothing on an initialised dataset, it opens it and
+  reports a refusal, so the two cannot drift apart again. It still writes
+  nothing.
+- `check` and `status` no longer crash on a `timestamps.txt` with several
+  columns, on fields of the wrong type (`sources: 3`), on a `dataset.yaml` or
+  a `calibration.yaml` that is not a mapping or not YAML, on a transform
+  matrix that is not numeric, or on a malformed `apairo.yaml` in a directory
+  without `.apairo`.
+- Loading over such files raises `ConfigError` naming the file and the field,
+  where it raised `TypeError` or `AttributeError`. A malformed calibration
+  entry is skipped, as documented, instead of failing the load.
+
+### Security
+
+- A `dataset.yaml` cannot list a sequence outside its root (`../elsewhere`):
+  the names are validated like every other name read from a sidecar.
+
 ## [0.10.2] - 2026-11-10
 
 The audit of 0.10.0 continued over what the review had not read: the
@@ -1207,7 +1236,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/apairo-robotics/apairo/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/apairo-robotics/apairo/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...v0.10.0
