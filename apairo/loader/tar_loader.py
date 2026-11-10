@@ -87,7 +87,10 @@ class TarImageLoader(AbstractLoader):
                 "Install with: pip install 'apairo[vision]'"
             ) from exc
         img: Image.Image = Image.open(BytesIO(data))
-        if img.mode in ("P", "CMYK", "YCbCr", "I", "F"):
+        # Colour spaces and palettes become RGB. The numeric modes are left
+        # alone: a 32-bit ("I") or float ("F") image is a depth or a measure,
+        # and RGB would clip it to 8 bits.
+        if img.mode in ("P", "CMYK", "YCbCr"):
             img = img.convert("RGB")
         arr = np.asarray(img)
         if arr.ndim == 2:

@@ -864,3 +864,98 @@ def test_empty_channels_yaml_does_not_crash_status(tmp_path, capsys):
     assert _run(["status", str(seq), "--json"]) == 0
     status = json.loads(capsys.readouterr().out)
     assert any("version" in i.lower() for i in status["issues"])
+
+
+def test_a_plugin_cannot_take_the_name_of_a_builtin_command(monkeypatch, raw_root):
+    import importlib.metadata
+
+    import apairo.cli as cli
+
+    called = []
+
+    class _EP:
+        def __init__(self, name):
+            self.name = name
+
+        def load(self):
+            return lambda argv: called.append(self.name) or 0
+
+    monkeypatch.setattr(
+        importlib.metadata,
+        "entry_points",
+        lambda group: [_EP("status"), _EP("init"), _EP("extractor")],
+    )
+    assert sorted(cli._discover_plugins()) == ["extractor"]
+    assert _run(["init", str(raw_root)]) == 0  # apairo's init, not the plugin's
+    assert called == []
+    assert set(cli.BUILTIN_COMMANDS) == {
+        "init",
+        "declare",
+        "status",
+        "check",
+        "alias",
+        "channel",
+        "export",
+    }
+
+
+def test_channel_remove_reports_a_refusal_without_a_traceback(tmp_path, capsys):
+    from apairo.core.config import write_config
+
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    seq = tmp_path / "seq"
+    (seq / "lidar").mkdir(parents=True)
+    write_config(
+        seq,
+        {"version": 1, "channels": {"../victim": {"kind": "raw", "loader": "npys"}}},
+    )
+    code = _run(
+        ["channel", "remove", "../victim", "--path", str(seq), "--purge", "--yes"]
+    )
+    assert code == 1
+    assert "channel remove failed" in capsys.readouterr().err
+    assert victim.is_dir()
+
+
+_BROKEN_SIDECARS = {
+    "not a mapping": "- a\n- b\n",
+    "channels is a list": "version: 1\nchannels: [a, b]\n",
+    "entry is a scalar": "version: 1\nchannels:\n  lidar: npys\n",
+    "entry is empty": "version: 1\nchannels:\n  lidar:\n",
+    "not yaml": "version: 1\nchannels: {lidar: [\n",
+}
+
+
+@pytest.mark.parametrize("text", _BROKEN_SIDECARS.values(), ids=_BROKEN_SIDECARS)
+@pytest.mark.parametrize("command", ["status", "check"])
+def test_a_broken_sidecar_is_reported_not_a_traceback(tmp_path, capsys, text, command):
+    seq = tmp_path / "seq"
+    (seq / "lidar").mkdir(parents=True)
+    for i in range(3):
+        np.save(seq / "lidar" / f"{i:06d}.npy", np.zeros(2))
+    np.savetxt(seq / "lidar" / "timestamps.txt", np.arange(3) * 0.1)
+    (seq / ".apairo").mkdir()
+    (seq / ".apairo" / "channels.yaml").write_text(text)
+
+    code = _run([command, str(seq)])
+    captured = capsys.readouterr()
+    assert code != 0 or "channels.yaml" in captured.out + captured.err
+    assert "Traceback" not in captured.err
+    if command == "check":
+        assert code == 1
+
+
+@pytest.mark.parametrize("text", _BROKEN_SIDECARS.values(), ids=_BROKEN_SIDECARS)
+def test_loading_over_a_broken_sidecar_names_the_file(tmp_path, text):
+    from apairo import RawDataset
+    from apairo.core.config import ConfigError
+
+    seq = tmp_path / "seq"
+    (seq / "lidar").mkdir(parents=True)
+    np.save(seq / "lidar" / "000000.npy", np.zeros(2))
+    np.savetxt(seq / "lidar" / "timestamps.txt", [0.0])
+    (seq / ".apairo").mkdir()
+    (seq / ".apairo" / "channels.yaml").write_text(text)
+    with pytest.raises(ConfigError, match="channels.yaml"):
+        RawDataset(seq)

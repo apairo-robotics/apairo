@@ -33,6 +33,7 @@ import numpy as np
 
 from apairo.core.config import (
     DECLARATION_FILE,
+    ConfigError,
     alias_conflict,
     channel_dependents,
     config_exists,
@@ -1281,11 +1282,15 @@ def cmd_channel_remove(args: argparse.Namespace) -> int:
             print("aborted")
             return 1
 
-    if profiled is not None:
-        profiled.remove_channel(path, args.channel, data=args.purge)
-    else:
-        for seq in targets:
-            remove_channel(seq, args.channel, data=args.purge)
+    try:
+        if profiled is not None:
+            profiled.remove_channel(path, args.channel, data=args.purge)
+        else:
+            for seq in targets:
+                remove_channel(seq, args.channel, data=args.purge)
+    except (ValueError, KeyError, FileNotFoundError, TimeoutError) as exc:
+        print(f"channel remove failed: {exc}", file=sys.stderr)
+        return 1
 
     suffix = " (data deleted)" if args.purge else ""
     print(f"removed channel '{args.channel}' from {where}{suffix}")
@@ -1301,6 +1306,11 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     )
 
 
+BUILTIN_COMMANDS = frozenset(
+    {"init", "declare", "status", "check", "alias", "channel", "export"}
+)
+
+
 def _discover_plugins() -> dict:
     """Ecosystem subcommands registered under the ``apairo.cli_plugins`` entry
     point group (e.g. ``apairo extractor`` from ``apairo_ros``).
@@ -1310,7 +1320,13 @@ def _discover_plugins() -> dict:
     """
     from importlib.metadata import entry_points
 
-    return {ep.name: ep for ep in entry_points(group="apairo.cli_plugins")}
+    # A plugin never takes the name of a command apairo ships: `apairo status`
+    # is apairo's whatever is installed beside it.
+    return {
+        ep.name: ep
+        for ep in entry_points(group="apairo.cli_plugins")
+        if ep.name not in BUILTIN_COMMANDS
+    }
 
 
 def _build_parser(plugin_names) -> argparse.ArgumentParser:
@@ -1551,7 +1567,13 @@ def main(argv: list[str] | None = None) -> None:
         "channel": cmd_channel_remove,  # only sub-action is `remove`
         "export": cmd_export,
     }[args.command]
-    sys.exit(handler(args))
+    try:
+        code = handler(args)
+    except ConfigError as exc:
+        # A sidecar that cannot be read as written: say which, not a traceback.
+        print(f"apairo {args.command}: {exc}", file=sys.stderr)
+        code = 1
+    sys.exit(code)
 
 
 if __name__ == "__main__":

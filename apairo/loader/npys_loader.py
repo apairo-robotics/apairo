@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 from apairo.core import AbstractLoader
-from apairo.core.naming import is_frame_file
+from apairo.core.naming import frame_order, is_frame_file
 
 
 class NPYSLoader(AbstractLoader):
@@ -34,7 +34,9 @@ class NPYSLoader(AbstractLoader):
         if files is not None:
             self.files = list(files)
         else:
-            self.files = sorted(f for f in os.listdir(directory) if is_frame_file(f))
+            self.files = frame_order(
+                f for f in os.listdir(directory) if is_frame_file(f)
+            )
         if not self.files:
             raise FileNotFoundError(f"No .npy frames found in {directory}")
         self._shape = np.load(os.path.join(self.directory, self.files[0])).shape

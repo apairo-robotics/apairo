@@ -46,6 +46,15 @@ class TarImageWriter:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        data = np.asarray(data)
+        if data.dtype != np.uint8:
+            # Casting would wrap a 16-bit depth modulo 256 and zero a [0, 1]
+            # float image; and JPEG is lossy, so it holds pictures, not values.
+            raise TypeError(
+                f"TarImageWriter stores uint8 images as JPEG; got {data.dtype}. "
+                f"Convert the image yourself, or store values (depth, labels) "
+                f"in a lossless format (npys, img as PNG)."
+            )
         frames = data[None] if data.ndim in (2, 3) else data  # → (N, H, W[, C])
 
         with tarfile.open(str(path), "w") as tf:

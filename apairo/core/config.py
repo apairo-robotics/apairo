@@ -45,6 +45,20 @@ def safe_config_name(name: str, *, label: str = "path") -> str:
     return name
 
 
+def _inside(root_dir: Path, name: str, *, label: str) -> Path:
+    """``root_dir / name`` resolved, refused unless it stays inside *root_dir*
+    -- by its spelling (:func:`safe_config_name`) and once symbolic links are
+    followed. For the paths apairo is about to delete."""
+    root = Path(root_dir).resolve()
+    target = (root / safe_config_name(name, label=label)).resolve()
+    if target != root and root not in target.parents:
+        raise ValueError(
+            f"{label}: '{name}' resolves to {target}, outside the dataset "
+            f"directory {root}."
+        )
+    return target
+
+
 # ── .apairo schema, version 1 ────────────────────────────────────────────────
 # The on-disk contract. Validation is tolerant: an unknown field is reported as a
 # warning and otherwise ignored, so a sidecar written by a newer apairo still
@@ -355,12 +369,60 @@ def config_exists(root_dir: Path) -> bool:
     return _channels_path(root_dir).exists()
 
 
+class ConfigError(ValueError):
+    """A sidecar file (``channels.yaml``) that cannot be used as it is written:
+    not YAML, or not the mapping of channel entries the schema describes."""
+
+
+def _load_config(root_dir: Path) -> dict:
+    """``.apairo/channels.yaml`` as written, for :func:`verify_config`, which
+    reports each problem itself. An empty file reads as ``{}``."""
+    path = _channels_path(root_dir)
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        where = f", line {mark.line + 1}" if mark is not None else ""
+        raise ConfigError(
+            f"{path} is not valid YAML{where}: {getattr(exc, 'problem', exc)}."
+        ) from None
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigError(
+            f"{path} must be a mapping (version, channels), not a "
+            f"{type(data).__name__}."
+        )
+    return data
+
+
 def read_config(root_dir: Path) -> dict:
     """Read ``.apairo/channels.yaml``. An empty or whitespace-only file (a
     truncated write, a stray touch) reads as ``{}`` -- callers get a dict, and
-    ``verify_config`` flags the missing ``version``/``channels`` fields."""
-    with open(_channels_path(root_dir)) as f:
-        return yaml.safe_load(f) or {}
+    ``verify_config`` flags the missing ``version``/``channels`` fields.
+
+    Raises:
+        ConfigError: The file is not YAML, is not a mapping, or holds a
+            ``channels`` field or a channel entry that is not a mapping --
+            named, so the line to fix is found. Every caller can then rely on
+            ``config["channels"]`` being ``{name: {field: value}}``.
+    """
+    config = _load_config(root_dir)
+    path = _channels_path(root_dir)
+    channels = config.get("channels", {})
+    if not isinstance(channels, dict):
+        raise ConfigError(
+            f"{path}: 'channels' must be a mapping of channel names to their "
+            f"entries, not a {type(channels).__name__}."
+        )
+    for name, entry in channels.items():
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                f"{path}: channel '{name}' must be a mapping of fields (for "
+                f"example {{loader: npys}}), not {entry!r}."
+            )
+    return config
 
 
 def _write_yaml(path: Path, data: dict) -> None:
@@ -820,23 +882,39 @@ def remove_channel(root_dir: str | Path, channel: str, *, data: bool = False) ->
             f"Channel '{channel}' is not declared in '{root_dir}'. "
             f"Available: {sorted(channels)}."
         )
-    entry = channels.pop(channel)
+    entry = channels[channel]
+    directory = entry.get("directory") if isinstance(entry, dict) else None
+    suffix = entry.get("suffix") if isinstance(entry, dict) else None
+    if data:
+        # The names come from channels.yaml, which may have been downloaded
+        # with the dataset: nothing is deleted outside the dataset's own tree.
+        # Checked before the entry is dropped, so a refusal changes nothing.
+        target = _inside(
+            root_dir,
+            str(directory) if directory and suffix else channel,
+            label=f"channel '{channel}'",
+        )
+        if suffix:
+            safe_config_name(str(suffix), label=f"channel '{channel}' suffix")
+            if "/" in str(suffix) or "\\" in str(suffix):
+                raise ValueError(
+                    f"channel '{channel}': suffix {suffix!r} is not a plain name."
+                )
+    channels.pop(channel)
     write_config(root_dir, config)
     if data:
         import shutil
 
-        directory = entry.get("directory")
-        suffix = entry.get("suffix")
         if directory and suffix:
             # A suffixed sub-channel shares its directory with another channel
             # (e.g. velodyne_0_intensity <- velodyne_0/*_intensity.npy) -- only
             # its own files are removed, never the shared directory.
-            for f in (root_dir / directory).glob(f"*_{suffix}.npy"):
-                f.unlink()
-        else:
-            channel_dir = root_dir / channel
-            if channel_dir.is_dir():
-                shutil.rmtree(channel_dir)
+            if target.is_dir():
+                for f in target.iterdir():
+                    if f.is_file() and f.stem.endswith(f"_{suffix}"):
+                        f.unlink()
+        elif target.is_dir() and target != root_dir.resolve():
+            shutil.rmtree(target)
     return entry
 
 
@@ -1184,7 +1262,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
         return [".apairo/channels.yaml does not exist"]
 
     try:
-        config = read_config(root_dir)
+        config = _load_config(root_dir)
     except Exception as exc:
         return [f"Cannot parse channels.yaml: {exc}"]
 
@@ -1290,7 +1368,7 @@ def verify_config(root_dir: str | Path) -> list[str]:
     # Aliases must be unique and must not shadow a real channel directory.
     seen_alias: dict[str, str] = {}
     for key, meta in channels.items():
-        alias = meta.get("alias")
+        alias = meta.get("alias") if isinstance(meta, dict) else None
         if not alias:
             continue
         if alias in channels and alias != key:  # a self-alias is a harmless no-op

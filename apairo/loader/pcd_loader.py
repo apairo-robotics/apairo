@@ -19,6 +19,7 @@ import os
 import numpy as np
 
 from apairo.core import AbstractLoader
+from apairo.core.naming import frame_order
 
 # PCD TYPE/SIZE pairs -> numpy scalar types. The header's TYPE is one of
 # I (signed), U (unsigned), F (float); SIZE is the width in bytes.
@@ -75,7 +76,12 @@ class PCDHeader:
         end: int,
     ) -> None:
         self.data_format: str = data
-        self.n_points: int = points if points is not None else width * height
+        # None when the header gives neither POINTS nor WIDTH: an ascii payload
+        # is then counted off its rows, a binary one cannot be read.
+        self.declared_points: int | None = (
+            points if points is not None else (width * height if width else None)
+        )
+        self.n_points: int = self.declared_points or 0
         self.width, self.height = width, height
         self.data_offset: int = end
 
@@ -195,11 +201,17 @@ def _read_ascii(path: str, header: PCDHeader) -> np.ndarray:
         fh.seek(header.data_offset)
         table = np.loadtxt(fh, dtype=np.float64, ndmin=2, comments="#")
     if table.size == 0:
-        return np.empty((0, header.n_scalars), dtype=np.float64)
+        table = np.empty((0, header.n_scalars), dtype=np.float64)
     if table.shape[1] != header.n_scalars:
         raise ValueError(
             f"PCD ascii payload of '{path}' has {table.shape[1]} column(s) but "
             f"its header declares {header.n_scalars}."
+        )
+    if header.declared_points is not None and len(table) != header.declared_points:
+        raise ValueError(
+            f"PCD ascii payload of '{path}' has {len(table)} point(s) but its "
+            f"header declares {header.declared_points}: the file is truncated "
+            f"or its header is wrong."
         )
     return table
 
@@ -207,6 +219,11 @@ def _read_ascii(path: str, header: PCDHeader) -> np.ndarray:
 def _read_binary(path: str, header: PCDHeader) -> list[np.ndarray]:
     """The binary payload as one array per scalar column, padding included."""
     record = np.dtype([(n, d, c) if c > 1 else (n, d) for n, d, c in header.record])
+    if header.declared_points is None:
+        raise ValueError(
+            f"PCD header of '{path}' gives neither POINTS nor WIDTH: the size "
+            f"of its binary payload is unknown."
+        )
     want = record.itemsize * header.n_points
     with open(path, "rb") as fh:
         fh.seek(header.data_offset)
@@ -234,14 +251,18 @@ def read_pcd(path: str, fields: list[str] | None = None) -> np.ndarray:
     """
     header = _parse_header(path)
     picked = header.select(fields)
-    if not picked:
-        return np.empty((header.n_points, 0), dtype=np.float32)
-    out_dtype = np.result_type(*[header.columns[i][1] for i in picked])
+    out_dtype = (
+        np.result_type(*[header.columns[i][1] for i in picked])
+        if picked
+        else np.float32
+    )
     scalar_cols = [header.flat_index[i] for i in picked]
 
     if header.data_format == "ascii":
         table = _read_ascii(path, header)
         return np.ascontiguousarray(table[:, scalar_cols].astype(out_dtype))
+    if not picked:
+        return np.empty((header.n_points, 0), dtype=np.float32)
 
     cols = _read_binary(path, header)
     out = np.empty((header.n_points, len(picked)), dtype=out_dtype)
@@ -278,7 +299,7 @@ class PCDLoader(AbstractLoader):
         if files is not None:
             self.files = list(files)
         else:
-            self.files = sorted(
+            self.files = frame_order(
                 f for f in os.listdir(directory) if f.lower().endswith(".pcd")
             )
         if not self.files:

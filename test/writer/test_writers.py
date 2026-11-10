@@ -58,3 +58,13 @@ class TestWRITERS:
     def test_unknown_key_raises(self):
         with pytest.raises(KeyError):
             _ = WRITERS["xyz"]
+
+
+def test_tar_image_writer_refuses_what_it_would_corrupt(tmp_path):
+    pytest.importorskip("PIL")
+    from apairo.writer import TarImageWriter
+
+    depth = np.full((4, 4), 60000, dtype=np.uint16)
+    with pytest.raises(TypeError, match="uint8 images.*got uint16"):
+        TarImageWriter().write(depth, tmp_path / "images.tar")
+    TarImageWriter().write(np.zeros((4, 4, 3), np.uint8), tmp_path / "images.tar")

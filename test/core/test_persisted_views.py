@@ -321,3 +321,50 @@ def test_a_broken_view_registry_is_reported_not_a_crash(tmp_path, capsys):
     except SystemExit:
         pass
     assert "cannot parse" in capsys.readouterr().out
+
+
+# ------------------------------------------- a tampered or damaged index file
+
+
+def _rewrite(path, **changes):
+    with np.load(path) as data:
+        arrays = {k: data[k] for k in data.files}
+    for key, change in changes.items():
+        arrays[key] = change(arrays[key])
+    np.savez(path, **arrays)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"index_1": lambda a: a - 100},  # negative: would count from the end
+        {"index_1": lambda a: a + 1000},  # past the last frame
+        {"index_1": lambda a: a[:-1]},  # one row short
+        {"index_1": lambda a: a.astype(float) + 0.5},  # not frame numbers
+        {"reference_timestamps": lambda a: a[:-1]},
+    ],
+    ids=["negative", "too large", "short", "float", "short clock"],
+)
+def test_a_damaged_index_file_is_refused(tmp_path, change):
+    seq = _seq(tmp_path / "seq")
+    path = (
+        RawDataset(seq)
+        .synchronize(reference="cam", method="nearest", tolerance=0.005)
+        .persist("v")
+    )
+    _rewrite(path, **change)
+    with pytest.raises(ValueError, match="View 'v' cannot be loaded"):
+        RawDataset(seq).load_view("v")
+
+
+def test_an_index_file_outside_the_sequence_is_refused(tmp_path):
+    import yaml
+
+    seq = _seq(tmp_path / "seq")
+    RawDataset(seq).synchronize(reference="cam").persist("v")
+    registry = seq / ".apairo" / "views.yaml"
+    doc = yaml.safe_load(registry.read_text())
+    doc["views"]["v"]["file"] = "../../elsewhere.npz"
+    registry.write_text(yaml.safe_dump(doc))
+    with pytest.raises(ValueError):
+        RawDataset(seq).load_view("v")

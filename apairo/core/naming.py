@@ -12,11 +12,33 @@ writer refuses to create them.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from apairo.core.formats import Format
+
+
+def frame_order(
+    names: Iterable[str], stem: Callable[[str], str] | None = None
+) -> list[str]:
+    """Frame filenames in frame order.
+
+    By name -- except when every stem is a plain integer, where the order is
+    numeric: ``2.npy`` comes before ``10.npy``. For zero-padded names both
+    orders agree; for unpadded ones the order by name (``1, 10, 11, 2``) would
+    pair each frame with the timestamp of another, silently.
+
+    *stem* gives a name's frame stem when it is not simply the name without
+    its extension (a suffixed variant's ``000000_intensity.npy``).
+    """
+    ordered = sorted(names)
+    stems = [stem(n) if stem else os.path.splitext(n)[0] for n in ordered]
+    if ordered and all(s.isascii() and s.isdigit() for s in stems):
+        rank = sorted(range(len(ordered)), key=lambda i: (int(stems[i]), ordered[i]))
+        ordered = [ordered[i] for i in rank]
+    return ordered
 
 
 def frame_stem_is_valid(stem: str) -> bool:
@@ -39,10 +61,13 @@ def suffixed_frame_files(directory, suffix: str, ext: str = ".npy") -> list[str]
     given *suffix*), sorted the same way the legacy default sorts unsuffixed
     frames."""
     tail = f"_{suffix}{ext}"
-    return sorted(
-        f
-        for f in os.listdir(directory)
-        if f.endswith(tail) and frame_stem_is_valid(f[: -len(tail)])
+    return frame_order(
+        (
+            f
+            for f in os.listdir(directory)
+            if f.endswith(tail) and frame_stem_is_valid(f[: -len(tail)])
+        ),
+        stem=lambda f: f[: -len(tail)],
     )
 
 
@@ -108,7 +133,7 @@ def channel_frame_files(
         variants: set[str] = set()
         for ext in fmt.extensions or {""}:
             variants.update(suffixed_frame_files(directory, str(suffix), ext=ext))
-        return sorted(variants)
+        return frame_order(variants, stem=lambda f: f[: f.rindex(f"_{suffix}")])
     if not fmt.per_frame:
         from apairo.core.formats import formats
 

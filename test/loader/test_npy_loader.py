@@ -54,7 +54,8 @@ def test_file_selects_the_named_array(colocated_arrays):
     directory, poses, mask = colocated_arrays
     # Without `file`, glob picks poses.npy ('.' sorts before '_') -- the second
     # array is unreachable; with `file` each is addressable by name.
-    np.testing.assert_array_equal(NPYLoader(directory).array, poses)
+    with pytest.warns(UserWarning, match="loading 'poses.npy', not 'valid_mask.npy'"):
+        np.testing.assert_array_equal(NPYLoader(directory).array, poses)
     np.testing.assert_array_equal(
         NPYLoader(directory, file="valid_mask.npy").array, mask
     )

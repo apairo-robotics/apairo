@@ -9,6 +9,7 @@ lives in ``channels.yaml``, never in the loader.
 """
 
 import numpy as np
+import pytest
 
 from apairo.core.config import verify_config, write_config
 from apairo.dataset.raw import RawDataset
@@ -89,7 +90,8 @@ def test_bare_base_still_loads_via_sort_when_only_sibling_declares_file(tmp_path
     # the sibling names valid_mask.npy explicitly. Both remain reachable.
     seq = tmp_path / "seq_a"
     poses, mask, _ = _make_gicp_poses(seq, base_array_file=False)
-    ds = RawDataset(seq, keys=["gicp_poses", "gicp_valid_mask"])
+    with pytest.warns(UserWarning, match="loading 'poses.npy'.*array_file"):
+        ds = RawDataset(seq, keys=["gicp_poses", "gicp_valid_mask"])
     np.testing.assert_array_equal(ds.loaders["gicp_poses"][0], poses[0])
     np.testing.assert_array_equal(ds.loaders["gicp_valid_mask"][0], mask[0])
 

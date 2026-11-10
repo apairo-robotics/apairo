@@ -111,8 +111,9 @@ class Format:
     # ------------------------------------------------------------ discovery
 
     def data_files(self, directory: Path) -> list[Path]:
-        """The files of *directory* this format reads, sorted by name -- never a
-        dotfile or ``timestamps.txt``."""
+        """The files of *directory* this format reads, in frame order (by name;
+        numerically when every name is a plain integer) -- never a dotfile or
+        ``timestamps.txt``."""
         # Names are listed and sorted as strings: a channel can hold tens of
         # thousands of frames, and sorting Paths costs several times more.
         with os.scandir(directory) as entries:
@@ -123,7 +124,13 @@ class Format:
                 and e.name != "timestamps.txt"
                 and e.is_file()
             )
-        return [p for p in (directory / n for n in names) if self.matches(p)]
+        matched = [n for n in names if self.matches(directory / n)]
+        if self.per_frame:
+            # Frame order: numeric when the names are plain integers.
+            from apairo.core.naming import frame_order
+
+            matched = frame_order(matched)
+        return [directory / n for n in matched]
 
     def matches(self, path: Path) -> bool:
         """Is *path* a data file of this format?"""

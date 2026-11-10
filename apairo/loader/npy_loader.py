@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,18 @@ class NPYLoader(AbstractLoader):
         npy_files = sorted(directory.glob("*.npy"))
         if not npy_files:
             raise FileExtensionError(f"No .npy file found in {directory}")
+        if len(npy_files) > 1:
+            # The first by name is loaded, as it always was -- but which array
+            # that is depends on how the files sort (a mask before the poses),
+            # so say it.
+            warnings.warn(
+                f"Several .npy files in {directory}: loading "
+                f"'{npy_files[0].name}', not "
+                f"{', '.join(repr(f.name) for f in npy_files[1:])}. Name the "
+                f"channel's array with 'array_file' to make the choice explicit.",
+                UserWarning,
+                stacklevel=2,
+            )
         self.array = np.load(npy_files[0])
 
     def __len__(self) -> int:
