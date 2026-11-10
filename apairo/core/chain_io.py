@@ -43,6 +43,13 @@ if TYPE_CHECKING:
 FORMAT = "apairo-chain"
 VERSION = 1
 TRUSTED = ("apairo", "apairo_transform", "apairo_preprocess", "apairo_ros")
+# The dataset methods a chain may replay: those decorated with @records.
+OPS = frozenset(
+    {
+        "select", "cache", "concat", "repeat", "join", "window", "synchronize",
+        "filter", "filter_sequences", "filter_split",
+    }
+)
 _TAG = "__apairo__"
 _HEAPTYPE = 1 << 9  # Py_TPFLAGS_HEAPTYPE: a class defined in Python
 
@@ -250,8 +257,23 @@ def _import(path: str, trusted: tuple[str, ...]) -> Any:
             f"If you trust it, pass load_chain(..., trusted=[{module.split('.')[0]!r}])."
         )
     obj: Any = importlib.import_module(module)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
+    try:
+        for part in qualname.split("."):
+            obj = getattr(obj, part)
+    except AttributeError:
+        raise ChainDeclarationError(f"The chain names {path}, which does not exist.") from None
+    # The module prefix is not enough: `trusted.module:os.system` starts in a
+    # trusted module and ends anywhere. The object itself must be a class or a
+    # Python function *defined* at that path, which is what save() writes.
+    if not isinstance(obj, (type, types.FunctionType)) or (
+        getattr(obj, "__module__", None) != module
+        or getattr(obj, "__qualname__", None) != qualname
+    ):
+        raise ChainDeclarationError(
+            f"The chain names {path}, which is not a class or a function "
+            f"defined there. A chain file names each step by the module that "
+            f"defines it."
+        )
     return obj
 
 
@@ -280,7 +302,10 @@ def _decode(value: Any, trusted: tuple[str, ...]) -> Any:
     if tag == "compose":
         return Compose([_decode(t, trusted) for t in value["transforms"]])
     if tag == "function":
-        return _import(value["path"], trusted)
+        fn = _import(value["path"], trusted)
+        if not isinstance(fn, types.FunctionType):
+            raise ChainDeclarationError(f"{value['path']} is not a function.")
+        return fn
     if tag == "partial":
         return functools.partial(
             _decode(value["func"], trusted),
@@ -289,10 +314,17 @@ def _decode(value: Any, trusted: tuple[str, ...]) -> Any:
         )
     if tag == "object":
         cls = _import(value["path"], trusted)
+        if not isinstance(cls, type):
+            raise ChainDeclarationError(f"{value['path']} is not a class.")
         if "config" in value:
             return cls(**_decode(value["config"], trusted))
         obj = cls.__new__(cls)
         for k, v in value["state"].items():
+            if k.startswith("__"):
+                raise ChainDeclarationError(
+                    f"The chain sets {k!r} on {value['path']}: not an attribute "
+                    f"a declaration may set."
+                )
             object.__setattr__(obj, k, _decode(v, trusted))
         return obj
     raise ChainDeclarationError(f"Unknown entry in the chain file: {value!r:.80}")
@@ -323,6 +355,13 @@ def load_chain(path: str | Path, *, trusted: Iterable[str] = ()) -> Chain:
     allowed = TRUSTED + tuple(trusted)
     nodes: list[_Node] = []
     for raw in doc["nodes"]:
+        # The operation is called by name on the dataset: only the recorded
+        # dataset methods, never an arbitrary attribute.
+        if raw["op"] is not None and raw["op"] not in OPS:
+            raise ChainDeclarationError(
+                f"{path} names the operation {raw['op']!r}, which is not one a "
+                f"chain records ({sorted(OPS)})."
+            )
         nodes.append(
             _Node(
                 raw["op"],
