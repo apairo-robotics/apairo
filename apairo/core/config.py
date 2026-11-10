@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import contextlib
+import functools
+import os
+import tempfile
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -358,11 +363,88 @@ def read_config(root_dir: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def _write_yaml(path: Path, data: dict) -> None:
+    """Write *data* to *path* atomically: a reader, or a crash, sees the old
+    file or the new one, never a truncated one. Written beside the target (the
+    same filesystem), flushed, then renamed over it."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+_LOCK_FILE = ".lock"
+_LOCK_STALE_S = 60.0
+
+
+@contextlib.contextmanager
+def config_lock(root_dir: str | Path, timeout: float = 30.0):
+    """Hold ``<root>/.apairo/.lock`` while a sidecar file is read, changed and
+    written back, so two processes registering channels in the same sequence
+    (two preprocessors run in parallel) do not lose each other's entry.
+
+    The lock is a file created exclusively, which works the same on every
+    platform and on network filesystems. One left by a killed process is
+    taken over once it is older than a minute. Reentrant within a thread is
+    not needed: the functions that take it do not call each other.
+
+    Raises:
+        TimeoutError: If the lock is still held after *timeout* seconds.
+    """
+    d = _apairo_dir(Path(root_dir))
+    d.mkdir(exist_ok=True)
+    lock = d / _LOCK_FILE
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                stale = time.time() - lock.stat().st_mtime > _LOCK_STALE_S
+            except FileNotFoundError:
+                continue  # released meanwhile
+            if stale:
+                with contextlib.suppress(FileNotFoundError):
+                    lock.unlink()
+                continue
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"{lock} is held by another process (waited {timeout:.0f} s). "
+                    f"If no apairo process is running, delete it."
+                ) from None
+            time.sleep(0.02)
+    try:
+        yield
+    finally:
+        os.close(fd)
+        with contextlib.suppress(FileNotFoundError):
+            lock.unlink()
+
+
+def _locked(fn):
+    """Run *fn* (whose first argument is the root directory) under
+    :func:`config_lock`: its read-change-write of a sidecar file is one step."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with config_lock(args[0] if args else kwargs["root_dir"]):
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
 def write_config(root_dir: Path, config: dict) -> None:
     d = _apairo_dir(root_dir)
     d.mkdir(exist_ok=True)
-    with open(d / CHANNELS_FILE, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=True)
+    _write_yaml(d / CHANNELS_FILE, config)
 
 
 def declaration_path(root_dir: str | Path) -> Path:
@@ -480,11 +562,11 @@ def write_manifest(root_dir: str | Path, manifest: dict) -> Path:
     d.mkdir(exist_ok=True)
     path = d / DATASET_FILE
     payload = {"version": SCHEMA_VERSION, **manifest}
-    with open(path, "w") as f:
-        yaml.dump(payload, f, default_flow_style=False, sort_keys=True)
+    _write_yaml(path, payload)
     return path
 
 
+@_locked
 def register_channel(
     root_dir: str | Path,
     key: str,
@@ -539,6 +621,7 @@ def register_channel(
     write_config(root_dir, config)
 
 
+@_locked
 def register_raw_channel(
     root_dir: str | Path,
     key: str,
@@ -630,6 +713,7 @@ def register_raw_channel(
     write_config(root_dir, config)
 
 
+@_locked
 def set_alias(
     root_dir: str | Path, channel: str, alias: str | None, *, force: bool = False
 ) -> list[str]:
@@ -692,6 +776,7 @@ def set_alias(
     return displaced
 
 
+@_locked
 def remove_channel(root_dir: str | Path, channel: str, *, data: bool = False) -> dict:
     """Remove a channel's declaration from ``root_dir/.apairo/channels.yaml``.
 
@@ -966,6 +1051,7 @@ def read_calibration(root_dir: str | Path) -> Calibration:
     return out
 
 
+@_locked
 def register_static_transform(
     root_dir: str | Path,
     parent: str,
@@ -997,10 +1083,10 @@ def register_static_transform(
     }
     data.update(version=1, transforms=transforms)
     (root_dir / CONFIG_DIR).mkdir(exist_ok=True)
-    with open(path, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=True)
+    _write_yaml(path, data)
 
 
+@_locked
 def register_intrinsics(
     root_dir: str | Path,
     camera: str,
@@ -1057,8 +1143,7 @@ def register_intrinsics(
     cameras[camera] = entry
     data.update(version=1, cameras=cameras)
     (root_dir / CONFIG_DIR).mkdir(exist_ok=True)
-    with open(path, "w") as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=True)
+    _write_yaml(path, data)
 
 
 def verify_config(root_dir: str | Path) -> list[str]:
