@@ -891,3 +891,12 @@ The public API and the `.apairo` format are declared stable at 1.0
   `apairo-preprocess` 0.2.0 the same evening; `apairo[ros,transform,preprocess,visu]`
   installs from PyPI. Zenodo archived it as `10.5281/zenodo.24092237`, and
   the concept DOI resolves to it.
+- **2026-11-10**: 0.10.1 prepared after a code review of 0.10.0 (about
+  8,000 of the 15,500 lines read). One security flaw: `load_chain()` followed
+  an attribute path out of a trusted module, so a crafted chain file could
+  run any function. Four silent wrong-data cases: misaligned channels in a
+  `ProfiledDataset`, an unsorted `timestamps.txt`, a boolean mask read as
+  indices by `filter()`, and transforms dropped by `synchronize()`. Also
+  fixed: an interrupted preprocess blocking the next run, sidecars written
+  without atomicity or lock, and misleading refusals. Not read by the
+  review: `cli.py`, most of `config.py`, the csv, pcd, zarr and tar loaders.

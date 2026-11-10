@@ -28,6 +28,10 @@ _PER_FRAME_DEFAULT = "npys"
 _STACKED_DEFAULT = "npy"
 
 
+# Marks an output directory whose run has not registered its channel yet.
+_IN_PROGRESS = ".apairo-incomplete"
+
+
 def _writable(name: str, label: str) -> Format:
     fmt = get_format(name)
     if not fmt.writes:
@@ -444,6 +448,20 @@ def run(
     for _, registry, key in targets:
         _refuse_collision(key, registries[registry], registry)
 
+    # A run interrupted before it registered its output (Ctrl-C, a crash, an
+    # exception in the preprocessor) leaves its marker behind: that output is
+    # apairo's and incomplete, so it is removed, whatever the flags. Without
+    # this the directory held data no channel entry accounted for, and neither
+    # overwrite nor reuse could run again.
+    for directory, _, key in targets:
+        if (directory / _IN_PROGRESS).exists():
+            logger.info(
+                "Removing the incomplete output '%s' of an interrupted run (%s).",
+                key,
+                directory,
+            )
+            shutil.rmtree(directory)
+
     def holds_data(directory: Path) -> bool:
         return directory.is_dir() and any(directory.iterdir())
 
@@ -490,10 +508,21 @@ def run(
         "s" if n != 1 else "",
     )
 
-    if isinstance(preprocessor, FramePreprocessor):
-        _run_frame(preprocessor, dataset, outputs)
-    else:
-        _run_sequence(preprocessor, dataset, outputs)
+    for directory, _, _ in targets:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / _IN_PROGRESS).touch()
+
+    try:
+        if isinstance(preprocessor, FramePreprocessor):
+            _run_frame(preprocessor, dataset, outputs)
+        else:
+            _run_sequence(preprocessor, dataset, outputs)
+    except BaseException:
+        # An error or Ctrl-C: nothing half-written stays behind. (A process
+        # killed outright leaves the marker, and the next run removes it.)
+        for directory, _, _ in targets:
+            shutil.rmtree(directory, ignore_errors=True)
+        raise
 
     keys = preprocessor.outputs
     logger.info("Done  ->  '%s' registered in %s", "', '".join(keys), root_dir)
@@ -511,6 +540,9 @@ def run(
                 sources=preprocessor.sources,
                 recipe=recipe,
             )
+    # Registered: the output is complete.
+    for directory, _, _ in targets:
+        (directory / _IN_PROGRESS).unlink(missing_ok=True)
 
 
 def _run_frame(
@@ -574,12 +606,24 @@ def _run_sequence(
     for indices in groups.values():
         if not indices:
             continue
-        frames = [dataset[i] for i in indices]
-        results = _outputs_to_numpy(preprocessor, preprocessor(iter(frames)))
-        # Per-sequence clock, taken from the frames themselves, so each
+        # Per-sequence clock, taken from the frames as they are read, so each
         # sequence's output gets its own timestamps.txt of the right length.
         # Empty for a clockless dataset -> nothing written.
-        seq_ts = [s.timestamp for s in frames if s.timestamp is not None]
+        seq_ts: list[float] = []
+
+        def frames(indices=indices, seq_ts=seq_ts):
+            # One frame at a time: the preprocessor receives an iterator, and
+            # a sequence is not held in memory on its behalf.
+            for i in indices:
+                sample = dataset[i]
+                if sample.timestamp is not None:
+                    seq_ts.append(sample.timestamp)
+                yield sample
+
+        stream = frames()
+        results = _outputs_to_numpy(preprocessor, preprocessor(stream))
+        for _ in stream:  # frames the preprocessor did not read: their times
+            pass
         chosen = outputs.choose_all(results, frame=False)
         for key, result in results.items():
             fmt = chosen[key]

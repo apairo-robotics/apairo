@@ -155,7 +155,13 @@ predictions = chain.on(source)
 The file is a JSON declaration, not a pickle: for each step, the import path
 of its class and the values that rebuild it. Loading imports those classes
 and sets those values. It never runs code stored in the file, and it only
-imports from apairo, its satellites, and the packages listed in `trusted=`.
+imports from apairo, its satellites, and the packages listed in `trusted=`:
+each name must be a class or a function defined in one of them, and each
+operation one of the dataset methods a chain records.
+
+A chain file still decides which trusted classes are built, and with which
+arguments. Load a chain as you would load a configuration file: from a
+source you know.
 
 A step must be declarable:
 
@@ -200,4 +206,5 @@ the outputs did not change.
 - A `synchronize` on an explicit clock array cannot be replayed on another
   source.
 - `synchronize` reads its source's raw channels: steps registered on the
-  source before it never applied, and still do not.
+  source before it never applied (a warning says so when the view is
+  built), and still do not.

@@ -24,6 +24,7 @@ The result is a :class:`InferenceView`, a dataset like any other, with a
 from __future__ import annotations
 
 import inspect
+import warnings
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -606,7 +607,14 @@ def _build(
         built = ins[0]
     elif node.op == "synchronize":
         kwargs = {k: v for k, v in node.kwargs.items() if not k.startswith("_")}
-        built = ins[0].synchronize(**kwargs)
+        with warnings.catch_warnings():
+            # Replaying reproduces the original call, whose warning (steps
+            # registered before synchronize() are not applied) was already
+            # given when the chain was built.
+            warnings.filterwarnings(
+                "ignore", message="synchronize\\(\\) reads the stored"
+            )
+            built = ins[0].synchronize(**kwargs)
     else:
         method = getattr(ins[0], node.op)
         built = method(*ins[1:], *node.args, **node.kwargs)

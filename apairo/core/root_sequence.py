@@ -203,8 +203,12 @@ class RootSequenceMixin(_MixinBase):
                 "sequence has its own time base. Synchronize sequences individually "
                 "(ds.sequences[i].synchronize(...)) and concat the results."
             )
+        from apairo.core.synchronized_view import warn_steps_not_synchronized
         from apairo.dataset.concat import SynchronizedSequences
 
+        # The root's own steps: each sequence is synchronized from its stored
+        # channels, like a single sequence is.
+        warn_steps_not_synchronized(getattr(self, "_pipeline", None))
         return SynchronizedSequences(
             [
                 seq.synchronize(reference=reference, method=method, tolerance=tolerance)

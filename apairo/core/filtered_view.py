@@ -34,7 +34,29 @@ class FilteredView(AbstractDataset):
 
     def __init__(self, parent: AbstractDataset, indices) -> None:
         self._parent = parent
-        self._indices = np.asarray(indices, dtype=np.int64)
+        arr = np.asarray(indices)
+        if arr.dtype == bool:
+            # A mask, one entry per parent frame -- not the indices 0 and 1.
+            if arr.ndim != 1 or len(arr) != len(parent):
+                raise ValueError(
+                    f"A boolean mask must hold one entry per frame: got "
+                    f"{arr.shape} for a dataset of {len(parent)} frame(s)."
+                )
+            arr = np.flatnonzero(arr)
+        elif arr.size and not np.issubdtype(arr.dtype, np.integer):
+            raise TypeError(
+                f"filter() takes frame indices (integers) or a boolean mask, "
+                f"got an array of {arr.dtype}."
+            )
+        self._indices = arr.astype(np.int64).reshape(-1)
+        n = len(parent)
+        if self._indices.size and (
+            self._indices.min() < -n or self._indices.max() >= n
+        ):
+            bad = int(self._indices[(self._indices < -n) | (self._indices >= n)][0])
+            raise IndexError(
+                f"filter(): index {bad} is out of range for a dataset of {n} frame(s)."
+            )
 
     @property
     def keys(self) -> list:
@@ -47,6 +69,11 @@ class FilteredView(AbstractDataset):
             "A filtered view keeps its parent's channels; project them with "
             "select([...])."
         )
+
+    def _stored_channel(self, key: str, idx: int):
+        """The parent's, at the remapped index: a filter keeps frames, it does
+        not change what a channel holds."""
+        return self._parent._stored_channel(key, int(self._indices[idx]))
 
     @property
     def indices(self) -> np.ndarray:

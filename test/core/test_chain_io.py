@@ -217,3 +217,73 @@ def test_a_partial_of_a_module_function_round_trips(tmp_path):
 
 def scaled(x, k=1.0):
     return x * k
+
+
+# --------------------------------------------------- a hostile chain file
+
+
+def _doc_with(deployed, tmp_path, edit):
+    path = deployed.save(tmp_path / "c.json")
+    doc = json.loads(path.read_text())
+    edit(doc)
+    path.write_text(json.dumps(doc))
+    return path
+
+
+def _first_step(doc):
+    return next(n for n in doc["nodes"] if n["steps"])["steps"]
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "apairo.core.chain_io:importlib.import_module",  # reached through a module
+        "apairo.core.chain_io:json.loads",
+        "apairo.core.chain_io:Path",  # a class defined elsewhere
+        "apairo.core.chain_io:np.sin",
+        "apairo.core.chain_io:no_such_thing",
+    ],
+)
+def test_a_path_through_a_trusted_module_is_refused(deployed, tmp_path, target):
+    def edit(doc):
+        _first_step(doc)[0] = {"__apairo__": "function", "path": target}
+
+    path = _doc_with(deployed, tmp_path, edit)
+    with pytest.raises(
+        ChainDeclarationError, match="not a class or a function|does not exist"
+    ):
+        load_chain(path, trusted=["test"])
+
+
+def test_an_object_entry_must_name_a_class(deployed, tmp_path):
+    def edit(doc):
+        _first_step(doc)[0] = {
+            "__apairo__": "object",
+            "path": "apairo.core.chain_io:load_chain",
+            "config": {"path": "x"},
+        }
+
+    with pytest.raises(ChainDeclarationError, match="is not a class"):
+        load_chain(_doc_with(deployed, tmp_path, edit), trusted=["test"])
+
+
+def test_dunder_state_is_refused(deployed, tmp_path):
+    def edit(doc):
+        _first_step(doc)[0] = {
+            "__apairo__": "object",
+            "path": "test.core.test_chain_io:Offset",
+            "state": {"__class__": 1},
+        }
+
+    with pytest.raises(ChainDeclarationError, match="__class__"):
+        load_chain(_doc_with(deployed, tmp_path, edit), trusted=["test"])
+
+
+def test_only_recorded_operations_are_replayed(deployed, tmp_path):
+    def edit(doc):
+        next(n for n in doc["nodes"] if n["op"] is not None)["op"] = "export"
+
+    with pytest.raises(
+        ChainDeclarationError, match="'export'.*not one a chain records"
+    ):
+        load_chain(_doc_with(deployed, tmp_path, edit), trusted=["test"])
