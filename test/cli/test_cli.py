@@ -864,3 +864,55 @@ def test_empty_channels_yaml_does_not_crash_status(tmp_path, capsys):
     assert _run(["status", str(seq), "--json"]) == 0
     status = json.loads(capsys.readouterr().out)
     assert any("version" in i.lower() for i in status["issues"])
+
+
+def test_a_plugin_cannot_take_the_name_of_a_builtin_command(monkeypatch, raw_root):
+    import importlib.metadata
+
+    import apairo.cli as cli
+
+    called = []
+
+    class _EP:
+        def __init__(self, name):
+            self.name = name
+
+        def load(self):
+            return lambda argv: called.append(self.name) or 0
+
+    monkeypatch.setattr(
+        importlib.metadata,
+        "entry_points",
+        lambda group: [_EP("status"), _EP("init"), _EP("extractor")],
+    )
+    assert sorted(cli._discover_plugins()) == ["extractor"]
+    assert _run(["init", str(raw_root)]) == 0  # apairo's init, not the plugin's
+    assert called == []
+    assert set(cli.BUILTIN_COMMANDS) == {
+        "init",
+        "declare",
+        "status",
+        "check",
+        "alias",
+        "channel",
+        "export",
+    }
+
+
+def test_channel_remove_reports_a_refusal_without_a_traceback(tmp_path, capsys):
+    from apairo.core.config import write_config
+
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    seq = tmp_path / "seq"
+    (seq / "lidar").mkdir(parents=True)
+    write_config(
+        seq,
+        {"version": 1, "channels": {"../victim": {"kind": "raw", "loader": "npys"}}},
+    )
+    code = _run(
+        ["channel", "remove", "../victim", "--path", str(seq), "--purge", "--yes"]
+    )
+    assert code == 1
+    assert "channel remove failed" in capsys.readouterr().err
+    assert victim.is_dir()
