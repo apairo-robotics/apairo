@@ -4,7 +4,14 @@ import numpy as np
 def load_timestamps(file):
     # atleast_1d: a single-frame channel's timestamps.txt is one line, which
     # np.loadtxt returns as a 0-d scalar -- callers index/iterate it as a 1-d array.
-    return np.atleast_1d(np.loadtxt(file))
+    clock = np.atleast_1d(np.loadtxt(file))
+    if clock.ndim != 1:
+        raise ValueError(
+            f"{file} holds {clock.shape[1]} columns: a clock file lists one time "
+            f"per line, in seconds. For a table whose clock is one of its "
+            f"columns, declare the channel as csv with `key: {{column: ...}}`."
+        )
+    return clock
 
 
 def get_frequency(timestamps: np.ndarray) -> float:
