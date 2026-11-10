@@ -221,6 +221,11 @@ By default, `run_preprocess` raises `FileExistsError` if an output channel's dir
 Goose3DDataset.run_preprocess(preprocessor, "/data/goose", overwrite=True)
 ```
 
+A run that stops before the end (an error, Ctrl-C, a killed process) leaves
+no output behind: what it was writing is removed, at once or by the next run,
+which then starts over without any flag. Data apairo did not write is never
+removed.
+
 ---
 
 ## The `.apairo` directory

@@ -7,6 +7,68 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-10
+
+A code review of 0.10.0 found one security flaw and four ways of getting
+wrong data without an error. Upgrade if you load chain files you did not
+write, or datasets you did not check by hand.
+
+### Security
+
+- **`load_chain()` could run any function.** The trust check looked at the
+  module a name starts in, then followed the attribute path freely, so a
+  crafted chain file naming `apairo.<module>:os.system` passed. A name must
+  now resolve to a class or a Python function defined at that very path, and
+  a chain may only replay the dataset methods a chain records. A chain file
+  still chooses which trusted classes are built and with which arguments:
+  load one as you would a configuration file, from a known source.
+
+### Upgrading from 0.10.0
+
+Four loads or calls that used to succeed with wrong data are now refused.
+
+- A `ProfiledDataset` whose channels hold as many files but not the same
+  frames (lidar 0, 1, 2 beside labels 1, 2, 3) raises `ValueError` instead of
+  pairing each scan with another frame's label. A constant suffix per channel
+  (GOOSE) is set aside.
+- A `timestamps.txt` that is not ascending raises `ValueError`, as a declared
+  `key` already did: `synchronize()` matched its frames to the wrong instants.
+- `filter(mask)` with a boolean array keeps the `True` frames. It used to
+  read the mask as the indices 0 and 1. A float array, or an index out of
+  range, is refused at the call.
+- `ProfiledDataset.sequences` is a property, as on the asynchronous family.
+  `ds.sequences()` still works and emits a `DeprecationWarning`.
+
+### Fixed
+
+- `filter(key, fn)` evaluates the stored channel on a filtered or selected
+  view too, as documented; the predicate received transformed data there. A
+  channel published by `transform(..., output=)` can be filtered on: the
+  documented example raised `KeyError`.
+- `synchronize()` warns when the dataset it is called on carries transform
+  steps: it reads the stored channels, so those steps were dropped silently.
+- An interrupted `run_preprocess` (an error, Ctrl-C, a killed process) no
+  longer leaves a directory that neither `overwrite=True` nor `reuse=True`
+  would touch, and an interrupted overwrite is not mistaken for a complete
+  output by `reuse=True`.
+- A sequence preprocessor reads its frames one at a time; the whole sequence
+  was loaded in memory before the call.
+- `.apairo/channels.yaml`, `dataset.yaml` and `calibration.yaml` are written
+  atomically, and registrations hold a lock: two preprocessors run in
+  parallel on one sequence no longer lose each other's channel.
+- A `CachedDataset` cached from a dataset without sequence ids raises
+  `AttributeError` for `frame_sequence_ids`, `frame_stems` and
+  `frame_channel_ids` instead of returning `None`.
+- Clearer refusals, at the call: `filter(idx).synchronize()` on an
+  asynchronous dataset no longer answers "already synchronous";
+  `concat(a, b).synchronize()` on asynchronous datasets is refused instead of
+  failing on first access; `ds[0:3]` names `ds.filter(range(...))`.
+
+### Changed
+
+- Internal: the asynchronous layout keeps one record per channel instead of
+  six parallel dictionaries.
+
 ## [0.10.0] - 2026-11-09
 
 ### Upgrading from 0.9
@@ -1091,7 +1153,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/apairo-robotics/apairo/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/apairo-robotics/apairo/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/apairo-robotics/apairo/compare/v0.7.0...v0.8.0

@@ -206,4 +206,5 @@ the outputs did not change.
 - A `synchronize` on an explicit clock array cannot be replayed on another
   source.
 - `synchronize` reads its source's raw channels: steps registered on the
-  source before it never applied, and still do not.
+  source before it never applied (a warning says so when the view is
+  built), and still do not.

@@ -19,8 +19,8 @@ authors:
 repository-code: "https://github.com/apairo-robotics/apairo"
 url: "https://apairo-robotics.github.io/apairo/"
 license: MIT
-version: 0.10.0
-date-released: "2026-11-09"
+version: 0.10.1
+date-released: "2026-11-10"
 keywords:
   - robotics
   - lidar
@@ -33,6 +33,3 @@ identifiers:
   - type: doi
     value: "10.5281/zenodo.22248230"
     description: "Concept DOI -- always resolves to the latest archived release"
-  - type: doi
-    value: "10.5281/zenodo.24092237"
-    description: "DOI of the archived v0.10.0 release"

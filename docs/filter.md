@@ -28,7 +28,7 @@ ds.filter(lambda s: s.data["lidar"].shape[0] > 100)
 ds.filter(key, fn)   # fn: value -> bool
 ```
 
-`fn` receives `sample.data[key]` **before transforms** and returns `True` to keep the frame. Only the specified channel is loaded during the sweep — faster for large datasets:
+`fn` receives `sample.data[key]` **before transforms** and returns `True` to keep the frame, on a filtered or selected view as on the dataset itself. Only the specified channel is loaded during the sweep — faster for large datasets. A channel published by a transform (`output=`) is computed for the predicate:
 
 ```python
 ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
@@ -37,13 +37,19 @@ ds.filter("trav_gt", lambda gt: (gt == 1).sum() >= 50)
 ### Pre-computed indices form
 
 ```python
-ds.filter(indices)   # indices: np.ndarray | list[int]
+ds.filter(indices)   # indices: np.ndarray | list[int], or a boolean mask
 ```
 
 Pass a previously saved index array directly. No sweep, no I/O cost:
 
 ```python
 ds.filter(np.load("cache/valid_indices.npy"))
+```
+
+A boolean array is a mask, one entry per frame, `True` to keep it:
+
+```python
+ds.filter(scores > 0.5)
 ```
 
 ---
