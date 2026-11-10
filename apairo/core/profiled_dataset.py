@@ -242,6 +242,49 @@ class _PerFrameLoader:
         return arr
 
 
+def _common_suffix(names: list[str]) -> str:
+    first, last = min(names, key=lambda s: s[::-1]), max(names, key=lambda s: s[::-1])
+    n = 0
+    while n < min(len(first), len(last)) and first[-1 - n] == last[-1 - n]:
+        n += 1
+    return first[len(first) - n :]
+
+
+def _check_same_frames(frames: dict[str, list[tuple[str, str]]], root: Path) -> None:
+    """Refuse per-frame channels whose files do not name the same frames.
+
+    A synchronous dataset pairs channels by position, so frame ``i`` of every
+    channel must be the same capture. Channels may name their files
+    differently by a constant suffix (GOOSE: ``..._vls128.bin`` beside
+    ``..._goose.label``); once that suffix is set aside the names must agree,
+    frame by frame. Channels whose names share nothing (two unrelated naming
+    schemes) cannot be compared and are paired by position, as before.
+    """
+    if len(frames) < 2:
+        return
+    (ref_key, ref), *others = frames.items()
+    for key, names in others:
+        if names == ref or len(names) != len(ref):
+            continue
+        a, b = ref, names
+        if not {s for _, s in a} & {s for _, s in b}:
+            # No name in common: set each channel's constant suffix aside.
+            sa, sb = _common_suffix([s for _, s in a]), _common_suffix([s for _, s in b])
+            a = [(q, s[: len(s) - len(sa)]) for q, s in a]
+            b = [(q, s[: len(s) - len(sb)]) for q, s in b]
+            if a == b or not {s for _, s in a} & {s for _, s in b}:
+                continue
+        i = next(i for i, (x, y) in enumerate(zip(ref, names, strict=True)) if a[i] != b[i])
+        raise ValueError(
+            f"Channels '{ref_key}' and '{key}' of '{root}' hold the same number "
+            f"of frames but not the same frames: frame {i} is "
+            f"'{ref[i][1]}' in sequence '{ref[i][0]}' for '{ref_key}' and "
+            f"'{names[i][1]}' in '{names[i][0]}' for '{key}'. Pairing them by "
+            f"position would give each '{ref_key}' the '{key}' of another frame. "
+            f"Remove or complete the unmatched files, or load the channels separately."
+        )
+
+
 def _loadtxt_2d(path: Path) -> np.ndarray:
     return np.atleast_2d(np.loadtxt(path))
 
@@ -773,6 +816,16 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
         frame_counts = {k: len(v) for k, v in self._loaders.items()}
         if len(set(frame_counts.values())) > 1:
             raise ValueError(f"Mismatched frame counts per key: {frame_counts}")
+        # ...and the same frames: equal counts do not make frame i of one
+        # channel the frame i of another.
+        _check_same_frames(
+            {
+                k: [(self._seq_root(p).name, p.stem) for p in v.paths]
+                for k, v in self._loaders.items()
+                if isinstance(v, (_PerFrameLoader, _FormatFrames))
+            },
+            self._root,
+        )
 
         self._set_keys([self._public_of[k] for k in loaded_real])
 
