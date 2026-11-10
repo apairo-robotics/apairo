@@ -111,3 +111,23 @@ def test_roundtrip_loads_with_rawdataset(tmp_path):
     ds = apairo.RawDataset(seq)
     assert "ground_truth" in ds.available
     assert "cloud" in ds.available
+
+
+def test_unpadded_stems_keep_their_own_timestamp(tmp_path):
+    """Frames named 1, 2, 10 are read in numeric order: timestamps.txt follows
+    that order, not the order of the names as text."""
+    seq = tmp_path / "seq"
+    with ChannelWriter(seq, "labels") as w:
+        for i in (10, 2, 1, 11):
+            w.add(np.full(2, float(i)), stem=str(i), timestamp=i * 0.1)
+    ds = apairo.RawDataset(seq, keys=["labels"])
+    values = [float(ds.loaders["labels"][i][0]) for i in range(4)]
+    assert values == [1.0, 2.0, 10.0, 11.0]
+    np.testing.assert_allclose(ds.timestamps["labels"], np.array(values) * 0.1)
+
+
+def test_a_bin_channel_takes_n_by_4_points_only(tmp_path):
+    with pytest.raises(ValueError, match=r"\(N, 4\) points.*shape \(8, 3\)"):
+        ChannelWriter(tmp_path / "seq", "cloud", loader="bin").add(
+            np.zeros((8, 3), np.float32), stem="000000"
+        )

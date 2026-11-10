@@ -31,7 +31,7 @@ from typing import Any
 import numpy as np
 
 from apairo.core.config import register_channel
-from apairo.core.naming import frame_stem_is_valid, require_frame_stem
+from apairo.core.naming import frame_order, frame_stem_is_valid, require_frame_stem
 from apairo.writer.bin_writer import BINWriter
 from apairo.writer.npy_writer import NPYWriter
 
@@ -89,7 +89,7 @@ class ChannelWriter:
     def _read_existing(self) -> dict[str, float | None]:
         if not self._cdir.is_dir():
             return {}
-        stems = sorted(
+        stems = self._in_frame_order(
             p.stem
             for p in self._cdir.glob(f"*{self._ext}")
             if frame_stem_is_valid(p.stem)
@@ -103,6 +103,12 @@ class ChannelWriter:
                 return dict(zip(stems, rows, strict=True))
         return {s: None for s in stems}
 
+    def _in_frame_order(self, stems) -> list[str]:
+        """*stems* in the order the loader reads their files (numeric for plain
+        integers, else by name) -- :func:`apairo.core.naming.frame_order`."""
+        names = frame_order(f"{s}{self._ext}" for s in stems)
+        return [n[: len(n) - len(self._ext)] for n in names]
+
     def add(self, data, stem, timestamp: float | None = None) -> ChannelWriter:
         """Write one frame as ``<seq>/<channel>/<stem><ext>`` and record its
         timestamp.  *stem* is the frame id (no extension) and must not contain
@@ -110,8 +116,17 @@ class ChannelWriter:
         if self._closed:
             raise RuntimeError("ChannelWriter is closed.")
         stem = require_frame_stem(str(stem))
+        data = np.asarray(data)
+        if self._loader == "bin" and (data.ndim != 2 or data.shape[1] != 4):
+            # A bin channel is read back as (-1, 4): any other shape would
+            # come back as different points, or not at all.
+            raise ValueError(
+                f"A frame of a 'bin' channel is (N, 4) points (x, y, z, "
+                f"intensity); got shape {data.shape}. Use loader='npys' for "
+                f"other arrays."
+            )
         self._cdir.mkdir(parents=True, exist_ok=True)
-        self._writer.write(np.asarray(data), self._cdir / f"{stem}{self._ext}")
+        self._writer.write(data, self._cdir / f"{stem}{self._ext}")
         self._ts[stem] = None if timestamp is None else float(timestamp)
         return self
 
@@ -122,8 +137,9 @@ class ChannelWriter:
             return
         if not self._ts:
             raise RuntimeError("ChannelWriter.close() with no frames written.")
-        # Frames load in sorted-stem order; timestamps.txt must follow it row-for-row.
-        stems = sorted(self._ts)
+        # timestamps.txt must follow, row for row, the order the loader reads
+        # the frames in: the same rule, not a second sort.
+        stems = self._in_frame_order(self._ts)
         have = [self._ts[s] is not None for s in stems]
         if any(have) and not all(have):
             missing = [s for s in stems if self._ts[s] is None]
