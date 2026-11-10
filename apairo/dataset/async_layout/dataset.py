@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -122,6 +123,63 @@ def _suffix_channel_entries(channel_dir: Path, loader: str) -> dict[str, dict]:
     }
 
 
+@dataclass(frozen=True)
+class _ChannelDeclaration:
+    """What the layout declares about one channel, beyond its format.
+
+    Attributes:
+        suffix: A suffixed sub-channel (``velodyne_0_intensity``) has no
+            directory of its own: it reads the suffix-filtered subset of
+            another channel's files.
+        key: The alignment key parsed from the channel's own filenames (Rellis
+            camera ``frame<N>-<epoch>_<ms>.jpg``) or computed by its format,
+            instead of a ``timestamps.txt``. Computed in memory, never written.
+        order: How the files are enumerated and ordered when the default
+            frame-file convention does not fit. Separate from ``key``; when
+            absent it defaults to the key's own regex.
+        array_file: The exact ``.npy`` a stacked channel loads when its
+            directory colocates several (``poses.npy`` beside
+            ``valid_mask.npy``): the whole-array analogue of ``suffix``.
+        fields: A ``pcd`` channel's field contract, which makes the channel's
+            width a layout decision instead of a per-file accident.
+        meta: The channel's whole entry, for its format to read what it needs,
+            including the fields a plugin format adds to the schema.
+    """
+
+    suffix: str | None = None
+    key: dict | None = None
+    order: dict | None = None
+    array_file: str | None = None
+    fields: list[str] | None = None
+    meta: dict = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, name: str, entry: dict) -> _ChannelDeclaration:
+        return cls(
+            suffix=entry.get("suffix") or None,
+            key=entry.get("key") or None,
+            order=entry.get("order") or None,
+            array_file=(
+                safe_config_name(
+                    entry["array_file"], label=f"channel '{name}' array_file"
+                )
+                if entry.get("array_file")
+                else None
+            ),
+            fields=list(entry["fields"]) if entry.get("fields") else None,
+            meta=dict(entry),
+        )
+
+    @property
+    def shares_a_directory(self) -> bool:
+        """A suffixed or colocated sub-channel: it reads another channel's
+        directory, and so borrows that channel's clock and latency."""
+        return self.suffix is not None or self.array_file is not None
+
+
+_UNDECLARED = _ChannelDeclaration()
+
+
 class AsyncLayoutDataset(AbstractDataset):
     r"""Abstract *asynchronous layout* loader (one subdirectory per channel).
 
@@ -230,45 +288,11 @@ class AsyncLayoutDataset(AbstractDataset):
             for k, v in channels.items()
             if v.get("timestamps_from")
         }
-        # A suffixed sub-channel (e.g. velodyne_0_intensity) has no directory of
-        # its own -- it reads a suffix-filtered subset of another channel's files.
-        self._suffix_of: dict[str, str] = {
-            self._public(k): v["suffix"] for k, v in channels.items() if v.get("suffix")
-        }
-        # A channel may declare that its alignment key is parsed from its own
-        # filenames (e.g. Rellis camera frame<N>-<epoch>_<ms>.jpg) instead of a
-        # timestamps.txt -- the key is then computed in memory, nothing is written.
-        self._key_spec: dict[str, dict] = {
-            self._public(k): v["key"] for k, v in channels.items() if v.get("key")
-        }
-        # ...and how those files are enumerated/ordered, when the default frame-file
-        # convention doesn't fit its naming. Separate from `key`; when absent it
-        # defaults to the key's own regex.
-        self._order_spec: dict[str, dict] = {
-            self._public(k): v["order"] for k, v in channels.items() if v.get("order")
-        }
-        # A stacked `npy` channel may name the exact `.npy` it loads when its
-        # directory colocates several (poses.npy beside valid_mask.npy) -- the
-        # whole-array analogue of `suffix`. The name lives here, in the layout.
-        self._array_file_of: dict[str, str] = {
-            self._public(k): safe_config_name(
-                v["array_file"], label=f"channel '{k}' array_file"
-            )
+        # What the layout declares about each channel, one record per channel.
+        self._declared: dict[str, _ChannelDeclaration] = {
+            self._public(k): _ChannelDeclaration.of(k, v)
             for k, v in channels.items()
-            if v.get("array_file")
-        }
-        # A `pcd` channel's field contract. A PCD header is self-describing, so
-        # the field set is a per-file property; declaring it here is what makes
-        # the channel's width a layout decision instead of a per-file accident.
-        self._fields_of: dict[str, list[str]] = {
-            self._public(k): list(v["fields"])
-            for k, v in channels.items()
-            if v.get("fields")
-        }
-        # Each channel's whole entry, for its format to read what it needs --
-        # including the fields a plugin format adds to the schema.
-        self._meta_of: dict[str, dict] = {
-            self._public(k): dict(v) for k, v in channels.items() if isinstance(v, dict)
+            if isinstance(v, dict)
         }
 
         if dataset_profile is not None:
@@ -591,19 +615,25 @@ class AsyncLayoutDataset(AbstractDataset):
     def _channel_meta(self, key: str) -> dict:
         """The channel's entry as the layout declares it -- what its format reads
         (``array_file``, ``fields``, ``key``, ``suffix``, plugin fields)."""
-        meta = dict(getattr(self, "_meta_of", {}).get(key, {}))
+        decl = self._declaration(key)
+        meta = dict(decl.meta)
         meta["loader"] = self._profile[key]
-        if key in self._key_spec:
-            meta["key"] = self._key_spec[key]
-        if key in self._order_spec:
-            meta["order"] = self._order_spec[key]
-        if key in self._suffix_of:
-            meta["suffix"] = self._suffix_of[key]
-        if key in self._array_file_of:
-            meta["array_file"] = self._array_file_of[key]
-        if key in self._fields_of:
-            meta["fields"] = self._fields_of[key]
+        if decl.key:
+            meta["key"] = decl.key
+        if decl.order:
+            meta["order"] = decl.order
+        if decl.suffix:
+            meta["suffix"] = decl.suffix
+        if decl.array_file:
+            meta["array_file"] = decl.array_file
+        if decl.fields:
+            meta["fields"] = decl.fields
         return meta
+
+    def _declaration(self, key: str) -> _ChannelDeclaration:
+        """What the layout declares about channel *key* (an empty record for a
+        channel it does not declare, or on an instance built without one)."""
+        return getattr(self, "_declared", {}).get(key, _UNDECLARED)
 
     def _init_loaders(self) -> None:
         loaders: dict[str, AbstractLoader] = {}
@@ -659,7 +689,7 @@ class AsyncLayoutDataset(AbstractDataset):
         A suffixed sub-channel borrows the base channel's clock (shared
         directory): its ``*_<suffix>.npy`` files must cover every base frame."""
         for key in self._keys:
-            suffix = self._suffix_of.get(key)
+            suffix = self._declaration(key).suffix
             if suffix is None:
                 continue
             n_files = len(self.loaders[key])
@@ -677,7 +707,7 @@ class AsyncLayoutDataset(AbstractDataset):
         # count is never validated -- a short array would only surface as a
         # cryptic IndexError deep in _load. Fail here at construction instead.
         for key in self._keys:
-            array_file = self._array_file_of.get(key)
+            array_file = self._declaration(key).array_file
             if array_file is None:
                 continue
             n_rows = len(self.loaders[key])
@@ -691,7 +721,7 @@ class AsyncLayoutDataset(AbstractDataset):
         # Every other channel: its own timestamps.txt, or the clock it borrows
         # with `timestamps_from`.
         for key in self._keys:
-            if key in self._suffix_of or key in self._array_file_of:
+            if self._declaration(key).shares_a_directory:
                 continue
             n_frames = len(self.loaders[key])
             n_clock = len(self.timestamps[key])
@@ -734,7 +764,7 @@ class AsyncLayoutDataset(AbstractDataset):
                 clock = self._as_key_array(
                     key, provider(getattr(self.loaders[key], "files", None))
                 )
-            elif key in self._key_spec:  # declarative key, parsed in memory
+            elif self._declaration(key).key:  # declarative key, parsed in memory
                 clock = self._as_key_array(key, self._parse_key(key))
             elif (Path(self._files[key]) / "timestamps.txt").exists():
                 clock = load_timestamps(Path(self._files[key]) / "timestamps.txt")
@@ -793,15 +823,14 @@ class AsyncLayoutDataset(AbstractDataset):
         declares its own."""
         from apairo.core.config import latency_seconds
 
-        value = self._meta_of.get(key, {}).get("latency")
-        if value is None and (key in self._suffix_of or key in self._array_file_of):
+        value = self._declaration(key).meta.get("latency")
+        if value is None and self._declaration(key).shares_a_directory:
             for other, directory in self._files.items():
                 if (
                     directory == self._files[key]
-                    and other not in self._suffix_of
-                    and other not in self._array_file_of
+                    and not self._declaration(other).shares_a_directory
                 ):
-                    value = self._meta_of.get(other, {}).get("latency")
+                    value = self._declaration(other).meta.get("latency")
                     break
         if value is None:
             return 0.0
@@ -828,7 +857,8 @@ class AsyncLayoutDataset(AbstractDataset):
         """
         from apairo.core.keys import parse_filename_key
 
-        spec = self._key_spec[key]
+        spec = self._declaration(key).key
+        assert spec is not None  # called for a channel that declares a key
         label = f"Channel '{key}'"
         fmt = get_format(self._profile[key])
         own = [form for form in spec if form in fmt.key_forms]

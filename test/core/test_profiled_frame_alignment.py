@@ -63,3 +63,12 @@ def test_frames_of_another_sequence_are_refused():
     b = [("00", "000000"), ("02", "000000")]
     with pytest.raises(ValueError, match="sequence '01'.*'02'"):
         _check_same_frames({"lidar": a, "labels": b}, "root")
+
+
+def test_sequences_is_a_property_like_the_async_family(tmp_path):
+    _tree(tmp_path, [0, 1], [0, 1], seq="00")
+    _tree(tmp_path, [0, 1, 2], [0, 1, 2], seq="01")
+    ds = SemanticKittiDataset(tmp_path, keys=["lidar", "labels"])
+    assert [len(s) for s in ds.sequences] == [2, 3]
+    with pytest.warns(DeprecationWarning, match="drop the parentheses"):
+        assert [len(s) for s in ds.sequences()] == [2, 3]

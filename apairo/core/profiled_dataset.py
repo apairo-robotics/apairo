@@ -290,6 +290,20 @@ def _check_same_frames(frames: dict[str, list[tuple[str, str]]], root: Path) -> 
         )
 
 
+class _Sequences(list):
+    """The list ``ProfiledDataset.sequences`` returns. Calling it, as when
+    ``sequences`` was a method, still gives the list, with a warning."""
+
+    def __call__(self) -> list:
+        warnings.warn(
+            "ds.sequences is a property since apairo 0.10.1: drop the "
+            "parentheses. Calling it will stop working in 1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return list(self)
+
+
 def _loadtxt_2d(path: Path) -> np.ndarray:
     return np.atleast_2d(np.loadtxt(path))
 
@@ -1522,10 +1536,14 @@ class ProfiledDataset(SynchronousDataset, ConfigurableDataset):
             raise ValueError(f"Split '{name}' not found. Available: {available}")
         return _read_lst_frame_set(self._root / lst_rel)
 
+    @property
     def sequences(self) -> list[SequenceView]:
-        from apairo.core.sequence_view import SequenceView  # noqa: F401
+        """One view per sequence, in ``sequence_ids`` order.
 
-        return [self.sequence(sid) for sid in self.sequence_ids]
+        A property, as on the asynchronous family (``RawDataset(root).sequences``).
+        It was a method until 0.10.0: ``ds.sequences()`` still works and warns.
+        """
+        return _Sequences(self.sequence(sid) for sid in self.sequence_ids)
 
     def sequence(self, seq_id: str) -> SequenceView:
         if seq_id not in self._seq_groups:
