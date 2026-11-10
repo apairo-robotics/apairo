@@ -770,6 +770,19 @@ class AsyncLayoutDataset(AbstractDataset):
                     f"Channel '{key}': timestamp {row} is not a finite number "
                     f"({clock[row]}). Every frame needs a time."
                 )
+            # Whatever the clock's origin (a timestamps.txt as much as a `key:`
+            # or a provider): synchronize() searches it as a sorted array, and
+            # an unsorted one matches frames to the wrong instants, silently.
+            if clock is not None and clock.size > 1 and np.any(np.diff(clock) < 0):
+                row = int(np.flatnonzero(np.diff(clock) < 0)[0]) + 1
+                raise ValueError(
+                    f"Channel '{key}': its clock is not non-decreasing (frame "
+                    f"{row} is at {clock[row]}, after {clock[row - 1]}). The "
+                    f"timeline and synchronize() need each channel's times "
+                    f"ascending: reorder the frames and their timestamps "
+                    f"together (timestamps.txt lists one time per frame, in "
+                    f"frame order)."
+                )
         return timestamps
 
     def _latency(self, key: str) -> float:
