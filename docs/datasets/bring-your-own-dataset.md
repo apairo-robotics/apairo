@@ -19,7 +19,8 @@ This is the entry point for the asynchronous family: the profile-free
 ## The three contracts
 
 Every channel answers three questions. apairo ships a sensible default for each,
-so a plain directory of zero-padded files needs no configuration at all.
+so a plain directory of numbered files needs no configuration at all (frames
+are read in numeric order: `2.npy` before `10.npy`, padded or not).
 
 | Contract | Question it answers | Built-in default |
 |---|---|---|

@@ -3,6 +3,7 @@ import os
 import numpy as np
 
 from apairo.core import AbstractLoader
+from apairo.core.naming import frame_order
 
 
 class BINLoader(AbstractLoader):
@@ -12,7 +13,9 @@ class BINLoader(AbstractLoader):
         if files is not None:
             self.files = list(files)
         else:
-            self.files = sorted(f for f in os.listdir(directory) if f.endswith(".bin"))
+            self.files = frame_order(
+                f for f in os.listdir(directory) if f.endswith(".bin")
+            )
         self.directory = directory
         self._shape = (4,)  # (x, y, z, intensity)
 
