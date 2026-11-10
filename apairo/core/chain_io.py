@@ -30,7 +30,7 @@ import types
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -323,12 +323,13 @@ def _decode(value: Any, trusted: tuple[str, ...]) -> Any:
             **_decode(value["keywords"], trusted),
         )
     if tag == "object":
-        cls = _import(value["path"], trusted)
+        cls: Any = _import(value["path"], trusted)
         if not isinstance(cls, type):
             raise ChainDeclarationError(f"{value['path']} is not a class.")
+        cls = cast("Any", cls)  # a class, built dynamically below
         if "config" in value:
             return cls(**_decode(value["config"], trusted))
-        obj: Any = cls.__new__(cls)
+        obj = cls.__new__(cls)
         for k, v in value["state"].items():
             if k.startswith("__"):
                 raise ChainDeclarationError(
