@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from apairo.core.config import CONFIG_DIR, write_config
-from apairo.core.preprocessor import FramePreprocessor
+from apairo.core.preprocessor import FramePreprocessor, SequencePreprocessor
 from apairo.core.sample import Sample
 from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
@@ -460,6 +460,15 @@ def test_root_synchronize_concats_per_sequence(root_dataset):
     assert {"lidar", "imu"} <= set(sample.data)
 
 
+def test_root_synchronize_loads_one_channel_of_a_frame(root_dataset):
+    # On a root, load(key, k) reaches the sequence that holds frame k.
+    root, _, _ = root_dataset
+    synced = RawDataset(root).synchronize(reference="lidar")
+    for k in range(len(synced)):
+        np.testing.assert_array_equal(synced.load("imu", k), synced[k].data["imu"])
+    assert len(synced.filter("lidar", lambda x: x.shape == (4, 3))) == 5
+
+
 def test_root_external_clock_rejected(root_dataset):
     root, _, _ = root_dataset
     ds = RawDataset(root)
@@ -503,6 +512,66 @@ def test_run_preprocess_on_root_writes_and_reloads_per_sequence(root_dataset):
     # The derived channel reloads through the root too (available on every seq).
     root_ds = RawDataset(root, keys=["lidar_x2"])
     assert "lidar_x2" in root_ds.available
+
+
+class _FrameCounter(FramePreprocessor):
+    """Stateful: the index of the frame within its sequence."""
+
+    output_key = "frame_no"
+    output_loader = "npys"
+    input_keys = ["lidar"]
+    timestamps_from = "lidar"
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.starts = 0
+
+    def start_sequence(self) -> None:
+        self.count = 0
+        self.starts += 1
+
+    def __call__(self, sample: Sample) -> np.ndarray:
+        self.count += 1
+        return np.array([self.count - 1])
+
+
+def test_run_preprocess_starts_a_stateful_preprocessor_at_each_sequence(root_dataset):
+    """One instance sees a root's sequences one after another: without the
+    hook, the second sequence continues the state the first one left."""
+    root, _, _ = root_dataset
+    counter = _FrameCounter()
+
+    RawDataset.run_preprocess(counter, root)
+
+    assert counter.starts == 2
+    for seq, n_lidar in (("seq_a", 3), ("seq_b", 2)):
+        der = RawDataset(root / seq, keys=["frame_no"])
+        got = [int(der[i].data["frame_no"][0]) for i in range(len(der))]
+        assert got == list(range(n_lidar))
+
+
+class _SequenceLength(SequencePreprocessor):
+    output_key = "seq_len"
+    output_loader = "npys"
+    input_keys = ["lidar"]
+    timestamps_from = "lidar"
+
+    def __init__(self) -> None:
+        self.starts = 0
+
+    def start_sequence(self) -> None:
+        self.starts += 1
+
+    def __call__(self, frames) -> np.ndarray:
+        n = sum(1 for _ in frames)
+        return np.full((n, 1), n)
+
+
+def test_run_preprocess_starts_a_sequence_preprocessor_once_per_sequence(root_dataset):
+    root, _, _ = root_dataset
+    proc = _SequenceLength()
+    RawDataset.run_preprocess(proc, root)
+    assert proc.starts == 2
 
 
 # ─────────────────────────────── errors ──────────────────────────────────────
@@ -618,3 +687,59 @@ def test_repr_counts_sequences_on_a_root(root_dataset):
     root, len_a, len_b = root_dataset
     text = repr(RawDataset(root))
     assert text.startswith(f"RawDataset(n={len_a + len_b}, sequences=2, keys=[")
+
+
+def test_root_of_declared_only_sequences(tmp_path):
+    # A sequence whose only channel is a container file no format detects (an
+    # HDF5 recording, split into channels by its declaration) is still a
+    # sequence of its root: its apairo.yaml marks it.
+    from apairo.core.abstract_loader import AbstractLoader
+    from apairo.core.formats import Format, register_format
+
+    class RowsLoader(AbstractLoader):
+        def __init__(self, directory, files=None):
+            self.rows = np.loadtxt(os.path.join(directory, "rec.rows"), ndmin=2)
+
+        def __len__(self):
+            return len(self.rows)
+
+        def __getitem__(self, i):
+            return self.rows[i]
+
+        @property
+        def shape(self):
+            return self.rows.shape[1:]
+
+    class DeclaredOnly(Format):
+        name = "declared_only_rows"
+        loader = RowsLoader
+        extensions = frozenset({".rows"})
+        per_frame = False
+
+        def detect(self, directory):
+            return False
+
+    register_format(DeclaredOnly, replace=True)
+    root = tmp_path / "root"
+    for name in ("demo_a", "demo_b"):
+        seq = root / name
+        seq.mkdir(parents=True)
+        np.savetxt(seq / "rec.rows", np.arange(6.0).reshape(3, 2))
+        np.savetxt(seq / "t.stamps", [0.0, 0.1, 0.2])
+        (seq / "apairo.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "version": 1,
+                    "channels": {
+                        "rows": {
+                            "loader": "declared_only_rows",
+                            "directory": ".",
+                            "key": {"file": "t.stamps"},
+                        }
+                    },
+                }
+            )
+        )
+    ds = RawDataset(root, keys=["rows"])
+    assert ds.sequence_ids == ["demo_a", "demo_b"]
+    assert len(ds) == 6

@@ -2,7 +2,7 @@
 
 apairo reads a dataset as a set of **channels** — one directory per channel,
 holding per-frame files (or a single stacked file) in a format the loader
-registry understands (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`). Turning *your*
+registry understands (`npy`, `npys`, `bin`, `img`, `zarr`, `pcd`, `csv`, `hdf5`, `video`). Turning *your*
 directories into a loadable dataset comes down to three small questions per
 channel. Two have always been implicit; this page makes all three explicit — and
 shows how the **`key`** and **`order`** fields let a channel carry its own

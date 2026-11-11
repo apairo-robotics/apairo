@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from abc import abstractmethod
 from pathlib import Path
@@ -25,6 +26,35 @@ from apairo.core.config import (
 logger = logging.getLogger(__name__)
 
 
+def _opening_kwargs(cls: type, args: tuple, kwargs: dict) -> dict:
+    """The keyword arguments a ``cls(*args, **kwargs)`` call opens a dataset
+    with, besides its directory and its ``keys``: what ``ds.run_preprocess``
+    must pass again when the runner reopens the dataset (``declare=``,
+    ``split=``...). Only the arguments the caller gave; a call that does not
+    bind returns ``{}`` and lets ``__init__`` raise."""
+    try:
+        signature = inspect.signature(cls.__init__)  # type: ignore[misc]
+        bound = signature.bind_partial(None, *args, **kwargs)
+    except (TypeError, ValueError):
+        return {}
+    params = list(signature.parameters.values())
+    skipped = {p.name for p in params[:2]} | {"keys"}  # self, the directory
+    opened: dict = {}
+    for name, value in bound.arguments.items():
+        kind = signature.parameters[name].kind
+        if kind is inspect.Parameter.VAR_KEYWORD:
+            opened.update({k: v for k, v in value.items() if k != "keys"})
+        elif kind is not inspect.Parameter.VAR_POSITIONAL and name not in skipped:
+            opened[name] = value
+    # A deprecated spelling is passed again under its current name, so the
+    # reopened dataset does not warn a second time.
+    for old, new in getattr(cls, "_deprecated_open_kwargs", {}).items():
+        if old in opened:
+            value = opened.pop(old)
+            opened.setdefault(new, value)
+    return opened
+
+
 class _RunPreprocessDescriptor:
     """Descriptor that makes run_preprocess work on both classes and instances.
 
@@ -37,6 +67,10 @@ class _RunPreprocessDescriptor:
 
         if obj is not None:
             root_dir = obj.root_dir
+            # The runner reopens the dataset with the preprocessor's input keys:
+            # it must reopen it as this instance was opened (its declaration,
+            # its split...). An explicit kwarg replaces the instance's own.
+            opened = getattr(obj, "_open_kwargs", {})
 
             def _instance_run(
                 preprocessor,
@@ -53,7 +87,7 @@ class _RunPreprocessDescriptor:
                     overwrite=overwrite,
                     reuse=reuse,
                     output_format=output_format,
-                    **dataset_kwargs,
+                    **{**opened, **dataset_kwargs},
                 )
 
             return _instance_run
@@ -103,6 +137,15 @@ class ConfigurableDataset:
 
         config = self._load_or_create_config(sequence_dir)
     """
+
+    _open_kwargs: dict = {}
+
+    def __new__(cls, *args, **kwargs):
+        # Remember how the instance is opened, for ds.run_preprocess(...): a
+        # subclass's own arguments are kept with no code of its own.
+        self = super().__new__(cls)
+        self._open_kwargs = _opening_kwargs(cls, args, kwargs)
+        return self
 
     @classmethod
     def register_channel(
@@ -186,8 +229,11 @@ class ConfigurableDataset:
         ds = Goose3DDataset("/data/GOOSE_3D", keys=["lidar"], split="train")
         ds.run_preprocess(preprocessor)
 
-    Extra keyword arguments are forwarded to the dataset constructor (class form)
-    or ignored (instance form, since the instance is already configured).
+    Extra keyword arguments are forwarded to the dataset constructor. The
+    instance form reopens the dataset as the instance was opened -- the same
+    ``declare=``, ``split=``, ``sequences=``... -- with the preprocessor's
+    ``input_keys`` as its keys; a keyword argument given to ``run_preprocess``
+    replaces the instance's own.
     ``overwrite=True`` recomputes even if the output already exists.
 
     To preview a :class:`~apairo.core.preprocessor.FramePreprocessor` without
@@ -216,7 +262,7 @@ class ConfigurableDataset:
         config = (
             read_config(sequence_dir)
             if config_exists(sequence_dir)
-            else cls(sequence_dir)._load_or_create_config(sequence_dir)  # type: ignore[call-arg]
+            else cls(sequence_dir)._load_or_create_config(sequence_dir)
         )
         channels = config.get("channels", {})
 

@@ -368,3 +368,71 @@ def test_an_index_file_outside_the_sequence_is_refused(tmp_path):
     registry.write_text(yaml.safe_dump(doc))
     with pytest.raises(ValueError):
         RawDataset(seq).load_view("v")
+
+
+def _registry_entry(seq, name):
+    return yaml.safe_load((seq / ".apairo" / "views.yaml").read_text())["views"][name]
+
+
+def test_a_tolerance_per_channel_is_persisted_and_reloaded(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    view = RawDataset(seq).synchronize(
+        reference="cam", method={"imu": "nearest"}, tolerance={"imu": 0.005}
+    )
+    assert len(view) == 4
+    view.persist("v")
+    assert _registry_entry(seq, "v")["tolerance"] == {"imu": 0.005}
+    again = RawDataset(seq).load_view("v")
+    _same(view, again)
+    again.persist("w")  # a reloaded view persists as it was made
+    assert _registry_entry(seq, "w")["tolerance"] == {"imu": 0.005}
+
+
+def test_a_tolerance_per_channel_is_kept_under_real_names(tmp_path):
+    seq = _seq(tmp_path / "seq")
+    (seq / "apairo.yaml").write_text(
+        "version: 1\nchannels:\n  imu: {alias: inertial}\n"
+    )
+    view = RawDataset(seq).synchronize(
+        reference="cam", method="nearest", tolerance={"inertial": 0.005}
+    )
+    view.persist("v")
+    assert _registry_entry(seq, "v")["tolerance"] == {"imu": 0.005}
+    (seq / "apairo.yaml").unlink()
+    again = RawDataset(seq).load_view("v")
+    assert again.keys == ["cam", "imu"]
+    again.persist("w")
+    assert _registry_entry(seq, "w")["tolerance"] == {"imu": 0.005}
+
+
+def test_a_scalar_tolerance_is_persisted_as_before(tmp_path):
+    # A view made with one tolerance keeps the 0.9 registry form, and a 0.9
+    # registry entry (a number) reloads.
+    seq = _seq(tmp_path / "seq")
+    view = RawDataset(seq).synchronize(
+        reference="cam", method="nearest", tolerance=0.005
+    )
+    view.persist("v")
+    assert _registry_entry(seq, "v")["tolerance"] == 0.005
+    again = RawDataset(seq).load_view("v")
+    _same(view, again)
+    again.persist("w")
+    assert _registry_entry(seq, "w")["tolerance"] == 0.005
+
+
+def test_a_tolerance_naming_no_channel_of_the_view_is_reported(tmp_path, capsys):
+    seq = _seq(tmp_path / "seq")
+    RawDataset(seq).synchronize(reference="cam", tolerance={"imu": 0.5}).persist("v")
+    registry = seq / ".apairo" / "views.yaml"
+    data = yaml.safe_load(registry.read_text())
+    data["views"]["v"]["tolerance"] = {"lidar": 0.5, "imu": "fast"}
+    registry.write_text(yaml.safe_dump(data))
+    with pytest.raises(ValueError, match="'tolerance' names channel 'lidar'"):
+        RawDataset(seq).load_view("v")
+    try:
+        main(["check", str(seq), "--json"])
+    except SystemExit:
+        pass
+    issues = json.loads(capsys.readouterr().out)["issues"]
+    assert any("'tolerance' names channel 'lidar'" in i for i in issues)
+    assert any("tolerance of 'imu' is not a duration" in i for i in issues)

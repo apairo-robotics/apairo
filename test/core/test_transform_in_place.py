@@ -1,4 +1,4 @@
-"""transform()'s in_place default is deprecated: it changes in 0.11.
+"""transform()'s in_place default is deprecated: it changes in 0.12.
 
 Left unset, in_place behaves as True (the 0.9 behaviour) and warns. Passing
 it either way is silent. Assigning the result gives the same dataset under
@@ -58,7 +58,7 @@ def lidar(dataset, idx=0):
 def test_unset_warns_and_names_the_fix(ds):
     with pytest.warns(FutureWarning, match=r"ds = ds\.transform") as record:
         ds.transform("lidar", _plus_one)
-    assert "0.11" in str(record[0].message)
+    assert "0.12" in str(record[0].message)
 
 
 def test_unset_warning_points_at_the_caller(ds):

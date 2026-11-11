@@ -82,9 +82,11 @@ channels:
 | `alias` | no | Public name the channel loads under (the directory keeps its real name). Must be unique and must not shadow a real channel directory. |
 | `directory` | no | On-disk directory the channel's files live in, when different from its key: another channel's directory (colocation), or a **nested relative path** (`per_object_gt/pcd` — an annotation tool's export). Resolved from the sequence directory; `..`, absolute paths and drive anchors are rejected. Defaults to the key. |
 | `suffix` | no | Per-frame colocation: load only `<frame_stem>_<suffix>.npy` from `directory` (e.g. `velodyne_0/000000_intensity.npy` beside `000000.npy`). Formats with suffixed variants only (`npys`, or a plugin's); `check` reports it elsewhere. The sub-channel reads its directory's clock, and its latency. |
-| `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`); for `csv`, the table file (needed for a `.txt` table). `npy` and `csv` only. |
+| `array_file` | no | Whole-array colocation: the exact stacked `.npy` this channel loads from `directory`, when it holds more than one (e.g. `valid_mask.npy` beside `poses.npy`); for `csv`, the table file (needed for a `.txt` table); for `hdf5`, the container file, by name or by a glob that matches one file. `npy`, `csv` and `hdf5` only. |
+| `array` | for `hdf5` | The path of the channel's array inside the container file, e.g. `/robot_state/measured_force`; frame `i` is row `i`. `hdf5` only. |
+| `decode` | no | `video`: the `array` is one value holding an encoded video (MP4 bytes), and frame `i` is its `i`-th decoded frame. `hdf5` only. |
 | `fields` | no | The field contract of a `pcd` channel, e.g. `[x, y, z, intensity]`. A PCD header is self-describing, so two frames may declare different fields; naming them here selects those columns in that order, making the channel's width a declared property rather than a per-file accident. A frame missing one raises, naming both sets. Omitted, every field the file declares is returned in header order. For `csv`, the table columns to keep, by header name. `pcd` and `csv` only. |
-| `key` | no | Where the channel's clock comes from, when it is not a `timestamps.txt`: `{name: <regex>}` parses it from each frame's filename (per-frame formats), `{file: <name>}` reads a sidecar of one timestamp per frame, `{column: <index or name>}` takes a table column (`csv`) -- with `units`/`scale`. A form a format plugin provides is accepted on its channels. See [the `key` field](bring-your-own-dataset.md#the-key-field). |
+| `key` | no | Where the channel's clock comes from, when it is not a `timestamps.txt`: `{name: <regex>}` parses it from each frame's filename (per-frame formats), `{file: <name>}` reads a sidecar of one timestamp per frame, `{column: <index or name>}` takes a table column (`csv`), `{array: <path>}` an array of the same container file (`hdf5`), `{pts: true}` a video's presentation timestamps (`video`) -- with `units`/`scale` where they apply. A form a format plugin provides is accepted on its channels. See [the `key` field](bring-your-own-dataset.md#the-key-field). |
 | `order` | no | The frame order of a per-frame channel, as a filename regex `{name: <regex>}`: the matching files, sorted by the regex's first capture group. See [the `order` field](bring-your-own-dataset.md#the-order-field). |
 | `latency` | no | How long before its timestamp each frame was captured, in seconds: a sensor's transport delay (`0.008416` for an IMU forwarded by a microcontroller). The channel's clock -- whatever its source -- is moved back by it before anything is aligned to it; a channel borrowing this clock, or a suffixed sub-channel sharing its directory, gets the corrected one. A finite number; YAML's `8e-3` string is read as one. |
 | `recipe` | no | Machine provenance written by `run_preprocess`: a hash of the preprocessor's declared configuration, which `reuse=True` compares. Never declared by hand. |
@@ -163,7 +165,7 @@ views:
     reference: velodyne_0          # null for an external clock
     method: {velodyne_0: nearest, multisense_imu: nearest,
              gicp_poses: "interpolate:apairo_transform.interp.Se3Interp"}
-    tolerance: 0.05                # null for none
+    tolerance: 0.05                # null for none; per channel: {velodyne_0: 0.05}
     frames: 5041
     sources:                       # the fingerprint load_view checks
       velodyne_0: {frames: 5041, clock: 3fa2b0c94e17d8a1}
@@ -176,7 +178,7 @@ views:
 | `file` | The index file, relative to `.apairo/`. |
 | `reference` | The channel whose clock the view resamples onto; `null` for an external clock. |
 | `method` | Per channel: `previous`, `next`, `nearest`, `custom:<name>` (a callable, not needed to reload), or `interpolate:<class>` (passed again to `load_view`). |
-| `tolerance` | The tolerance, in seconds, or `null`. |
+| `tolerance` | The tolerance, in seconds, or `null`. A tolerance given per channel is a mapping of channel to seconds (or `null`); a channel it does not list is unconstrained. |
 | `frames` | The number of frames the view kept. |
 | `sources` | Per channel, its frame count and a hash of its clock when the view was persisted. A difference makes `load_view` refuse the view as stale. |
 | `created` | When the view was persisted (UTC). |

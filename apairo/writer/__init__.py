@@ -1,4 +1,5 @@
 from .bin_writer import BINWriter
+from .channel_writer import ChannelWriter
 from .npy_writer import NPYWriter
 from .tar_writer import TarImageWriter
 from .zarr_writer import ZarrWriter
@@ -10,9 +11,6 @@ WRITERS: dict[str, type] = {
     "zarr": ZarrWriter,
     "img": TarImageWriter,
 }
-
-# Imported last: channel_writer pulls the per-frame writer classes defined above.
-from .channel_writer import ChannelWriter  # noqa: E402
 
 __all__ = [
     "NPYWriter",

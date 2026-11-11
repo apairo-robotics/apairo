@@ -348,3 +348,135 @@ def test_method_dict_unknown_channel_raises(async_ds):
 def test_method_dict_repr(async_ds):
     view = async_ds.synchronize(method={"imu": LerpInterp()})
     assert "per-channel" in repr(view)
+
+
+# ─────────────────────────── load(key, idx) ──────────────────────────────────
+
+
+class _CountingLoader:
+    """Wraps a loader and records the rows read through it."""
+
+    def __init__(self, inner):
+        self.inner, self.reads = inner, []
+
+    def __len__(self):
+        return len(self.inner)
+
+    def __getitem__(self, i):
+        self.reads.append(i)
+        return self.inner[i]
+
+
+def test_load_returns_one_channel_of_a_frame(async_ds):
+    view = async_ds.synchronize(reference="lidar", method="previous")
+    for k in range(len(view)):
+        for key in ("lidar", "imu"):
+            np.testing.assert_array_equal(view.load(key, k), view[k].data[key])
+    np.testing.assert_array_equal(view.load("imu", -1), view[-1].data["imu"])
+
+
+def test_load_interpolates_an_interpolated_channel(async_ds):
+    view = async_ds.synchronize(reference="lidar", method={"imu": LerpInterp()})
+    np.testing.assert_allclose(view.load("imu", 1), np.full(2, 2 + 1 / 3), rtol=1e-6)
+    np.testing.assert_allclose(view.load("imu", 3), np.full(2, 7.0))
+
+
+def test_load_reads_only_the_channel_asked_for(async_ds):
+    view = async_ds.synchronize(reference="lidar", method={"imu": LerpInterp()})
+    lidar = async_ds.loaders["lidar"] = _CountingLoader(async_ds.loaders["lidar"])
+    imu = async_ds.loaders["imu"] = _CountingLoader(async_ds.loaders["imu"])
+    view.load("imu", 1)
+    assert lidar.reads == [] and imu.reads == [2, 3]
+    view.load("lidar", 2)
+    assert lidar.reads == [2] and imu.reads == [2, 3]
+
+
+def test_load_refuses_an_unknown_channel_or_frame(async_ds):
+    view = async_ds.synchronize(reference="lidar")
+    with pytest.raises(KeyError, match="nope"):
+        view.load("nope", 0)
+    with pytest.raises(IndexError):
+        view.load("lidar", len(view))
+
+
+def test_per_channel_filter_on_a_view_reads_that_channel_only(async_ds):
+    view = async_ds.synchronize(reference="lidar")
+    imu = async_ds.loaders["imu"] = _CountingLoader(async_ds.loaders["imu"])
+    assert len(view.filter("lidar", lambda x: x[0] >= 2)) == 2
+    assert imu.reads == []
+
+
+# ───────────────────────── per-channel tolerance ─────────────────────────────
+
+
+def _make_channels(tmp_path, clocks):
+    """An AsyncLayoutDataset with one npys channel per ``{name: timestamps}``;
+    frame i of each channel holds np.full(2, i)."""
+    for name, ts in clocks.items():
+        d = tmp_path / name
+        d.mkdir()
+        for i in range(len(ts)):
+            np.save(d / f"{i:06d}.npy", np.full(2, i, dtype=np.float32))
+        np.savetxt(d / "timestamps.txt", np.asarray(ts, dtype=float))
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("".join(f"{name}: npys\n" for name in clocks))
+    return AsyncLayoutDataset(tmp_path, keys=list(clocks), dataset_profile=profile)
+
+
+@pytest.fixture
+def camera_lidar_poses(tmp_path):
+    # camera at 10 Hz; lidar near each tick but 80 ms off at t=0.2; poses at
+    # 5 Hz, so an interpolated tick between two poses is 100 ms from both.
+    return _make_channels(
+        tmp_path,
+        {
+            "camera": [0.0, 0.1, 0.2, 0.3, 0.4],
+            "lidar": [0.01, 0.12, 0.29, 0.41],
+            "poses": [0.0, 0.2, 0.4],
+        },
+    )
+
+
+def _sync(ds, tolerance):
+    return ds.synchronize(
+        reference="camera",
+        method={"lidar": "nearest", "poses": LerpInterp()},
+        tolerance=tolerance,
+    )
+
+
+def test_a_scalar_tolerance_holds_every_channel_to_it(camera_lidar_poses):
+    np.testing.assert_allclose(
+        _sync(camera_lidar_poses, 0.05).reference_timestamps, [0.0, 0.4]
+    )
+    assert len(_sync(camera_lidar_poses, 0.15)) == 5
+
+
+def test_a_tolerance_per_channel(camera_lidar_poses):
+    # lidar within 50 ms, the poses' bracketing events within 150 ms: only the
+    # tick whose lidar scan is 80 ms away is dropped.
+    view = _sync(camera_lidar_poses, {"lidar": 0.05, "poses": 0.15})
+    np.testing.assert_allclose(view.reference_timestamps, [0.0, 0.1, 0.3, 0.4])
+
+
+def test_a_channel_left_out_of_the_tolerance_is_unconstrained(camera_lidar_poses):
+    view = _sync(camera_lidar_poses, {"lidar": 0.05})
+    np.testing.assert_allclose(view.reference_timestamps, [0.0, 0.1, 0.3, 0.4])
+    view = _sync(camera_lidar_poses, {"poses": 0.05, "lidar": None})
+    np.testing.assert_allclose(view.reference_timestamps, [0.0, 0.2, 0.4])
+    assert len(_sync(camera_lidar_poses, {})) == 5
+
+
+def test_a_tolerance_for_an_unknown_channel_is_refused(camera_lidar_poses):
+    with pytest.raises(KeyError, match="tolerance maps unknown channels"):
+        _sync(camera_lidar_poses, {"lidr": 0.05})
+    with pytest.raises(TypeError, match="not a set"):
+        _sync(camera_lidar_poses, {"lidar", 0.05})
+
+
+@pytest.mark.parametrize("bad", [-0.1, float("nan"), "0.05", True])
+def test_a_tolerance_is_a_duration(camera_lidar_poses, bad):
+    with pytest.raises((TypeError, ValueError), match="tolerance"):
+        _sync(camera_lidar_poses, {"lidar": bad})
+    with pytest.raises((TypeError, ValueError), match="tolerance"):
+        _sync(camera_lidar_poses, bad)

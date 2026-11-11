@@ -33,7 +33,7 @@ from test.loader.test_pcd_loader import XYZI, write_binary
 
 REPO = Path(__file__).resolve().parents[2]
 T0_NS = 1785248347168248576
-BUILTINS = ("npy", "npys", "bin", "img", "zarr", "pcd", "csv")
+BUILTINS = ("npy", "npys", "bin", "img", "zarr", "pcd", "csv", "hdf5")
 
 
 def _cli(args, capsys):
@@ -95,6 +95,12 @@ def _sample(tmp_path: Path, name: str) -> tuple[Path, dict]:
         zarr = pytest.importorskip("zarr")
         arr = zarr.open_array(str(d), mode="w", shape=(4, 3), dtype="float32")
         arr[:] = np.arange(12, dtype=np.float32).reshape(4, 3)
+    elif name == "hdf5":
+        h5py = pytest.importorskip("h5py")
+        with h5py.File(d / "rec.h5", "w") as f:
+            f["state"] = np.arange(12.0).reshape(4, 3)
+            f["t"] = 1.0 + np.arange(4) * 0.1
+        meta = {"array": "/state", "key": {"array": "/t"}}
     return d, meta
 
 
@@ -239,6 +245,25 @@ def test_a_preprocess_on_plugin_data_writes_the_plugin_format(tmp_path, plugins)
     RawDataset.run_preprocess(Convert("cloud", to="xyz"), seq)
     ds = RawDataset(seq, keys=["cloud", "cloud_xyz"])
     np.testing.assert_array_equal(ds.loaders["cloud_xyz"][1], ds.loaders["cloud"][1])
+
+
+def test_channel_writer_writes_a_plugin_format(tmp_path, plugins):
+    """ChannelWriter writes through the format contract: a plugin's per-frame
+    format is written, registered and read back like a built-in one."""
+    from apairo.writer import ChannelWriter
+
+    plugins(("xyz", "apairo_xyz:XyzFormat"))
+    seq = tmp_path / "seq"
+    cloud = np.arange(15, dtype=np.float32).reshape(5, 3)
+    with ChannelWriter(seq, "lidar", loader="xyz") as w:
+        w.add(cloud, stem="000000", timestamp=1.0)
+        w.add(cloud + 1, stem="000001", timestamp=2.0)
+    assert sorted(p.name for p in (seq / "lidar").glob("*.xyz")) == [
+        "000000.xyz",
+        "000001.xyz",
+    ]
+    ds = RawDataset(seq, keys=["lidar"])
+    np.testing.assert_array_equal(ds.load("lidar", 1), cloud + 1)
 
 
 def test_a_filename_order_reaches_the_plugin_loader(tmp_path, plugins):
@@ -420,14 +445,15 @@ def test_a_broken_plugin_is_skipped_with_a_warning(plugins, caplog):
 def test_an_unknown_loader_points_at_plugins(tmp_path, plugins, capsys):
     plugins()
     with pytest.raises(KeyError, match="Write a format plugin"):
-        get_format("h5")
+        get_format("mcap")
     seq = tmp_path / "seq"
     (seq / "scan").mkdir(parents=True)
     write_config(
-        seq, {"version": 1, "channels": {"scan": {"kind": "raw", "loader": "h5"}}}
+        seq, {"version": 1, "channels": {"scan": {"kind": "raw", "loader": "mcap"}}}
     )
     assert any(
-        "unknown loader 'h5' (known: bin, csv, img, npy, npys, pcd, zarr)" in i
+        "unknown loader 'mcap' (known: bin, csv, hdf5, img, npy, npys, pcd, video, zarr)"
+        in i
         for i in verify_config(seq)
     )
 

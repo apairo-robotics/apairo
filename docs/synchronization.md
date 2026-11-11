@@ -32,7 +32,9 @@ sample.timestamp      # timestamp of the reference frame
   time, past or future, ties favouring the earlier event (best alignment
   for offline training).
 - **`tolerance`** -- reference frames where any channel has no event within
-  the window are dropped, so every sample is guaranteed fresh.
+  the window are dropped, so every sample is guaranteed fresh. One number
+  bounds every channel; a dict bounds each channel on its own (see
+  [a tolerance per channel](#a-tolerance-per-channel)).
 
 The matching is a pure index computation (one `searchsorted` per channel) --
 nothing is read from disk until access. Inspect the alignment with
@@ -91,8 +93,30 @@ ds_sync.time_offsets("gicp_poses")   # zeros: synthesized at the tick
 
 Rules: ticks not bracketed by two events are dropped; exact matches return
 the stored value untouched; with `tolerance`, *both* bracketing events must
-lie within tolerance. Custom interpolators subclass `apairo.Interpolator` —
-a single method `(t, t0, v0, t1, v1) -> value`.
+lie within the channel's tolerance. Custom interpolators subclass
+`apairo.Interpolator` — a single method `(t, t0, v0, t1, v1) -> value`.
+
+## A tolerance per channel
+
+Channels at different rates rarely want the same bound. A camera at 10 Hz is
+the reference; the lidar, matched `"nearest"`, must lie within 50 ms. Poses
+on the lidar's clock are interpolated, so their bracketing events can be up
+to 100 ms from a tick. One number would have to be 0.15 s for everything.
+Give `tolerance` as a dict instead, as `method` is:
+
+```python
+ds_sync = ds.synchronize(
+    reference="camera",
+    method={"lidar": "nearest", "poses": Se3Interp()},
+    tolerance={"lidar": 0.05, "poses": 0.15},
+)
+```
+
+A channel the dict does not list, or maps to `None`, is unconstrained. Here
+the camera, which is the reference, always matches its own tick. An
+interpolated channel's tolerance bounds both of its bracketing events. A
+name that is not a channel of the dataset is refused, and so is a tolerance
+that is not a number of seconds `>= 0`.
 
 ## Custom matching strategies
 
@@ -139,6 +163,15 @@ loader = DataLoader(ds_train, batch_size=8, shuffle=True, num_workers=4,
                     collate_fn=my_collate)
 ```
 
+To look at one channel of a frame without reading the others, use
+`load(key, k)`: it returns frame `k`'s value for that channel, the matched
+event or the value interpolated at the tick, and reads that channel only.
+A per-channel `filter` reads its channel the same way.
+
+```python
+ds_sync.load("image_left", 42)    # one image, the scan of frame 42 is not read
+```
+
 !!! note "Transforms and synchronize()"
     `synchronize()` reads channel data directly from the loaders -- transforms
     registered on the *async* parent are not applied. Register transforms on
@@ -162,7 +195,7 @@ ds_sync = RawDataset(seq).load_view("lidar_sync")
 
 - the reference ticks it kept;
 - one index array per channel;
-- the method and the tolerance;
+- the method and the tolerance (per channel when it was given per channel);
 - a fingerprint of every source channel: its frame count and a hash of its
   clock.
 

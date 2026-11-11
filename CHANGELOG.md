@@ -7,6 +7,110 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-11
+
+### Added
+
+- **`Preprocessor.start_sequence()`**: a hook `run_preprocess` calls before the
+  first frame of each sequence. A preprocessor that carries state between
+  frames (odometry, tracking) overrides it to forget that state; on a root of
+  several sequences one instance used to carry the pose and the map of a
+  sequence into the next. Stateless preprocessors are unaffected.
+- **Video: the `video` format, and `decode: video` in `hdf5`**
+  (`pip install apairo[video]`, PyAV). A channel is a video's frames, `(H, W,
+  3)` uint8 RGB, decoded on access with random access: the packets are indexed
+  once, a jump decodes from the nearest keyframe before the frame, and a
+  sequential pass decodes each frame once. A channel directory holding one
+  video file is detected; `key: {pts: true}` takes its clock from the
+  presentation timestamps. Inside an HDF5 container, `decode: video` reads one
+  value holding an encoded video. REASSEMBLE's three cameras are now channels
+  of its declaration.
+- **HDF5 containers: the `hdf5` format** (`pip install apairo[hdf5]`). A
+  channel is one array of a container file, named by its path inside it
+  (`array: /robot_state/measured_force`), and its clock is another array of
+  the same file (`key: {array: /timestamps/measured_force, units: [s]}`), the
+  way asynchronous robot recordings store one clock per sensor. Rows are read
+  in place, a file handle opens lazily once per process, and `array_file`
+  takes a name or a glob that matches one file. The format is declared, never
+  detected: a container holds a whole recording, which only a declaration
+  splits into channels. Guide: "HDF5 containers".
+- **`Format.detectable`.** A format a channel only ever declares sets it to
+  `False`: its `detect` answers no, and `check_format` checks that instead of
+  detection.
+- **REASSEMBLE ships as a declaration.** `declare="reassemble"` reads a
+  demonstration of the TU Wien contact-rich assembly dataset as published:
+  force and torque (~1.7 kHz), joints (~1 kHz), pose (~600 Hz) and gripper,
+  each on its own clock. `pip install apairo[reassemble]`; sample
+  `mini_reassemble`, cut from the official archive.
+- **A tolerance per channel.** `synchronize(tolerance=...)` takes a dict
+  mapping channels to seconds, as `method` does:
+  `tolerance={"lidar": 0.05, "poses": 0.15}`. A channel it does not list, or
+  maps to `None`, is unconstrained, and an interpolated channel's tolerance
+  bounds both of its bracketing events. A camera reference with a lidar
+  matched within 50 ms and poses interpolated between lidar-clocked events
+  up to 100 ms away no longer needs 0.15 s for every channel. An unknown
+  channel is refused, and so is a tolerance that is not a finite number of
+  seconds `>= 0`, a single one included (a negative bound dropped every
+  frame). `persist` stores a per-channel tolerance as a mapping under the
+  channels' real names. A single tolerance is stored as a number, as in
+  0.9, so views persisted by 0.9 reload unchanged. `apairo check` validates
+  both forms.
+- **`ChannelWriter` writes any per-frame format that writes, images
+  included.** It knew `npys` and `bin` only, from a table of its own. It now
+  writes through the format contract: `img` (PNG: `uint8` masks and images,
+  `uint16` depth maps), `npys`, `bin`, or a plugin's per-frame format, with
+  the format's `write_suffix`. A frame the format cannot read back unchanged
+  is refused before it is written, naming its dtype and shape. `npys` and
+  `bin` frames are written byte for byte as before, and resuming a channel
+  picks up the frames its format reads.
+
+
+### Changed
+
+- **`transform()` keeps its in-place default one more release.** The
+  `FutureWarning` announced the change for 0.11; it now names 0.12. Nothing to
+  do if you already assign the result (`ds = ds.transform(...)`) or pass
+  `in_place=`.
+- **`ChannelWriter(loader="bin")` refuses a frame that is not `(N, 4)`
+  `float32`**, as `run_preprocess` does since 0.9. It cast any array to
+  `float32` and flattened it, which did not read back as written. Cast the
+  frame yourself, or write it as `npys`. A stacked or read-only format is
+  refused with the list of formats the writer can write.
+
+
+### Fixed
+
+- **`status`, `check` and `init` read a declared sequence.** A directory
+  whose channels only a declaration names -- no `.apairo/`, no channel
+  directory to detect -- was "not an apairo dataset" for the command line and
+  had "no recognizable channels" for `init`, though `RawDataset` loaded it.
+  A declaration, the directory's own or `--declare`, now makes it a sequence
+  everywhere, unless it is a root.
+- **A declared sequence is a sequence of its root.** A root's subdirectory
+  counted only when it had a `.apairo/` or a channel directory a format
+  detects. A recording whose channels only a declaration can name -- one HDF5
+  container file, split into channels by `array:` -- has neither until it is
+  opened once, so its root failed with "neither a sequence nor a dataset
+  root". A subdirectory with an `apairo.yaml` now counts.
+- **`ds.run_preprocess(p)` reopens the dataset as `ds` was opened.** The
+  runner reopens the dataset with the preprocessor's input keys, and the
+  instance form passed it only the directory: a `declare=`, a `split=` or a
+  `sequences=` was lost. A sequence whose clock is declared in an external
+  file failed with "no clock declared", and a selection ran on the whole
+  root. The instance's own arguments are now passed again, every one but its
+  `keys`, a subclass's included; a keyword argument given to `run_preprocess`
+  replaces the instance's own. The deprecated `sequence_ids=` is passed again
+  as `sequences=`, so the reopened dataset does not warn a second time.
+- **`load(key, k)` works on a synchronized view.** It raised
+  `AttributeError: 'SynchronizedView' object has no attribute 'loaders'`. It
+  now returns frame `k`'s value for that channel -- the matched event, or the
+  value interpolated at the tick -- and reads that channel only, where `ds[k]`
+  reads them all. On a root, `synchronize()`'s result routes it to the
+  sequence that holds frame `k`. A per-channel `filter(key, fn)` on the view
+  reads its channel alone too, where it read every channel of every frame. On
+  a dataset that cannot read one channel alone (a cached or a filtered view),
+  `load` says so and names the way that works.
+
 ## [0.10.3] - 2026-11-10
 
 The last part of the audit: the code of `apairo status` and `apairo check`,
@@ -1236,7 +1340,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/apairo-robotics/apairo/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/apairo-robotics/apairo/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/apairo-robotics/apairo/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...v0.10.1

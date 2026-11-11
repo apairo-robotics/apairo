@@ -7,6 +7,7 @@ import numpy as np
 
 from apairo.core import AbstractDataset
 from apairo.core.sample import Sample
+from apairo.core.utils.indexing import from_end
 
 if TYPE_CHECKING:
     from apairo.core.abstract_dataset import FrameRef
@@ -123,6 +124,19 @@ class ConcatDataset(AbstractDataset):
         """Channel that produced each global frame, concatenated from the
         children."""
         return np.concatenate([ds.frame_channel_ids for ds in self.datasets])
+
+    def load(self, key: str, idx: int):
+        """Channel *key* of frame *idx*, read alone by the dataset that owns
+        the frame (see :meth:`AbstractDataset.load`)."""
+        if key not in self._keys:
+            raise KeyError(f"{key!r} is not a channel of this dataset: {self._keys}.")
+        if idx < 0:
+            idx = from_end(idx, len(self))
+        ds_idx, offset = self._dataset_idx_and_offset(idx)
+        return self.datasets[ds_idx].load(key, idx - offset)
+
+    def _reads_channel(self, key: str) -> bool:
+        return key in self._keys and all(ds._reads_channel(key) for ds in self.datasets)
 
     def _load(self, idx: int) -> Sample:
         ds_idx, offset = self._dataset_idx_and_offset(idx)

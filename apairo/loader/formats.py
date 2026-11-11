@@ -9,15 +9,20 @@ from pathlib import Path
 
 import numpy as np
 
+from apairo.core.config import KEY_UNITS
 from apairo.core.formats import Facts, Format
 from apairo.core.keys import epoch_unit, parse_column_key
 from apairo.core.naming import is_frame_file
 from apairo.loader.bin_loader import BINLoader
 from apairo.loader.csv_loader import CSVLoader, looks_like_table, scan_table
+from apairo.loader.hdf5_loader import EXTENSIONS as HDF5_EXTENSIONS
+from apairo.loader.hdf5_loader import Hdf5ArrayLoader, locate
 from apairo.loader.img_loader import IMGLoader
 from apairo.loader.npy_loader import NPYLoader
 from apairo.loader.npys_loader import NPYSLoader
 from apairo.loader.pcd_loader import PCDLoader, _parse_header
+from apairo.loader.video_loader import EXTENSIONS as VIDEO_EXTENSIONS
+from apairo.loader.video_loader import VideoLoader
 from apairo.loader.zarr_loader import ZarrLoader
 
 
@@ -351,6 +356,171 @@ class CsvFormat(Format):
         return out
 
 
+def _array_clock_scale(spec: dict, label: str) -> float:
+    units, scale = spec.get("units"), spec.get("scale")
+    if units is not None and scale is not None:
+        raise ValueError(f"{label}: key has both 'units' and 'scale'; give one.")
+    if units is not None:
+        if len(units) != 1 or units[0] not in KEY_UNITS:
+            raise ValueError(
+                f"{label}: an array clock takes one unit of {sorted(KEY_UNITS)}, got {units!r}"
+            )
+        return float(KEY_UNITS[units[0]])
+    if scale is not None:
+        if len(scale) != 1:
+            raise ValueError(
+                f"{label}: an array clock takes one scale factor, got {scale!r}"
+            )
+        return float(scale[0])
+    return 1.0
+
+
+class Hdf5Format(Format):
+    """One array of an HDF5 container per channel, named by its path inside the
+    file (``array:``); its clock is a sibling array (``key: {array: ...}``).
+    Declared, never detected: a container is a whole recording, which only a
+    declaration splits into channels."""
+
+    name = "hdf5"
+    loader = Hdf5ArrayLoader
+    extensions = HDF5_EXTENSIONS
+    per_frame = False
+    fields = frozenset({"array_file", "array", "decode"})
+    key_forms = frozenset({"array"})
+    priority = 80
+    detectable = False
+
+    def detect(self, directory: Path) -> bool:
+        # Declared, never detected. A container is not a channel directory: it
+        # holds a whole recording, split into channels only by a declaration
+        # (`array:`). Claiming a directory with an .h5 in it would make every
+        # recording of a root look like a channel, and the root a sequence.
+        return False
+
+    def open(self, directory: Path, meta: dict, files: list[str] | None = None):
+        array = meta.get("array")
+        if not array:
+            raise ValueError(
+                f"an hdf5 channel names its array inside the file: 'array: /path/to/array' "
+                f"(in {directory})"
+            )
+        return Hdf5ArrayLoader(
+            str(directory),
+            array=array,
+            array_file=meta.get("array_file"),
+            decode=meta.get("decode"),
+        )
+
+    def clock(self, loader, spec: dict, label: str) -> np.ndarray:
+        clock = loader.read(spec["array"]).astype(
+            np.float64
+        ).ravel() * _array_clock_scale(spec, label)
+        if len(clock) != len(loader):
+            raise ValueError(
+                f"{label}: clock '{spec['array']}' has {len(clock)} values for "
+                f"{len(loader)} frames of '{loader.array}'"
+            )
+        return clock
+
+    def facts(
+        self, directory: Path, meta: dict, files: list[str] | None = None
+    ) -> Facts:
+        loader = self.open(directory, meta, files)
+        dataset = loader._dataset()
+        decoded = meta.get("decode") == "video"
+        facts = Facts(
+            frames=len(loader),
+            shape=list(loader.shape),
+            dtype="uint8" if decoded else str(dataset.dtype),
+        )
+        spec = meta.get("key")
+        if isinstance(spec, dict) and "array" in spec and len(loader):
+            clock = self.clock(loader, spec, "status")
+            facts.span = (float(clock[0]), float(clock[-1]))
+        return facts
+
+    def declare_hints(self, directory: Path, meta: dict) -> list[str]:
+        try:
+            import h5py
+
+            path = locate(directory, meta.get("array_file"))
+            names: list[str] = []
+            with h5py.File(path, "r") as f:
+                f.visititems(
+                    lambda n, o: (
+                        names.append(f"/{n} {o.shape}")
+                        if isinstance(o, h5py.Dataset) and o.ndim >= 1
+                        else None
+                    )
+                )
+        except (OSError, FileNotFoundError, ImportError):
+            return []
+        hints = ["    # array: <one of the arrays below>   # path inside the file"]
+        hints += [f"    #   {n}" for n in names[:40]]
+        if len(names) > 40:
+            hints.append(f"    #   ... {len(names) - 40} more")
+        return hints
+
+    def validate(self, key: str, meta: dict, storage_dir) -> list[str]:
+        issues = []
+        array = meta.get("array")
+        if array is not None and not (isinstance(array, str) and array.strip("/")):
+            issues.append(
+                f"{key}: 'array' must be a path inside the file, got {array!r}"
+            )
+        decode = meta.get("decode")
+        if decode is not None and decode != "video":
+            issues.append(f"{key}: decode: only 'video' is known, got {decode!r}")
+        spec = meta.get("key")
+        if (
+            isinstance(spec, dict)
+            and "array" in spec
+            and not isinstance(spec["array"], str)
+        ):
+            issues.append(
+                f"{key}: key.array must be a path inside the file, got {spec['array']!r}"
+            )
+        return issues
+
+
+class VideoFormat(Format):
+    """One video file per channel (MP4, MKV, ...): frame ``i`` is its ``i``-th
+    frame, decoded with random access. ``key: {pts: true}`` takes the clock
+    from the frames' presentation timestamps, in seconds from the stream's
+    origin; otherwise the channel needs a ``timestamps.txt`` or a borrowed
+    clock. Read-only: a re-encoded video would not read back unchanged."""
+
+    name = "video"
+    loader = VideoLoader
+    extensions = VIDEO_EXTENSIONS
+    per_frame = False
+    fields = frozenset({"array_file"})
+    key_forms = frozenset({"pts"})
+    priority = 45
+
+    def detect(self, directory: Path) -> bool:
+        return len(self.data_files(directory)) == 1
+
+    def open(self, directory: Path, meta: dict, files: list[str] | None = None):
+        return VideoLoader(str(directory), array_file=meta.get("array_file"))
+
+    def clock(self, loader, spec: dict, label: str) -> np.ndarray:
+        if spec.get("pts") is not True:
+            raise ValueError(f"{label}: the video clock is 'key: {{pts: true}}'.")
+        return loader.reader.seconds()
+
+    def facts(
+        self, directory: Path, meta: dict, files: list[str] | None = None
+    ) -> Facts:
+        loader = self.open(directory, meta, files)
+        facts = Facts(frames=len(loader), shape=list(loader.shape), dtype="uint8")
+        spec = meta.get("key")
+        if isinstance(spec, dict) and spec.get("pts") is True:
+            clock = loader.reader.seconds()
+            facts.span = (float(clock[0]), float(clock[-1]))
+        return facts
+
+
 # Registered by the registry, which keeps their names as the built-in ones.
 BUILTIN_FORMATS = (
     NpysFormat(),
@@ -360,4 +530,6 @@ BUILTIN_FORMATS = (
     ImgFormat(),
     ZarrFormat(),
     CsvFormat(),
+    Hdf5Format(),
+    VideoFormat(),
 )

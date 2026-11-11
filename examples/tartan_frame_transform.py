@@ -52,7 +52,7 @@ def to_base_frame(pts):
 
 
 # in_place=False returns a new dataset and leaves ds in the sensor frame
-# (the default from 0.11 on).
+# (the default from 0.12 on).
 ds_base = ds.transform("velodyne_0", to_base_frame, in_place=False)
 raw = ds[0].data["velodyne_0"]
 base = ds_base[0].data["velodyne_0"]

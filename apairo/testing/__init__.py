@@ -119,7 +119,12 @@ def _check_on_disk(
             or p.name == "timestamps.txt"
         ):
             problems.append(f"data_files() returned {p}, not a data file of the sample")
-    if not _safe(fmt.detect, directory, problems):
+    if not getattr(fmt, "detectable", True):
+        if _safe(fmt.detect, directory, problems):
+            problems.append(
+                "detect() claims a directory, but the format is declared-only"
+            )
+    elif not _safe(fmt.detect, directory, problems):
         problems.append("detect() does not recognize the sample directory")
     with tempfile.TemporaryDirectory() as empty:
         if _safe(fmt.detect, Path(empty), problems):

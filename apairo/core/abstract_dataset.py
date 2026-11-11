@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from apairo.core.chain import InferenceView
     from apairo.core.filtered_view import FilteredView
-    from apairo.core.synchronized_view import ChannelStrategy
+    from apairo.core.synchronized_view import ChannelStrategy, Tolerance
 from . import abstract_loader
 from ._ops import Op, records
 from .config import Calibration, read_calibration
@@ -95,7 +95,7 @@ class _PreprocessorStep:
 
 _IN_PLACE_DEFAULT_CHANGES = (
     "transform() modifies the dataset it is called on and returns it. In "
-    "apairo 0.11 it will return a new dataset and leave this one unchanged. "
+    "apairo 0.12 it will return a new dataset and leave this one unchanged. "
     "Assign the result (`ds = ds.transform(...)`) and pass in_place=False to "
     "adopt the new behaviour now, or in_place=True to keep modifying the "
     "dataset; either silences this warning."
@@ -212,7 +212,7 @@ class AbstractDataset(ABC):
     ) -> "AbstractDataset":
         """Register a transform in the pipeline, applied at access time.
 
-        Use the returned dataset: ``ds = ds.transform(...)``. In 0.11
+        Use the returned dataset: ``ds = ds.transform(...)``. In 0.12
         ``transform()`` will return a new dataset and leave the one it is
         called on unchanged, like ``synchronize``, ``window``, ``filter``,
         ``select`` and ``cache`` already do (see *Returned dataset* below).
@@ -272,7 +272,7 @@ class AbstractDataset(ABC):
         - ``in_place=False`` returns an independent copy that shares loaders
           and indices but owns its pipeline (the steps already registered are
           inherited), and leaves ``self`` untouched. This becomes the default
-          in 0.11::
+          in 0.12::
 
               base = Rellis3DDataset(root, keys=["lidar"])
               v1 = base.transform(augment_v1, in_place=False)
@@ -281,12 +281,12 @@ class AbstractDataset(ABC):
         - ``in_place=True`` registers the step on ``self`` and returns
           ``self``.
         - Left unset, it behaves as ``in_place=True`` and emits a
-          :class:`FutureWarning`, because the default changes in 0.11. Code
+          :class:`FutureWarning`, because the default changes in 0.12. Code
           that assigns the result (``ds = ds.transform(...)``) gives the same
           result either way; pass ``in_place`` to silence the warning.
 
         .. warning::
-            Until 0.11, ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
+            Until 0.12, ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
             leave ``v1 is v2 is ds`` with *both* steps stacked. To build
             independent variants, pass ``in_place=False``.
         """
@@ -606,9 +606,8 @@ class AbstractDataset(ABC):
         (``output=``) is computed. Views that only select frames or channels
         delegate to their parent, so the answer does not depend on the view.
         """
-        loaders = getattr(self, "loaders", None)
-        if loaders and key in loaders:
-            return loaders[key][idx]
+        if self._reads_channel(key):
+            return self.load(key, idx)
         data = self._load(idx).data
         if key in data:
             return data[key]
@@ -720,7 +719,7 @@ class AbstractDataset(ABC):
         self,
         reference: "str | np.ndarray | None" = None,
         method: "ChannelStrategy | dict[str, ChannelStrategy]" = "previous",
-        tolerance: float | None = None,
+        tolerance: "Tolerance" = None,
     ) -> "AbstractDataset":
         """Resample this asynchronous dataset onto a single reference clock.
 
@@ -769,9 +768,18 @@ class AbstractDataset(ABC):
                 index = no match); or an
                 :class:`~apairo.core.interpolator.Interpolator` synthesizing
                 the value at ``t_ref`` from the two bracketing events.
-            tolerance: Maximum ``|t - t_ref|`` in seconds.  Reference frames
-                where any channel has no match within tolerance are dropped
-                (for interpolated channels, both bracketing events count).
+            tolerance: Maximum ``|t - t_ref|`` in seconds, for every channel;
+                or a dict of per-channel tolerances, like ``method`` (unlisted
+                channels, and channels mapped to ``None``, are unconstrained).
+                Reference frames where any channel has no match within its
+                tolerance are dropped (for interpolated channels, both
+                bracketing events count)::
+
+                    ds.synchronize(
+                        reference="camera",
+                        method={"lidar": "nearest", "poses": Se3Interp()},
+                        tolerance={"lidar": 0.05, "poses": 0.15},
+                    )
 
         Returns:
             :class:`~apairo.core.synchronized_view.SynchronizedView`
@@ -783,7 +791,21 @@ class AbstractDataset(ABC):
         )
 
     def load(self, key: str, idx: int):
-        return self.loaders[key][idx]
+        """The stored value of channel *key* at *idx*, read alone (no
+        transform applied). Only a dataset that reads one channel without the
+        others has it: an on-disk dataset, a synchronized view."""
+        loaders = getattr(self, "loaders", None)
+        if loaders is None:
+            raise AttributeError(
+                f"{type(self).__name__} cannot load one channel alone; read "
+                f"the frame, ds[idx].data[{key!r}]."
+            )
+        return loaders[key][idx]
+
+    def _reads_channel(self, key: str) -> bool:
+        """Whether :meth:`load` reads *key* alone, cheaper than a frame."""
+        loaders = getattr(self, "loaders", None)
+        return loaders is not None and key in loaders
 
     @abstractmethod
     def _load(self, idx: int) -> "Sample": ...

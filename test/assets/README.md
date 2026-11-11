@@ -22,10 +22,11 @@ exercise the full loading path on data the synthetic tests cannot fake.
 | `mini_goose` | GOOSE 3D, `goose_3d_train.zip` and `goose_3d_val.zip` | CC BY-SA 4.0 | 9 scans of 3 scenes (train, val), clouds and labels strided to 1024 pts, official names |
 | `mini_semantic_kitti` | SemanticKITTI labels, sequences 00 and 08 | CC BY-NC-SA 3.0 | 6 real label files strided to 1024 pts; clouds and `times.txt` synthetic (KITTI needs a registration) |
 | `mini_kuka_ft_imu` | KUKA LBR Med F/T and IMU logs (Skrede, Zenodo 10.5281/zenodo.11096791) | CC BY 4.0 | the `1-baseline` tables whole, the first second of the two other runs |
+| `mini_reassemble` | REASSEMBLE, demonstration `2025-01-11-14-43-37` (TU Wien, doi:10.48436/0ewrv-8cb44) | CC BY 4.0 | the first half second of five sensors and three cameras (HDF5, MP4 inside), each on its own clock |
 
 `mini_rellis` and `mini_tartan` come from `python test/assets/extract_mini_datasets.py`
 (requires the full datasets on lab storage — see paths in the script).
-`mini_goose`, `mini_semantic_kitti` and `mini_kuka_ft_imu` come from
+`mini_goose`, `mini_semantic_kitti`, `mini_kuka_ft_imu` and `mini_reassemble` come from
 `python test/assets/fetch_public_samples.py`, which reads a few members of
 the official archives with HTTP range requests (about 60 MB downloaded).
 
