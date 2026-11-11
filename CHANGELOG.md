@@ -9,6 +9,11 @@ All notable changes to apairo are documented here. The format is based on
 
 ### Added
 
+- **`Preprocessor.start_sequence()`**: a hook `run_preprocess` calls before the
+  first frame of each sequence. A preprocessor that carries state between
+  frames (odometry, tracking) overrides it to forget that state; on a root of
+  several sequences one instance used to carry the pose and the map of a
+  sequence into the next. Stateless preprocessors are unaffected.
 - **Video: the `video` format, and `decode: video` in `hdf5`**
   (`pip install apairo[video]`, PyAV). A channel is a video's frames, `(H, W,
   3)` uint8 RGB, decoded on access with random access: the packets are indexed

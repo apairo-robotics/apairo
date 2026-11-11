@@ -71,6 +71,22 @@ class Preprocessor(ABC):
         """Declared output channel names -- ``output_keys`` or ``[output_key]``."""
         return self.output_keys if self.output_keys is not None else [self.output_key]
 
+    def start_sequence(self) -> None:  # noqa: B027 -- an optional hook, not abstract
+        """Called by ``run_preprocess`` before the first frame of each sequence.
+
+        A preprocessor that carries state from one frame to the next (an
+        odometry, a tracker, a running map) overrides it to forget that state:
+        on a root of several sequences the frames come one sequence after
+        another through the same instance, and the first frame of a sequence
+        has nothing to do with the last frame of the previous one. Stateless
+        preprocessors leave it alone.
+
+        Only the materialising runner calls it. In a lazy pipeline
+        (``ds.transform(preprocessor)``) frames are served in whatever order
+        they are asked for, which a stateful preprocessor cannot support in
+        the first place.
+        """
+
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
         if cls.output_keys is not None:

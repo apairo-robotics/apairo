@@ -554,8 +554,16 @@ def _run_frame(
     seq_timestamps: dict[Path, list] = {}
     stacks: dict[tuple[Path, str], tuple[Format, list[tuple[int, np.ndarray]]]] = {}
 
+    # The sequence a frame belongs to is the directory its output lands in.
+    probe = preprocessor.outputs[0]
+    current: Path | None = None
+
     for idx, sample in enumerate(dataset):
         logger.debug("[%d/%d]", idx + 1, n)
+        sequence = dataset.derived_path(idx, probe, ".npy").parent
+        if sequence != current:
+            current = sequence
+            preprocessor.start_sequence()
         results = _outputs_to_numpy(preprocessor, preprocessor(sample))
         chosen = outputs.choose_all(results, frame=True)
         for key, result in results.items():
@@ -621,6 +629,7 @@ def _run_sequence(
                 yield sample
 
         stream = frames()
+        preprocessor.start_sequence()
         results = _outputs_to_numpy(preprocessor, preprocessor(stream))
         for _ in stream:  # frames the preprocessor did not read: their times
             pass

@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from apairo.core.config import CONFIG_DIR, write_config
-from apairo.core.preprocessor import FramePreprocessor
+from apairo.core.preprocessor import FramePreprocessor, SequencePreprocessor
 from apairo.core.sample import Sample
 from apairo.dataset.async_layout.dataset import _detect_loader
 from apairo.dataset.raw import RawDataset
@@ -512,6 +512,66 @@ def test_run_preprocess_on_root_writes_and_reloads_per_sequence(root_dataset):
     # The derived channel reloads through the root too (available on every seq).
     root_ds = RawDataset(root, keys=["lidar_x2"])
     assert "lidar_x2" in root_ds.available
+
+
+class _FrameCounter(FramePreprocessor):
+    """Stateful: the index of the frame within its sequence."""
+
+    output_key = "frame_no"
+    output_loader = "npys"
+    input_keys = ["lidar"]
+    timestamps_from = "lidar"
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.starts = 0
+
+    def start_sequence(self) -> None:
+        self.count = 0
+        self.starts += 1
+
+    def __call__(self, sample: Sample) -> np.ndarray:
+        self.count += 1
+        return np.array([self.count - 1])
+
+
+def test_run_preprocess_starts_a_stateful_preprocessor_at_each_sequence(root_dataset):
+    """One instance sees a root's sequences one after another: without the
+    hook, the second sequence continues the state the first one left."""
+    root, _, _ = root_dataset
+    counter = _FrameCounter()
+
+    RawDataset.run_preprocess(counter, root)
+
+    assert counter.starts == 2
+    for seq, n_lidar in (("seq_a", 3), ("seq_b", 2)):
+        der = RawDataset(root / seq, keys=["frame_no"])
+        got = [int(der[i].data["frame_no"][0]) for i in range(len(der))]
+        assert got == list(range(n_lidar))
+
+
+class _SequenceLength(SequencePreprocessor):
+    output_key = "seq_len"
+    output_loader = "npys"
+    input_keys = ["lidar"]
+    timestamps_from = "lidar"
+
+    def __init__(self) -> None:
+        self.starts = 0
+
+    def start_sequence(self) -> None:
+        self.starts += 1
+
+    def __call__(self, frames) -> np.ndarray:
+        n = sum(1 for _ in frames)
+        return np.full((n, 1), n)
+
+
+def test_run_preprocess_starts_a_sequence_preprocessor_once_per_sequence(root_dataset):
+    root, _, _ = root_dataset
+    proc = _SequenceLength()
+    RawDataset.run_preprocess(proc, root)
+    assert proc.starts == 2
 
 
 # ─────────────────────────────── errors ──────────────────────────────────────
