@@ -47,7 +47,7 @@ about a day, **M** a few days, **L** a week or more.
 | I1 | `transform()` without `in_place` is deprecated | S | 0.10 | ✅ released in 0.10.0 |
 | I2 | `AccumulateFrames` deprecated for `window` + `StackByPose` | S | `apairo_transform` 0.3 | ✅ released in `apairo_transform` 0.3.0 |
 | I3 | The satellites assign the result of `transform()` | S | before 0.10 | ✅ done (`apairo_rr`, archived, keeps its commit local) |
-| I4 | `transform()` returns a new dataset by default | S | 0.11 | planned |
+| I4 | `transform()` returns a new dataset by default | S | 0.12 | planned |
 | I5 | `cache()` keeps the recipe | M | 0.10 | ✅ released in 0.10.0 |
 | I6 | Steps declare what they read and write; `inference = False` | M | 0.10 | ✅ released in 0.10.0 |
 | I7 | `.inference(outputs=...)` | L | 0.10 | ✅ released in 0.10.0 |
@@ -525,7 +525,7 @@ which test it before the JOSS submission.
   (it is a second way, see `IDEAS.md`).
 - **Done when.** Core and satellites green; the CHANGELOG says what changes
   for code that ignored the return value.
-- **Placement.** Core 0.11. **Depends on.** I1, I3, one release in between.
+- **Placement.** Core 0.12. **Depends on.** I1, I3, one release in between.
 
 ### I5. `cache()` keeps the recipe
 

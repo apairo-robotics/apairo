@@ -58,7 +58,7 @@ ds.run_preprocess(p)                        # once satisfied, persist + register
 ```
 
 `in_place=False` keeps the lazy step off `ds`, so `run_preprocess` runs on
-the dataset as it was. It becomes the default in 0.11.
+the dataset as it was. It becomes the default in 0.12.
 
 On an instance, `run_preprocess` reopens the dataset as `ds` was opened -- the
 same `declare=`, `split=` or `sequences=` -- with the preprocessor's

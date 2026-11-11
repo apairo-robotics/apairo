@@ -76,7 +76,7 @@ These are the properties every change must preserve:
    and leaves the one it is called on unchanged, so `ds = ds.op(...)`
    reads the way it runs, and a dataset already built never changes
    behind your back. `transform()` is the last exception and is
-   migrating: its in-place default is deprecated and flips in 0.11.
+   migrating: its in-place default is deprecated and flips in 0.12.
 
 Two known, deliberate deviations (do not "fix" them without discussion):
 `SynchronizedView` reads parent loaders directly and bypasses parent

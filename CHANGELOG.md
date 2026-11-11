@@ -7,6 +7,8 @@ All notable changes to apairo are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-11
+
 ### Added
 
 - **`Preprocessor.start_sequence()`**: a hook `run_preprocess` calls before the
@@ -65,6 +67,10 @@ All notable changes to apairo are documented here. The format is based on
 
 ### Changed
 
+- **`transform()` keeps its in-place default one more release.** The
+  `FutureWarning` announced the change for 0.11; it now names 0.12. Nothing to
+  do if you already assign the result (`ds = ds.transform(...)`) or pass
+  `in_place=`.
 - **`ChannelWriter(loader="bin")` refuses a frame that is not `(N, 4)`
   `float32`**, as `run_preprocess` does since 0.9. It cast any array to
   `float32` and flattened it, which did not read back as written. Cast the
@@ -1334,7 +1340,8 @@ First feature release.
   chain (`FilteredView`, `ChannelView`) delegation (`frame_sequence_ids`).
 - Removed a dead, matplotlib-based test fixture (image I/O standardizes on Pillow).
 
-[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/apairo-robotics/apairo/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/apairo-robotics/apairo/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/apairo-robotics/apairo/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/apairo-robotics/apairo/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/apairo-robotics/apairo/compare/v0.10.0...v0.10.1

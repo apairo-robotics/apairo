@@ -10,7 +10,7 @@ Transforms let you apply callables to channel data **at access time**, without p
 
 A single method, three forms. All steps are registered in order and run as a unified pipeline at access time.
 
-Use the returned dataset: `ds = ds.transform(...)`. In 0.11 `transform()` will
+Use the returned dataset: `ds = ds.transform(...)`. In 0.12 `transform()` will
 return a new dataset and leave the one it is called on unchanged, like
 `synchronize`, `window`, `filter`, `select` and `cache` already do. See
 [The returned dataset](#the-returned-dataset-in_place).
@@ -128,14 +128,14 @@ parts.
 | **Scope** | Per-instance. Transforms on `ds` do not affect another instance at the same path. |
 | **`output`** | Publishes result as a new channel; source channel unchanged. |
 | **`keep=False`** | Removes an `output` channel from the final sample after the full pipeline runs. |
-| **`in_place`** | `False` returns an independent copy, `True` modifies the dataset. Unset: as `True`, with a `FutureWarning` (the default becomes `False` in 0.11). |
+| **`in_place`** | `False` returns an independent copy, `True` modifies the dataset. Unset: as `True`, with a `FutureWarning` (the default becomes `False` in 0.12). |
 
 ## The returned dataset — `in_place`
 
 `transform(..., in_place=False)` leaves the dataset untouched and returns an
 independent copy: it shares loaders and indices (no data is duplicated) but
 owns its pipeline. Transforms already registered are inherited by the copy.
-This becomes the default in 0.11.
+This becomes the default in 0.12.
 
 ```python
 base = Rellis3DDataset(root, keys=["lidar", "labels"])
@@ -153,7 +153,7 @@ Left unset, `in_place` behaves as `True`, as in 0.9, and `transform()` emits a
 `FutureWarning`. Code that assigns the result, `ds = ds.transform(...)`, gives
 the same dataset under both values; pass `in_place` to silence the warning.
 
-!!! warning "Until 0.11, transforms register in place by default"
+!!! warning "Until 0.12, transforms register in place by default"
     `v1 = ds.transform(a)` then `v2 = ds.transform(b)` leaves
     `v1 is v2 is ds` with *both* transforms stacked. To build independent
     variants from one dataset, pass `in_place=False`.

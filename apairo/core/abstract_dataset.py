@@ -95,7 +95,7 @@ class _PreprocessorStep:
 
 _IN_PLACE_DEFAULT_CHANGES = (
     "transform() modifies the dataset it is called on and returns it. In "
-    "apairo 0.11 it will return a new dataset and leave this one unchanged. "
+    "apairo 0.12 it will return a new dataset and leave this one unchanged. "
     "Assign the result (`ds = ds.transform(...)`) and pass in_place=False to "
     "adopt the new behaviour now, or in_place=True to keep modifying the "
     "dataset; either silences this warning."
@@ -212,7 +212,7 @@ class AbstractDataset(ABC):
     ) -> "AbstractDataset":
         """Register a transform in the pipeline, applied at access time.
 
-        Use the returned dataset: ``ds = ds.transform(...)``. In 0.11
+        Use the returned dataset: ``ds = ds.transform(...)``. In 0.12
         ``transform()`` will return a new dataset and leave the one it is
         called on unchanged, like ``synchronize``, ``window``, ``filter``,
         ``select`` and ``cache`` already do (see *Returned dataset* below).
@@ -272,7 +272,7 @@ class AbstractDataset(ABC):
         - ``in_place=False`` returns an independent copy that shares loaders
           and indices but owns its pipeline (the steps already registered are
           inherited), and leaves ``self`` untouched. This becomes the default
-          in 0.11::
+          in 0.12::
 
               base = Rellis3DDataset(root, keys=["lidar"])
               v1 = base.transform(augment_v1, in_place=False)
@@ -281,12 +281,12 @@ class AbstractDataset(ABC):
         - ``in_place=True`` registers the step on ``self`` and returns
           ``self``.
         - Left unset, it behaves as ``in_place=True`` and emits a
-          :class:`FutureWarning`, because the default changes in 0.11. Code
+          :class:`FutureWarning`, because the default changes in 0.12. Code
           that assigns the result (``ds = ds.transform(...)``) gives the same
           result either way; pass ``in_place`` to silence the warning.
 
         .. warning::
-            Until 0.11, ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
+            Until 0.12, ``v1 = ds.transform(a)`` and ``v2 = ds.transform(b)``
             leave ``v1 is v2 is ds`` with *both* steps stacked. To build
             independent variants, pass ``in_place=False``.
         """
