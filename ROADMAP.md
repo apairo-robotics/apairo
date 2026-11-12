@@ -37,7 +37,7 @@ about a day, **M** a few days, **L** a week or more.
 | U2 | Installation names the ecosystem | S | W43 (19 Oct) | ✅ in 0.9.0 |
 | U3 | KITTI Odometry through `SemanticKittiDataset` | S | after 0.9.0 | structure checked, real sequence owed |
 | U4 | "KITTI" names KITTI only; when to use which storage | M | W44–W45 | ✅ in 0.9.0 |
-| U5 | Satellites on PyPI, then `apairo[ros]` and the like | M | after 0.9.0 | ✅ `apairo-transform` 0.3.0, `apairo-visu` 0.1.0, `apairo-ros` 0.1.0 and `apairo-preprocess` 0.2.0 on PyPI; extras in 0.10.0 |
+| U5 | Satellites on PyPI, then `apairo[ros]` and the like | M | after 0.9.0 | ✅ on PyPI, now `apairo-transform` 0.3.1, `apairo-visu` 0.1.1, `apairo-ros` 0.1.1 and `apairo-preprocess` 0.3.0; extras in 0.10.0 |
 | D1 | One docs site for the ecosystem, built from the satellites | M | December | planned |
 | D2 | Executed examples for `apairo_transform` | S | December | planned |
 | D3 | A screen recording of `apairo studio` | S | December | planned |
@@ -53,7 +53,7 @@ about a day, **M** a few days, **L** a week or more.
 | I7 | `.inference(outputs=...)` | L | 0.10 | ✅ released in 0.10.0 |
 | I8 | `BagDataset` and `.on(source)`: the bag parity test | L | 0.10 | ✅ released in 0.10.0; `BagDataset` in `apairo-ros` 0.1.0 |
 | I9 | `.save()` and `load_chain()`, a declared chain | M | 0.10 | ✅ released in 0.10.0 |
-| I10 | `apairo_ros.live`: the chain in a live ROS 2 node | L | November | in progress (`apairo_ros` branch `feat/live`, draft PR #2; untested under ROS 2) |
+| I10 | `apairo_ros.live`: the chain in a live ROS 2 node | L | November | in progress (`apairo_ros` branch `feat/live`, draft PR #2, rebased on 0.1.1; untested under ROS 2) |
 
 ---
 
@@ -917,3 +917,26 @@ The public API and the `.apairo` format are declared stable at 1.0
   crashed, with `status`, on seven. `check` now ends by opening an
   initialised dataset, so it cannot say OK for one that does not load. The
   audit of the core is complete: every module has been read.
+- **2026-11-11**: 0.11.0 released (tag `v0.11.0`, Zenodo
+  `10.5281/zenodo.24133326`): the `hdf5` and `video` formats, a per-channel
+  synchronization tolerance, `ChannelWriter` in any per-frame format, and
+  `Preprocessor.start_sequence()`, called before the first frame of each
+  sequence. I4 moves from 0.11 to 0.12: the warning has been out for two
+  days, not one release.
+- **2026-11-11**: the audit extended to the five satellites, each finding
+  reproduced before its fix. Released: `apairo-transform` 0.3.1 (random
+  transforms identical across DataLoader workers, label dtypes wrapping),
+  `apairo-ros` 0.1.1 (PointCloud2 and image layouts read wrongly,
+  extractions overwriting each other), `apairo-preprocess` 0.3.0
+  (`pose_height`: with lidar odometry no point was ever traversable;
+  distorted points folding back into the image; odometry carried from one
+  sequence into the next, hence the core hook), `apairo-visu` 0.1.1 (the
+  studio answering any Host, results displayed that the data did not hold).
+  `apairo_huggingface` (`integration`): the TartanDrive export cast absolute
+  UTM poses to float32, a 0.5 m grid; the state is now relative to the
+  episode's first frame. The public `tartandrive_offroad` still holds the
+  quantised state until it is re-exported, from the laboratory machine.
+  I10: `LiveSource` kept reference messages a tolerance had left unmatched
+  as history, cutting short the windows after a gap; fixed on `feat/live`.
+  Not checked, for want of local data: RELLIS images and lidar height, the
+  FoMo ZED rate, `sim_amiad`.
